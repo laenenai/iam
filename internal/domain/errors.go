@@ -98,3 +98,10 @@ var ErrConflict = errors.New("conflict")
 // ErrInvalidConfig, which indicates the configuration itself is wrong
 // rather than a dependency being temporarily down.
 var ErrUnavailable = errors.New("unavailable")
+
+// ErrInvalidClaims is returned when a claim set is not provisionable: no
+// tenant, no external subject, an unknown principal kind, or an attempt to
+// provision an agent run from claims rather than by delegation. Like
+// ErrMalformedID it is a well-formedness error asked before any registry
+// state is consulted.
+var ErrInvalidClaims = errors.New("invalid claims")
