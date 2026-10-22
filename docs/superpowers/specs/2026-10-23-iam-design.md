@@ -435,6 +435,41 @@ Properties, each non-negotiable and each a test in §13:
 - **Creating and assigning classifications is itself permissioned and
   audited**, and is not a power that ownership confers.
 
+**Who may hold a clearance — and why tier-1 groups may never.** Clearance may
+be held by a principal or by a **clearance group**, and a clearance group is a
+*mandatory* object: its membership is changed only through the classify
+permission or an authoritative directory sync, it is audited, and **it can
+never be referenced in a tier-1 tuple**. An ordinary team or workspace group
+may not hold a clearance.
+
+This distinction is not fussiness, it is A3. If a clearance could attach to a
+tier-1 group, then anyone able to add a member to that group could open a
+mandatory gate through a discretionary operation, and the invariant is breached
+by construction rather than by a bug. It is also how real mandatory access
+control has always worked: clearances and compartments are administered by a
+security function, not by data owners — Palantir's marking membership is
+administered separately from dataset ownership for the same reason.
+
+And it is what makes administration tractable. "Everyone except Bob" is a
+clearance group that does not contain Bob, maintained through the mandatory
+channel, rather than 1,999 individual grants. A directory-synced clearance
+group (`all-timekeepers`) keeps a firm workable, because employment is an
+authoritative fact rather than a discretionary share.
+
+**A newly provisioned principal holds no clearances.** JIT provisioning grants
+identity, never clearance. This is fail-closed and it means a new joiner sees
+nothing classified until a mandatory act includes them — directly or through a
+synced clearance group.
+
+**Classifications inherit through containment as well as derivation.**
+Derivation propagation (above) is what kgs needs; CAS needs the other
+direction — "mark this fileset `privileged`" must cover the documents inside
+it, and a document is *contained* by a fileset, not derived from it. So the
+gate resolves a resource's classification set over its ancestry closure (§9.2)
+as well as its derivation inputs. Consequence, stated because it costs
+something: the gate is a closure join rather than a single-table anti-join, and
+it is subject to the §9.3 staleness rule like everything else.
+
 ### 8.4 Resource kinds, registered
 
 Each consumer registers a **schema**: its object types, its relations, its
@@ -544,6 +579,42 @@ symmetric and must not share a path.
   (§10), with the cursor stored so a restarted worker resumes rather than
   rebuilds.
 
+**One rule, stated once, replacing two asymmetries that were drifting apart:**
+
+> **The restrictive change propagates on the fast path. The permissive change
+> may lag, and lagging fails closed.**
+
+Applied to tier 1 that reads: a grant may lag; a revocation may not. Applied to
+tier 2 it reads the other way round, and an earlier draft got this wrong by
+claiming classifications are "never projected": *adding* a classification is
+restrictive and must propagate fast, because a missed addition is a disclosure;
+*removing* one is permissive and may lag, because a missed removal is only an
+outage. Both tiers are projected — §9.5's pools can be separate databases and a
+SQL predicate cannot join another database — and both obey the one rule above.
+What makes an absolute trustworthy is therefore not that it is unprojected but
+that its *restrictive* direction is synchronous and its projection fails closed.
+
+**A verified hazard in the changelog, which the fast path must not trust.**
+OpenFGA stamps each changelog entry's ULID from the application clock at write
+time, `ReadChanges` orders by `ulid asc` and resumes with `ulid > cursor`, and
+the only protection is a horizon guard `inserted_at < NOW() - horizon_offset`
+whose **default is zero**, with the operator knob denominated in whole minutes.
+At offset zero, a transaction that stamps a ULID at T but commits after the
+poller has passed T is **skipped permanently**. A dropped insert is a missed
+grant — benign. A dropped delete is a **missed revocation — a silent
+disclosure, in precisely the path this section claims is safe.**
+
+So: the horizon offset must exceed the longest write transaction plus
+application-to-database clock skew, and that offset is a **hard floor on
+propagation latency** — which falsifies A2's "grant propagation p95 < 2 s" and
+"revocation p95 < 500 ms" as written if the changelog is the only channel.
+Therefore it is not: **revocations, denials, deprovisioning and classification
+assignments are written to this module's own tables in the same statement as
+the authority call, and the deny epoch is bumped from there**, with the
+changelog used only to converge the permissive direction. The changelog is a
+convergence mechanism, never the carrier of a restrictive change. §13 gains a
+test that injects a late-committing write and asserts no revocation is lost.
+
 ### 9.4 The projection is audited, not trusted
 
 A denormalized copy of security decisions is a dangerous object, so the design
@@ -610,13 +681,22 @@ no gRPC server, no sidecar and no network hop. Specifically:
   `ResourceSearch`, `SubjectSearch`, `ActionSearch`), so this module's external
   API can speak a standard rather than a bespoke shape.
 
-**One promising thing to verify in phase 1, not assumed here:**
-`sqlcommon.NewTxConnector(tx *sql.Tx)` exists alongside `NewSQLConnector(db)`,
-which suggests a write can participate in a caller-supplied transaction. If it
-does, a grant and a consumer's own write commit atomically, and the projection
-can be updated in the same transaction in the embedded shape — which would
-remove the staleness window entirely for single-process deployments. Treated as
-an opportunity, not a dependency: §9.3's contract stands either way.
+**Resolved, and the answer is no.** An earlier draft flagged
+`sqlcommon.NewTxConnector(tx *sql.Tx)` as a possible route to enlisting a rule
+write in a caller's transaction. Verified against the source: it is a
+`database/sql` connector, while the Postgres datastore reaches the database
+through its own private pgx connector, and `Datastore.Write` opens its own
+transaction with no exported way to supply one. **A grant and a consumer's
+write cannot commit atomically, in any deployment shape.**
+
+Two consequences, both load-bearing. KGS §6.2 promised that the single-binary
+shape would maintain the projection in the same transaction as the rule change;
+that promise is withdrawn there and must not be reintroduced. And there is
+always a window between a classification being assigned and a derived row
+existing, which §8.3 must close by ordering rather than by atomicity: a
+consumer declares the derivation and receives its classification set **before**
+writing the derived row, and a row whose classification set cannot be resolved
+is not written.
 
 **The engine stays behind the `Engine` port.** Nothing OpenFGA-specific reaches
 this module's public API, so a reversal is an adapter plus tests.
@@ -750,3 +830,49 @@ enforcement class, and `escrow` ships on its own timeline.
    schema versions. Making approval mandatory is safer and makes automated
    deployment of a consumer's schema change impossible without a human in the
    loop. Making it advisory keeps CI green and relies on review discipline.
+
+4. **What must exist by CAS's ~2026-11-05 alpha?** §14 has five phases and no
+   dates. CAS has a dated commitment, KGS §6.1 puts its plan rewrite on that
+   critical path, and KGS §21 puts this module's *full* projection protocol —
+   deny epoch, fail-closed staleness, differential audit — in its phase 0. That
+   is roughly two weeks for work phased across five stages. So: may CAS ship
+   its alpha on phase 1's hand-built closure, with no projection worker, no
+   deny epoch and no differential audit — accepting that the A2 and A4 controls
+   do not yet exist — or is the alpha gated on phase 2? And is kgs's phase-0
+   dependency the full protocol, or only its semantics and schema? Nothing can
+   be sequenced without this.
+
+5. **How much divergence tolerance is acceptable in production?** A4 makes zero
+   divergence a build failure. But the projection is *designed* to lag within a
+   bound, so during that window authority and projection legitimately differ.
+   Distinguishing lag from divergence needs a point-in-time read of the
+   authority at the projection's cursor — and OpenFGA has no read-at-revision:
+   it offers a `ConsistencyPreference` and nothing resembling a ZedToken, and
+   `ReadChanges`' continuation token is a changelog ULID, not a consistency
+   token `Check` accepts. So the audit can be exhaustive and zero-tolerance in
+   CI against a quiesced fixture, but in production it must either quiesce
+   writes (unacceptable) or tolerate a window. Since A4 is what makes the whole
+   projection defensible, which weakening is acceptable is the owner's call,
+   not the builder's.
+
+## 17. Builder-check findings register (2026-10-23)
+
+Open items from the builder check, recorded rather than resolved, so none is
+lost and each has an owner. Items the check raised that *were* resolved are in
+§8.3, §9.3, §10 and §16 above.
+
+| # | Finding | Status |
+|---|---|---|
+| F1 | **Filtered ANN versus the predicate.** A2 wants an index join; KGS A2 and leak channel #8 want the predicate *inside* the ANN search with recall ≥ 0.90 at 0.1% selectivity. pgvector's workable shape is to pre-restrict the candidate set, which needs the accessible set expressible as an indexable key on consumer rows — which looks like the per-principal materialization A2 forbids. The household graph at 0.1% selectivity is exactly where a correct-looking system returns nothing. | **Blocking. Moves to phase 1** as a proof, not phase 3. `Predicate`'s contract may have to be "a fragment *plus* a key the consumer indexes and partitions by", with a maintenance path owned here. Recall ownership must be assigned to one document. |
+| F2 | **Classification assignment cardinality.** A2 budgets "500 classifications"; if that means *assignments*, it is wrong by orders of magnitude — KGS propagates an episode's markings to every derived fact, observation and vector, which is tens of millions of rows. "Small and changes rarely" is then false and the gate is not a small-table join. | **Blocking for the fixture.** A2 must distinguish label *definitions* from *assignments* and the fixture must carry the real shape before any benchmark means anything. |
+| F3 | **Containment is a DAG, not a tree.** §9.2's ancestry closure and §8.2's "only on the direct path" both assume one path, but a kgs fact has an episode *and* zero or more nestable, sometimes predicate-defined entity-sets. Many-to-many at fact cardinality, maintained on every write, and "the direct path" is undefined. | **Blocking for §9.2.** Either kgs's entity-sets stop being an authorization container, or the closure and `visible_below` are redefined for multiple paths. |
+| F4 | **Attribute-scoped classifications cannot be enforced by a row predicate.** A `WHERE` fragment hides rows, not columns. kgs is fine (facts are rows); CAS is not (document fields are columns). | **Open.** Either `Predicate` returns a permitted-attribute set the *consumer* applies — expanding the A3 trust boundary into consumer code — or this module becomes a query rewriter across three query builders. Two different modules; pick one before phase 1 fixes the API. |
+| F5 | **OpenFGA store topology.** One store per tenant (a changelog poller and model write per tenant, pressure on "no decision degrades with tenant count") or one global store with tenant-prefixed ids (one shared model in which all three consumers' types coexist, so any consumer's schema bump rewrites the model all three share). §8.4's per-consumer versioning and access-delta report may not be computable in the second shape. | **Open, decide in phase 1.** |
+| F6 | **Which `tenancy` connection the engine gets.** `tenancy`'s data-plane handles carry RLS session context and its control-plane path must not accept caller-supplied predicates; OpenFGA sets no tenant context, runs its own migrations (against the goose decision), and its queries inherit whatever RLS the pool's role carries. If it needs its own role, pool and `search_path`, the one-function-signature A1 argument that selected it is weaker than §10 states. | **Open.** Changes phase-1 wiring and `tenancy`'s public surface. |
+| F7 | **Two of kgs §9.3's rule dimensions fall outside §8.5's permitted subset** — ontology scope ("may read `Person` but not `salary`": attribute-conditioned and exclusionary) and predicate-defined entity-sets (authorization as a function of data). §8.5's answer is "use a classification", but a classification is mandatory and non-delegable, so a discretionary "don't show her salary facts" becomes an absolute no owner can lift. | **Open.** Either kgs loses those dimensions or tier 1 gains a form. Do not add a form casually; §8.5's restriction is what buys the projection. |
+| F8 | **What is the audit unit on the `Predicate` path?** A filtered read over 10M rows makes no per-row decision and produces no denials — absent rows are not refusals. KGS §8.6 requires denied access to be audited. | **Open.** Likely the compiled predicate plus parameters plus epoch, but §7.1's "auditable without being informative" needs a concrete answer for the surface carrying the traffic. |
+
+Verified by the check and already folded in above: `postgres.NewWithDB` is real
+(§10's A1 argument holds); `NewTxConnector` does **not** permit a caller's
+transaction (§10, and KGS §6.2 corrected); `DefaultChangelogHorizonOffset = 0`
+creates the dropped-revocation hazard (§9.3).
