@@ -1,4 +1,20 @@
-package registry
+// Package iamtest holds `iam`'s conformance suites: the executable form
+// of each port's contract, runnable by this module's own adapters and by a
+// consumer's, in the consumer's CI, against the consumer's wiring. The
+// charter makes that the adoption test — "a consumer counts as adopted
+// when the suite runs green in *its* CI against *its* wiring" — so the
+// suite has to be callable from another module, which an identifier in a
+// _test.go file is not.
+//
+// It is a sibling of the root package rather than part of it because a
+// non-test file that imports `testing` puts `testing` in the import graph
+// of every consumer's production binary, along with its flag
+// registrations. This is the standard library's own split: fstest.TestFS
+// verifies any fs.FS, and httptest is a sibling of http.
+//
+// The suites here, not the port interfaces, are the authoritative
+// description of each contract's edge-case behaviour.
+package iamtest
 
 import (
 	"context"
@@ -6,7 +22,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/laenen-ai/iam"
 	"github.com/laenen-ai/iam/internal/domain"
+	"github.com/laenen-ai/iam/internal/registry"
 )
 
 // suiteAgentRunTTL is the TTL the suite asks for when delegating an agent
@@ -47,7 +65,7 @@ const suiteAgentRunTTL = time.Hour
 // behavioural ones, and every adapter is forced to exercise them:
 // NewPrincipalHoldsNoClearances, DeprovisioningDeniesImmediately,
 // StalenessPastBoundForcesResync and OrdinaryGroupCannotActAsClearanceGroup.
-func RunRegistrySuite(t *testing.T, newRegistry func(t *testing.T) Registry) {
+func RunRegistrySuite(t *testing.T, newRegistry func(t *testing.T) iam.Registry) {
 	t.Helper()
 
 	// JITUpsertIsIdempotent: provisioning the same verified subject twice
@@ -370,6 +388,94 @@ func RunRegistrySuite(t *testing.T, newRegistry func(t *testing.T) Registry) {
 		}
 	})
 
+	// DeprovisioningCascadesToDelegatedAgentRuns: the hole the previous
+	// subtest would otherwise leave. An agent run is deliberately exempt
+	// from the staleness bound (it has no issuer to re-sync from — see
+	// domain.EvaluateCondition), so nothing else would ever catch a run
+	// delegated by a principal that has since been deprovisioned. Without
+	// the cascade, deprovisioning a user leaves her agents running with
+	// the authority she delegated to them, for as long as their TTLs last,
+	// and "deprovisioning denies immediately" would be false of the
+	// principals most likely to be holding a long-running job.
+	t.Run("DeprovisioningCascadesToDelegatedAgentRuns", func(t *testing.T) {
+		reg := newRegistry(t)
+		ctx := context.Background()
+		tenant := newTenant()
+
+		parent, err := reg.UpsertFromClaims(ctx, userClaims(t, tenant, "https://idp.example", "anne"))
+		if err != nil {
+			t.Fatalf("UpsertFromClaims: %v", err)
+		}
+		run, err := reg.DelegateAgentRun(ctx, parent.ID, registry.AgentRunSpec{TTL: suiteAgentRunTTL, DisplayName: "long job"})
+		if err != nil {
+			t.Fatalf("DelegateAgentRun: %v", err)
+		}
+		if cond, err := reg.Condition(ctx, run.ID, now()); err != nil {
+			t.Fatalf("Condition: %v", err)
+		} else if !cond.Usable() {
+			t.Fatalf("a fresh agent run is not usable: %+v", cond)
+		}
+
+		if err := reg.Deprovision(ctx, parent.ID); err != nil {
+			t.Fatalf("Deprovision(parent): %v", err)
+		}
+
+		cond, err := reg.Condition(ctx, run.ID, now())
+		if err != nil {
+			t.Fatalf("Condition after the parent was deprovisioned: %v", err)
+		}
+		if cond.State != domain.PrincipalStateDeprovisioned {
+			t.Fatalf("an agent run of a deprovisioned parent reports %q, want deprovisioned", cond.State)
+		}
+		if _, err := reg.GroupsOf(ctx, run.ID, now()); !errors.Is(err, domain.ErrPrincipalDeprovisioned) {
+			t.Fatalf("GroupsOf for a cascaded agent run error = %v, want ErrPrincipalDeprovisioned", err)
+		}
+		if _, err := reg.DelegateAgentRun(ctx, parent.ID, registry.AgentRunSpec{TTL: suiteAgentRunTTL}); !errors.Is(err, domain.ErrPrincipalDeprovisioned) {
+			t.Fatalf("DelegateAgentRun from a deprovisioned parent error = %v, want ErrPrincipalDeprovisioned", err)
+		}
+	})
+
+	// AgentRunIsNotSubjectToTheStalenessBound: the companion to the rule
+	// above, pinned so no adapter "fixes" it by applying the bound. A run
+	// longer than the deployment's staleness bound must not fail halfway
+	// through with a refusal no caller could clear, because there is no
+	// issuer an agent run could be re-synced from.
+	t.Run("AgentRunIsNotSubjectToTheStalenessBound", func(t *testing.T) {
+		reg := newRegistry(t)
+		ctx := context.Background()
+		tenant := newTenant()
+
+		parent, err := reg.UpsertFromClaims(ctx, serviceClaims(t, tenant, "https://idp.example", "consolidator"))
+		if err != nil {
+			t.Fatalf("UpsertFromClaims: %v", err)
+		}
+		cond, err := reg.Condition(ctx, parent.ID, parent.SyncedAt)
+		if err != nil {
+			t.Fatalf("Condition: %v", err)
+		}
+		run, err := reg.DelegateAgentRun(ctx, parent.ID, registry.AgentRunSpec{TTL: suiteAgentRunTTL})
+		if err != nil {
+			t.Fatalf("DelegateAgentRun: %v", err)
+		}
+		if suiteAgentRunTTL <= cond.Bound {
+			t.Skipf("this deployment's staleness bound (%v) is not shorter than the suite's agent-run TTL (%v), so the case cannot arise here",
+				cond.Bound, suiteAgentRunTTL)
+		}
+
+		// Past the bound, well inside the TTL.
+		asOf := run.SyncedAt.Add(cond.Bound + time.Minute)
+		late, err := reg.Condition(ctx, run.ID, asOf)
+		if err != nil {
+			t.Fatalf("Condition past the bound: %v", err)
+		}
+		if !late.Usable() {
+			t.Fatalf("an agent run past the staleness bound but inside its TTL reports %q; the bound must not apply to it", late.State)
+		}
+		if _, err := reg.GroupsOf(ctx, run.ID, asOf); err != nil {
+			t.Fatalf("GroupsOf for an agent run past the bound: %v", err)
+		}
+	})
+
 	// NewPrincipalHoldsNoClearances: design §8.3's fail-closed rule. JIT
 	// provisioning grants identity, never clearance, so a new joiner sees
 	// nothing classified until a mandatory act includes them.
@@ -421,7 +527,7 @@ func RunRegistrySuite(t *testing.T, newRegistry func(t *testing.T) Registry) {
 		if err := reg.AddClearanceGroupMember(ctx, act, existing.ID, p.ID); err != nil {
 			t.Fatalf("AddClearanceGroupMember: %v", err)
 		}
-		run, err := reg.DelegateAgentRun(ctx, p.ID, AgentRunSpec{TTL: suiteAgentRunTTL, DisplayName: "nightly consolidation"})
+		run, err := reg.DelegateAgentRun(ctx, p.ID, registry.AgentRunSpec{TTL: suiteAgentRunTTL, DisplayName: "nightly consolidation"})
 		if err != nil {
 			t.Fatalf("DelegateAgentRun: %v", err)
 		}
@@ -790,7 +896,7 @@ func RunRegistrySuite(t *testing.T, newRegistry func(t *testing.T) Registry) {
 			t.Fatalf("UpsertFromClaims: %v", err)
 		}
 
-		run, err := reg.DelegateAgentRun(ctx, parent.ID, AgentRunSpec{TTL: suiteAgentRunTTL, DisplayName: "run-1"})
+		run, err := reg.DelegateAgentRun(ctx, parent.ID, registry.AgentRunSpec{TTL: suiteAgentRunTTL, DisplayName: "run-1"})
 		if err != nil {
 			t.Fatalf("DelegateAgentRun: %v", err)
 		}
@@ -811,7 +917,7 @@ func RunRegistrySuite(t *testing.T, newRegistry func(t *testing.T) Registry) {
 		}
 
 		// Two runs from one parent are two principals.
-		second, err := reg.DelegateAgentRun(ctx, parent.ID, AgentRunSpec{TTL: suiteAgentRunTTL, DisplayName: "run-2"})
+		second, err := reg.DelegateAgentRun(ctx, parent.ID, registry.AgentRunSpec{TTL: suiteAgentRunTTL, DisplayName: "run-2"})
 		if err != nil {
 			t.Fatalf("second DelegateAgentRun: %v", err)
 		}
@@ -842,15 +948,15 @@ func RunRegistrySuite(t *testing.T, newRegistry func(t *testing.T) Registry) {
 
 		// An agent run cannot delegate a further agent run: a chain of
 		// ephemeral principals has no attributable owner.
-		if _, err := reg.DelegateAgentRun(ctx, run.ID, AgentRunSpec{TTL: suiteAgentRunTTL}); err == nil {
+		if _, err := reg.DelegateAgentRun(ctx, run.ID, registry.AgentRunSpec{TTL: suiteAgentRunTTL}); err == nil {
 			t.Fatal("an agent run was allowed to delegate another agent run")
 		}
 		// Nor may a deprovisioned or unknown principal delegate one.
-		if _, err := reg.DelegateAgentRun(ctx, domain.PrincipalID("01K0000000000000000000000Z"), AgentRunSpec{TTL: suiteAgentRunTTL}); !errors.Is(err, domain.ErrPrincipalNotFound) {
+		if _, err := reg.DelegateAgentRun(ctx, domain.PrincipalID("01K0000000000000000000000Z"), registry.AgentRunSpec{TTL: suiteAgentRunTTL}); !errors.Is(err, domain.ErrPrincipalNotFound) {
 			t.Fatalf("DelegateAgentRun from an unknown parent error = %v, want ErrPrincipalNotFound", err)
 		}
 		// A TTL is mandatory and must be positive.
-		if _, err := reg.DelegateAgentRun(ctx, parent.ID, AgentRunSpec{}); !errors.Is(err, domain.ErrInvalidPrincipal) {
+		if _, err := reg.DelegateAgentRun(ctx, parent.ID, registry.AgentRunSpec{}); !errors.Is(err, domain.ErrInvalidPrincipal) {
 			t.Fatalf("DelegateAgentRun with no TTL error = %v, want ErrInvalidPrincipal", err)
 		}
 
@@ -937,18 +1043,18 @@ func RunRegistrySuite(t *testing.T, newRegistry func(t *testing.T) Registry) {
 
 		cases := []struct {
 			name   string
-			claims Claims
+			claims registry.Claims
 		}{
-			{"no tenant", Claims{Subject: mustSubject(t, "https://idp.example", "anne"), Kind: domain.PrincipalKindUser}},
-			{"no subject", Claims{TenantID: tenant, Kind: domain.PrincipalKindUser}},
-			{"unknown kind", Claims{TenantID: tenant, Subject: mustSubject(t, "https://idp.example", "anne"), Kind: "robot"}},
+			{"no tenant", registry.Claims{Subject: mustSubject(t, "https://idp.example", "anne"), Kind: domain.PrincipalKindUser}},
+			{"no subject", registry.Claims{TenantID: tenant, Kind: domain.PrincipalKindUser}},
+			{"unknown kind", registry.Claims{TenantID: tenant, Subject: mustSubject(t, "https://idp.example", "anne"), Kind: "robot"}},
 			{
 				"agent run from claims",
-				Claims{TenantID: tenant, Subject: mustSubject(t, "https://idp.example", "anne"), Kind: domain.PrincipalKindAgentRun},
+				registry.Claims{TenantID: tenant, Subject: mustSubject(t, "https://idp.example", "anne"), Kind: domain.PrincipalKindAgentRun},
 			},
 			{
 				"empty group name",
-				Claims{TenantID: tenant, Subject: mustSubject(t, "https://idp.example", "anne"), Kind: domain.PrincipalKindUser, Groups: []string{"eng", ""}},
+				registry.Claims{TenantID: tenant, Subject: mustSubject(t, "https://idp.example", "anne"), Kind: domain.PrincipalKindUser, Groups: []string{"eng", ""}},
 			},
 		}
 		for _, tc := range cases {
@@ -1048,9 +1154,9 @@ func mustAct(t *testing.T, channel domain.MandatoryChannel, reason string) domai
 }
 
 // userClaims builds a user claim set for the given subject and claim-derived groups.
-func userClaims(t *testing.T, tenant domain.TenantID, issuer, subject string, groups ...string) Claims {
+func userClaims(t *testing.T, tenant domain.TenantID, issuer, subject string, groups ...string) registry.Claims {
 	t.Helper()
-	return Claims{
+	return registry.Claims{
 		TenantID:    tenant,
 		Subject:     mustSubject(t, issuer, subject),
 		Kind:        domain.PrincipalKindUser,
@@ -1061,7 +1167,7 @@ func userClaims(t *testing.T, tenant domain.TenantID, issuer, subject string, gr
 
 // serviceClaims builds a service claim set, the shape a Zitadel service
 // user's token arrives in.
-func serviceClaims(t *testing.T, tenant domain.TenantID, issuer, subject string, groups ...string) Claims {
+func serviceClaims(t *testing.T, tenant domain.TenantID, issuer, subject string, groups ...string) registry.Claims {
 	t.Helper()
 	c := userClaims(t, tenant, issuer, subject, groups...)
 	c.Kind = domain.PrincipalKindService
@@ -1070,7 +1176,7 @@ func serviceClaims(t *testing.T, tenant domain.TenantID, issuer, subject string,
 
 // groupNames reads a principal's ordinary group names, failing the test on
 // an error.
-func groupNames(t *testing.T, reg Registry, p domain.PrincipalID, asOf time.Time) []string {
+func groupNames(t *testing.T, reg iam.Registry, p domain.PrincipalID, asOf time.Time) []string {
 	t.Helper()
 	groups, err := reg.GroupsOf(context.Background(), p, asOf)
 	if err != nil {

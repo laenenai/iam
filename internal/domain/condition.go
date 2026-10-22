@@ -114,6 +114,20 @@ func (c PrincipalCondition) Usable() bool { return c.State == PrincipalStateUsab
 //     so there is no instant at which a deprovisioned principal is usable
 //     and no re-sync that clears it.
 //   - An expired agent run is expired even if its parent is active.
+//   - **The staleness bound does not apply to an agent run**, which is the
+//     one non-obvious rule here. The bound exists because claim-derived
+//     state drifts from the directory that owns it: a user's group
+//     membership may have changed since their token was issued, so past
+//     the bound the registry refuses until a fresh token re-syncs it. An
+//     agent run has no such state and no such token. It is delegated, not
+//     provisioned; it holds no groups and no clearances; and nothing
+//     could re-sync it, because there is no issuer to ask. Applying the
+//     bound to it would make every run longer than the bound fail halfway
+//     through with a refusal no caller could clear — a staleness check
+//     against an authority that does not exist. An agent run's liveness is
+//     its TTL, and its parent's deprovisioning reaches it because
+//     Registry.Deprovision cascades to live runs rather than because a
+//     read-time check chases the parent.
 //   - A bound of zero or less is a misconfiguration, and it resolves to
 //     resync-required rather than to "never stale". A deployment that
 //     failed to declare a bound gets the fail-closed reading; Config
@@ -133,6 +147,10 @@ func EvaluateCondition(p Principal, bound time.Duration, asOf time.Time) Princip
 		c.State = PrincipalStateDeprovisioned
 	case p.Kind == PrincipalKindAgentRun && !p.ExpiresAt.IsZero() && !asOf.Before(p.ExpiresAt):
 		c.State = PrincipalStateExpired
+	case p.Kind == PrincipalKindAgentRun:
+		// Inside its TTL and not deprovisioned. The staleness bound does
+		// not apply: see the doc comment above.
+		c.State = PrincipalStateUsable
 	case bound <= 0, p.SyncedAt.IsZero(), c.Age > bound:
 		c.State = PrincipalStateResyncRequired
 	default:

@@ -57,6 +57,20 @@ func TestEvaluateCondition(t *testing.T) {
 			bound, now.Add(10 * bound), domain.PrincipalStateDeprovisioned, domain.ErrPrincipalDeprovisioned,
 		},
 		{"agent run inside its ttl", agent, bound, now.Add(time.Minute), domain.PrincipalStateUsable, nil},
+		{
+			// The staleness bound does not apply to an agent run: there
+			// is no issuer it could be re-synced from, so applying it
+			// would make any run longer than the bound fail halfway
+			// through with a refusal nothing could clear.
+			"agent run past the staleness bound but inside its ttl",
+			func() domain.Principal { p := agent; p.ExpiresAt = now.Add(10 * bound); return p }(),
+			bound, now.Add(bound + time.Minute), domain.PrincipalStateUsable, nil,
+		},
+		{
+			"agent run of a deprovisioned parent, which the registry cascades onto the run itself",
+			func() domain.Principal { p := agent; p.DeprovisionedAt = now; return p }(),
+			bound, now.Add(time.Minute), domain.PrincipalStateDeprovisioned, domain.ErrPrincipalDeprovisioned,
+		},
 		{"agent run exactly at its deadline is expired", agent, bound, agent.ExpiresAt, domain.PrincipalStateExpired, domain.ErrAgentRunExpired},
 		{"agent run past its deadline", agent, bound, agent.ExpiresAt.Add(time.Minute), domain.PrincipalStateExpired, domain.ErrAgentRunExpired},
 	}

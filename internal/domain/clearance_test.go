@@ -74,7 +74,7 @@ func TestOrdinaryGroupIDIsNotAClearanceGroupID(t *testing.T) {
 // any output binary, and returns the combined compiler output.
 func runGoBuild(t *testing.T, goTool, root string) ([]byte, error) {
 	t.Helper()
-	cmd := exec.Command(goTool, "build", "-o", filepath.Join(t.TempDir(), "unwanted"), negativeCompileFile) //nolint:gosec // goTool is exec.LookPath's own answer and the file path is this package's own constant
+	cmd := exec.CommandContext(t.Context(), goTool, "build", "-o", filepath.Join(t.TempDir(), "unwanted"), negativeCompileFile) //nolint:gosec // goTool is exec.LookPath's own answer and the file path is this package's own constant
 	cmd.Dir = root
 	return cmd.CombinedOutput()
 }
@@ -83,7 +83,7 @@ func runGoBuild(t *testing.T, goTool, root string) ([]byte, error) {
 // the go tool rather than assumed from this test file's location.
 func moduleRoot(t *testing.T) string {
 	t.Helper()
-	out, err := exec.Command("go", "env", "GOMOD").Output()
+	out, err := exec.CommandContext(t.Context(), "go", "env", "GOMOD").Output() //nolint:gosec // a fixed, argument-free query to the go tool on PATH
 	if err != nil {
 		t.Skipf("cannot locate the module root: %v", err)
 	}
