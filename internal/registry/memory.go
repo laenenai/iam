@@ -134,7 +134,7 @@ func (m *Memory) UpsertFromClaims(ctx context.Context, c Claims) (domain.Princip
 	m.principals[id] = p
 	m.byExternal[key] = id
 
-	if err := m.reconcileClaimGroups(c.TenantID, id, normalizeClaimGroups(c.Groups), now); err != nil {
+	if err := m.reconcileClaimGroups(c.TenantID, id, NormalizeClaimGroups(c.Groups), now); err != nil {
 		return domain.Principal{}, err
 	}
 	return p, nil
@@ -413,7 +413,7 @@ func (m *Memory) EnsureClearanceGroup(ctx context.Context, act domain.MandatoryA
 	if err := ctx.Err(); err != nil {
 		return domain.ClearanceGroup{}, fmt.Errorf("%w: %w", domain.ErrUnavailable, err)
 	}
-	if err := requireAct(act); err != nil {
+	if err := RequireMandatoryAct(act); err != nil {
 		return domain.ClearanceGroup{}, err
 	}
 	if tenant == "" || name == "" {
@@ -427,7 +427,7 @@ func (m *Memory) EnsureClearanceGroup(ctx context.Context, act domain.MandatoryA
 	if id, ok := m.clearanceByName[key]; ok {
 		cg := m.clearanceGroups[id]
 		if cg.Channel != act.Channel() {
-			return domain.ClearanceGroup{}, channelMismatch(cg, act)
+			return domain.ClearanceGroup{}, ChannelMismatchError(cg, act)
 		}
 		return cg, nil
 	}
@@ -484,7 +484,7 @@ func (m *Memory) changeClearanceMembership(ctx context.Context, act domain.Manda
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("%w: %w", domain.ErrUnavailable, err)
 	}
-	if err := requireAct(act); err != nil {
+	if err := RequireMandatoryAct(act); err != nil {
 		return err
 	}
 
@@ -496,7 +496,7 @@ func (m *Memory) changeClearanceMembership(ctx context.Context, act domain.Manda
 		return err
 	}
 	if cg.Channel != act.Channel() {
-		return channelMismatch(cg, act)
+		return ChannelMismatchError(cg, act)
 	}
 	principal, err := m.principalLocked(p)
 	if err != nil {
@@ -607,7 +607,7 @@ func (m *Memory) DelegateAgentRun(ctx context.Context, parent domain.PrincipalID
 	if err := ctx.Err(); err != nil {
 		return domain.Principal{}, fmt.Errorf("%w: %w", domain.ErrUnavailable, err)
 	}
-	if err := validateAgentRunSpec(spec, m.cfg.MaxAgentRunTTL); err != nil {
+	if err := ValidateAgentRunSpec(spec, m.cfg.MaxAgentRunTTL); err != nil {
 		return domain.Principal{}, err
 	}
 
@@ -718,30 +718,6 @@ func (m *Memory) Deprovision(ctx context.Context, p domain.PrincipalID) error {
 	// condition, and keeping the rows is what lets audit explain what the
 	// principal had access to.
 	return nil
-}
-
-// requireAct is the mandatory-channel gate every clearance write passes
-// through. A zero or invalid act is a refusal, never a write that falls
-// back to a discretionary path: design §8.3 gives clearance membership no
-// discretionary path at all.
-func requireAct(act domain.MandatoryAct) error {
-	if act.IsZero() {
-		return fmt.Errorf("%w: a clearance-group change needs a mandatory act witnessing its channel", domain.ErrMandatoryChannelRequired)
-	}
-	if !act.Channel().Valid() {
-		return fmt.Errorf("%w: unknown channel %q", domain.ErrMandatoryChannelRequired, act.Channel())
-	}
-	if act.Actor() == "" || act.Reason() == "" || act.At().IsZero() {
-		return fmt.Errorf("%w: the act must carry an actor, a reason and an instant", domain.ErrMandatoryChannelRequired)
-	}
-	return nil
-}
-
-// channelMismatch is the refusal for an act arriving through a channel
-// that is not the clearance group's own.
-func channelMismatch(cg domain.ClearanceGroup, act domain.MandatoryAct) error {
-	return fmt.Errorf("%w: clearance group %q is administered through %q, not %q",
-		domain.ErrChannelMismatch, cg.Name, cg.Channel, act.Channel())
 }
 
 // keysOf returns a map's keys. It exists so the membership readers do not

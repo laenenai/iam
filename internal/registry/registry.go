@@ -399,10 +399,10 @@ func (c Config) Validate() (Config, error) {
 	return c, nil
 }
 
-// validateAgentRunSpec reports whether spec asks for a run this
-// deployment's policy permits. It is shared by both adapters so neither
-// invents its own ceiling.
-func validateAgentRunSpec(spec AgentRunSpec, maxTTL time.Duration) error {
+// ValidateAgentRunSpec reports whether spec asks for a run this
+// deployment's policy permits. It is exported so every adapter shares one
+// ceiling rather than inventing its own.
+func ValidateAgentRunSpec(spec AgentRunSpec, maxTTL time.Duration) error {
 	if spec.TTL <= 0 {
 		return fmt.Errorf("%w: an agent run must carry a positive TTL", domain.ErrInvalidPrincipal)
 	}
@@ -412,14 +412,16 @@ func validateAgentRunSpec(spec AgentRunSpec, maxTTL time.Duration) error {
 	return nil
 }
 
-// normalizeClaimGroups returns c.Groups deduplicated and sorted, which is
+// NormalizeClaimGroups returns groups deduplicated and sorted, which is
 // the form reconciliation compares against. Deduplication matters: an
 // issuer that lists a role twice must not produce two membership rows, and
 // a set comparison is only a set comparison if both sides are sets.
-func normalizeClaimGroups(groups []string) []string {
-	if len(groups) == 0 {
-		return nil
-	}
+//
+// It returns an empty, non-nil slice for an empty input, because an
+// adapter binding it as a SQL array parameter needs an empty array rather
+// than a NULL — the difference between "remove every claim-sourced
+// membership" and a predicate that matches nothing.
+func NormalizeClaimGroups(groups []string) []string {
 	seen := make(map[string]struct{}, len(groups))
 	out := make([]string, 0, len(groups))
 	for _, g := range groups {
@@ -431,4 +433,36 @@ func normalizeClaimGroups(groups []string) []string {
 	}
 	slices.Sort(out)
 	return out
+}
+
+// RequireMandatoryAct is the mandatory-channel gate every clearance write
+// passes through, in every adapter. A zero or invalid act is a refusal,
+// never a write that falls back to a discretionary path: design §8.3 gives
+// clearance membership no discretionary path at all.
+//
+// It lives here, exported, rather than being reimplemented per adapter,
+// because a security check written twice is a security check that can
+// differ in one place. domain.NewMandatoryAct already refuses to build an
+// invalid act; this re-checks the invariants at the boundary, since a
+// MandatoryAct can also arrive as the zero value from a caller that
+// ignored a constructor error.
+func RequireMandatoryAct(act domain.MandatoryAct) error {
+	if act.IsZero() {
+		return fmt.Errorf("%w: a clearance-group change needs a mandatory act witnessing its channel", domain.ErrMandatoryChannelRequired)
+	}
+	if !act.Channel().Valid() {
+		return fmt.Errorf("%w: unknown channel %q", domain.ErrMandatoryChannelRequired, act.Channel())
+	}
+	if act.Actor() == "" || act.Reason() == "" || act.At().IsZero() {
+		return fmt.Errorf("%w: the act must carry an actor, a reason and an instant", domain.ErrMandatoryChannelRequired)
+	}
+	return nil
+}
+
+// ChannelMismatchError is the refusal for an act arriving through a channel
+// that is not the clearance group's own. Shared for the same reason as
+// RequireMandatoryAct.
+func ChannelMismatchError(cg domain.ClearanceGroup, act domain.MandatoryAct) error {
+	return fmt.Errorf("%w: clearance group %q is administered through %q, not %q",
+		domain.ErrChannelMismatch, cg.Name, cg.Channel, act.Channel())
 }
