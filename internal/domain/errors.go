@@ -105,3 +105,20 @@ var ErrUnavailable = errors.New("unavailable")
 // ErrMalformedID it is a well-formedness error asked before any registry
 // state is consulted.
 var ErrInvalidClaims = errors.New("invalid claims")
+
+// ErrIssuerNotRegistered indicates a token's issuer is not one the tenant
+// accepts. The accepted issuer set is tenant policy (design §8.1), and the
+// refusal happens before any registry lookup: an unregistered issuer must
+// not be able to cause a principal to be created, a row to be read, or an
+// external subject to be recorded, because each of those is a write or a
+// signal attributable to an untrusted trust root.
+var ErrIssuerNotRegistered = errors.New("issuer not registered")
+
+// ErrCapabilityUnconfigured indicates the operation requires a capability
+// this deployment has not configured — a key source for an OIDC issuer, a
+// directory to pull from. It never silently degrades to a lesser
+// behaviour: the caller must either configure the capability or avoid the
+// operation. A deployment with no IdP configured still works for service
+// principals (anti-goal A1), and this is the error it gets if something
+// asks it to verify a user's token anyway.
+var ErrCapabilityUnconfigured = errors.New("capability unconfigured")
