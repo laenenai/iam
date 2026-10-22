@@ -136,7 +136,7 @@ func TestNewMandatoryAct(t *testing.T) {
 			if act.IsZero() {
 				t.Fatal("a valid act reports IsZero")
 			}
-			if act.Channel() != tc.channel || act.Actor() != tc.actor || !act.At().Equal(tc.at) {
+			if act.Channel() != tc.channel || act.Actor() != tc.actor || !act.At().Equal(domain.Canonical(tc.at)) {
 				t.Fatalf("act round-trip mismatch: got (%q, %q, %v)", act.Channel(), act.Actor(), act.At())
 			}
 		})

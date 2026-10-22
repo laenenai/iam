@@ -89,7 +89,10 @@ func NewMandatoryAct(channel MandatoryChannel, actor PrincipalID, reason string,
 	if at.IsZero() {
 		return MandatoryAct{}, fmt.Errorf("%w: the act must carry the instant it happened", ErrMandatoryChannelRequired)
 	}
-	return MandatoryAct{channel: channel, actor: actor, reason: trimmed, at: at}, nil
+	// Canonicalized on the way in: the act's instant is recorded in the
+	// clearance trail and read back from Postgres, where a nanosecond
+	// would be silently dropped. See domain.Canonical.
+	return MandatoryAct{channel: channel, actor: actor, reason: trimmed, at: Canonical(at)}, nil
 }
 
 // Channel returns the mandatory channel the act came through.

@@ -1076,6 +1076,70 @@ func RunRegistrySuite(t *testing.T, newRegistry func(t *testing.T) iam.Registry)
 		assertNames(t, groupNames(t, reg, p.ID, now()), []string{"eng"}, "membership from a claim set with a duplicate")
 	})
 
+	// StoredInstantsRoundTripExactly: the trap CONVENTIONS records two
+	// other modules hitting on the same day. Postgres timestamptz holds
+	// microseconds, so a time.Time carrying nanoseconds compares equal to
+	// itself in memory and unequal through the database — and an
+	// in-memory adapter and a Postgres one then disagree about whether two
+	// instants are the same instant. domain.Canonical closes it at the
+	// points where instants enter the system; this requires every adapter
+	// to preserve that, because an adapter that re-stamps or re-locates an
+	// instant breaks it again.
+	t.Run("StoredInstantsRoundTripExactly", func(t *testing.T) {
+		reg := newRegistry(t)
+		ctx := context.Background()
+		tenant := newTenant()
+
+		p, err := reg.UpsertFromClaims(ctx, userClaims(t, tenant, "https://idp.example", "anne", "eng"))
+		if err != nil {
+			t.Fatalf("UpsertFromClaims: %v", err)
+		}
+		reread, err := reg.PrincipalByID(ctx, p.ID)
+		if err != nil {
+			t.Fatalf("PrincipalByID: %v", err)
+		}
+		if !reread.SyncedAt.Equal(p.SyncedAt) {
+			t.Fatalf("synced_at did not round-trip: wrote %v (%d ns), read %v (%d ns)",
+				p.SyncedAt, p.SyncedAt.Nanosecond(), reread.SyncedAt, reread.SyncedAt.Nanosecond())
+		}
+		if !reread.CreatedAt.Equal(p.CreatedAt) {
+			t.Fatalf("created_at did not round-trip: wrote %v, read %v", p.CreatedAt, reread.CreatedAt)
+		}
+		for _, ts := range []struct {
+			name string
+			at   time.Time
+		}{{"synced_at", reread.SyncedAt}, {"created_at", reread.CreatedAt}} {
+			if ts.at.Truncate(time.Microsecond) != ts.at {
+				t.Fatalf("%s carries sub-microsecond precision (%v); it cannot survive a timestamptz round trip", ts.name, ts.at)
+			}
+		}
+
+		// A caller-supplied instant — a MandatoryAct's — must survive the
+		// trail intact, because a trail whose timestamps differ from the
+		// act's by a few hundred nanoseconds cannot be reconciled with
+		// anything else that recorded the same act.
+		actedAt := time.Date(2026, 10, 23, 12, 0, 0, 123456789, time.FixedZone("UTC+4", 4*60*60))
+		act, err := domain.NewMandatoryAct(domain.MandatoryChannelClassify,
+			domain.NewPrincipalID(domain.SystemClock{}), "matter 4471 conflict screen", actedAt)
+		if err != nil {
+			t.Fatalf("NewMandatoryAct: %v", err)
+		}
+		cg, err := reg.EnsureClearanceGroup(ctx, act, tenant, "conflict-screen-acme")
+		if err != nil {
+			t.Fatalf("EnsureClearanceGroup: %v", err)
+		}
+		changes, err := reg.ClearanceGroupChanges(ctx, cg.ID)
+		if err != nil {
+			t.Fatalf("ClearanceGroupChanges: %v", err)
+		}
+		if len(changes) != 1 {
+			t.Fatalf("trail has %d entries, want 1", len(changes))
+		}
+		if !changes[0].ActedAt.Equal(act.At()) {
+			t.Fatalf("acted_at did not round-trip: act carried %v, trail recorded %v", act.At(), changes[0].ActedAt)
+		}
+	})
+
 	t.Run("UnknownPrincipalReadsAreErrPrincipalNotFound", func(t *testing.T) {
 		reg := newRegistry(t)
 		ctx := context.Background()
