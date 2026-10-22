@@ -762,6 +762,55 @@ decisions and `Predicate` for filtered reads.
 
 ## 14. Phasing
 
+**Decided 2026-10-23: ship a seam, then accelerate.** CAS's ~2026-11-05 alpha
+does **not** wait for this module. CAS builds its own authorization
+(its plan 02 tasks 5/7/8, in `cas/internal/`) **shaped as this module's port
+and verified by this module's conformance suite**, and swaps to the real
+implementation after the alpha, at which point the CI duplication guard lands.
+The `captoken` and `tenancy` extractions also happen after the alpha — moving
+5,500 lines of working, tested code out from under a dated commitment is the
+highest-risk item available and it buys nothing before the date.
+
+This is a staged migration, not divergence: one consumer, written to a
+published contract, replaced before a second consumer exists. The invariant
+that must hold is **never two production authorization engines at the same
+time**, and it holds.
+
+Two things must be written down rather than assumed: CAS's alpha
+authorization is **not performance-qualified** (no §9 projection) and **not
+divergence-audited** (no §9.4 differential audit), so nobody later mistakes
+alpha behaviour for designed behaviour.
+
+**And the owner has asked to accelerate this module regardless.** The
+compression comes from three things, not from starting more phases at once:
+
+1. **Resolve the API-shaping findings by measurement, immediately.** F1
+   (filtered ANN) and F3 (tree versus DAG containment) decide whether
+   `Predicate` returns a SQL fragment or a fragment *plus* an indexable key the
+   consumer partitions by, and whether the ancestry closure is depth-bounded or
+   many-to-many at fact cardinality. These are empirical questions against a
+   real pgvector fixture, not design discussions, and until they are answered
+   every other decision is provisional. F1 is therefore the first task in the
+   module, ahead of phase 1.
+2. **Write the port and the conformance suite centrally and first.** It is the
+   seam CAS needs anyway, it forces the API decisions into the open, and it is
+   the yardstick every parallel workstream is judged against. **It is not
+   delegated**, and nor is the A3 adversarial suite, which gets one owner
+   rather than being distributed.
+3. **Parallelise only what does not depend on the API.** The identity registry
+   (formerly phase 3) is wholly independent of F1/F3/F4 and moves to the front.
+   So are the `Engine` adapter plus the F5/F6 topology and connection spikes,
+   and the classification store for the tree case.
+
+What acceleration cannot buy: **F7 is a design conversation with kgs, not a
+task.** Two of kgs §9.3's rule dimensions fall outside §8.5's permitted subset,
+and the resolution either removes a kgs capability or adds a tier-1 form that
+costs the projection. No amount of parallelism resolves it, and it should be
+settled before the projection is built on an assumption about it.
+
+Phases below are otherwise unchanged in content, with identity moved forward
+and the F1 spike prepended.
+
 Ordered by what cannot be retrofitted.
 
 **Phase 1 — the decision and the predicate.** Schema registry, identity
