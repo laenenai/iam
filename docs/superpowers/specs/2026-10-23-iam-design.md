@@ -798,7 +798,39 @@ decisions and `Predicate` for filtered reads.
 
 ## 14. Phasing
 
-**Decided 2026-10-23: ship a seam, then accelerate.** CAS's ~2026-11-05 alpha
+**Superseded later on 2026-10-23: the modules go first, then CAS.** The owner's
+decision — *"we will implement everything else first then go back to CAS,
+better to have CAS working with production grade implementations"* — reverses
+the seam below. The order is now: `tenancy`, `seal`, `captoken`, `escrow` to
+production grade; then this module; then CAS, rebuilt on top of them.
+
+What that changes, stated plainly because one of them is a cost:
+
+- **CAS's ~2026-11-05 alpha date is released.** CAS §19.1 recorded "both
+  systems at once, alpha in two weeks", and that commitment no longer holds.
+  This is the trade being made: a later alpha, built on components that have
+  been through their own conformance suites and integration tests, against an
+  earlier one built on code written to a deadline and swapped afterwards.
+- **The seam is no longer needed.** Its whole purpose was to let CAS ship
+  before this module existed. If CAS waits, it simply uses the real thing, and
+  the window in which a second authorization implementation existed never
+  opens. That is strictly better — the seam was a mitigation for a constraint
+  that has been removed rather than managed.
+- **The extraction direction inverts, helpfully.** The modules are extractions
+  *from* CAS, so CAS does not need to be rewritten against them: it adopts the
+  modules and deletes its own copies, which is a smaller and more reviewable
+  change than building adapters against an unfinished port. The duplication
+  guards land at that moment.
+- **This module is no longer on anyone's critical path**, which is the right
+  place for it to be given §17 still holds eight open findings, two of which
+  (F3, and F1's dependency on it) can still move the public API.
+
+The superseded decision is kept below, because the reasoning in it is still
+the reasoning that applies if a date ever returns.
+
+---
+
+**~~Decided 2026-10-23: ship a seam, then accelerate.~~** CAS's ~2026-11-05 alpha
 does **not** wait for this module. CAS builds its own authorization
 (its plan 02 tasks 5/7/8, in `cas/internal/`) **shaped as this module's port
 and verified by this module's conformance suite**, and swaps to the real
