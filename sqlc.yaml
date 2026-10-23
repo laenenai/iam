@@ -1,0 +1,201 @@
+# sqlc generates this module's query layer. CONVENTIONS makes sqlc the
+# default and hand-written SQL the departure that needs a reason; the one
+# reason that still holds here is SQL composed at runtime, which has no
+# fixed statement to generate (see internal/registry/pgregistry's package
+# doc).
+#
+# Schema and queries are read from the same files the module ships: the
+# goose migrations in db/migrations are the schema sqlc type-checks every
+# statement against, so a query naming a column that does not exist, or
+# binding a parameter of the wrong type, fails at generation time rather
+# than against a database.
+version: "2"
+sql:
+  - engine: "postgresql"
+    schema: "db/migrations"
+    queries: "db/queries"
+    gen:
+      go:
+        package: "gen"
+        out: "internal/registry/pgregistry/gen"
+        sql_package: "pgx/v5"
+        emit_pointers_for_null_types: true
+        overrides:
+          # ---------------------------------------------------------------
+          # The two base mappings every column in this schema starts from.
+          # ---------------------------------------------------------------
+          #
+          # iam.ulid is a DOMAIN over text (00001_init.sql), so without this
+          # sqlc has no Go type for it at all and a nullable one lands as
+          # interface{}. string is the honest primitive; the column
+          # overrides below refine each one to its typed domain id.
+          - db_type: "iam.ulid"
+            go_type: "string"
+          - db_type: "iam.ulid"
+            nullable: true
+            go_type:
+              type: "string"
+              pointer: true
+          # time.Time, not pgtype.Timestamptz: internal/domain's instants
+          # are time.Time, and a generated layer handing back a pgtype
+          # wrapper would put a pgx type in every conversion in the
+          # adapter. A nullable column becomes *time.Time, which is the
+          # shape the adapter already reads (a zero time.Time means
+          # "absent" in the domain, and NULL is how that is stored).
+          - db_type: "timestamptz"
+            go_type: "time.Time"
+          - db_type: "timestamptz"
+            nullable: true
+            go_type:
+              type: "time.Time"
+              pointer: true
+
+          # ---------------------------------------------------------------
+          # Typed ids and typed enums, following cas/sqlc.yaml.
+          # ---------------------------------------------------------------
+          #
+          # Every id column maps to its internal/domain typed id, never a
+          # bare string: that is the whole point of the typed ids (they
+          # cannot be crossed at a call site), and a generated layer
+          # handing back string would undo it right at the boundary. The
+          # text-valued enum columns map to their typed domain enums for
+          # the same reason.
+          - column: "iam.principals.id"
+            go_type:
+              import: "github.com/laenen-ai/iam/internal/domain"
+              type: "PrincipalID"
+          - column: "iam.principals.tenant_id"
+            go_type:
+              import: "github.com/laenen-ai/iam/internal/domain"
+              type: "TenantID"
+          - column: "iam.principals.kind"
+            go_type:
+              import: "github.com/laenen-ai/iam/internal/domain"
+              type: "PrincipalKind"
+          # delegated_by is NULL for everything but an agent run, so it is
+          # the typed id behind a pointer rather than the id itself.
+          - column: "iam.principals.delegated_by"
+            go_type:
+              import: "github.com/laenen-ai/iam/internal/domain"
+              type: "PrincipalID"
+              pointer: true
+
+          - column: "iam.groups.id"
+            go_type:
+              import: "github.com/laenen-ai/iam/internal/domain"
+              type: "GroupID"
+          - column: "iam.groups.tenant_id"
+            go_type:
+              import: "github.com/laenen-ai/iam/internal/domain"
+              type: "TenantID"
+
+          - column: "iam.group_members.group_id"
+            go_type:
+              import: "github.com/laenen-ai/iam/internal/domain"
+              type: "GroupID"
+          - column: "iam.group_members.principal_id"
+            go_type:
+              import: "github.com/laenen-ai/iam/internal/domain"
+              type: "PrincipalID"
+          - column: "iam.group_members.source"
+            go_type:
+              import: "github.com/laenen-ai/iam/internal/domain"
+              type: "GroupSource"
+
+          # ---------------------------------------------------------------
+          # The one column that is deliberately NOT its domain type.
+          # ---------------------------------------------------------------
+          #
+          # A clearance group's id is domain.ClearanceGroupID: a struct
+          # with an unexported field, so no package outside internal/domain
+          # can forge one, convert a GroupID into one, or read the string
+          # back out of one (design §8.3, and
+          # TestOrdinaryGroupIDIsNotAClearanceGroupID requires the compiler
+          # to reject the attempt).
+          #
+          # Mapping it here would need sql.Scanner and driver.Valuer on the
+          # type — both exported, so any package could then build a
+          # ClearanceGroupID from an arbitrary string and the
+          # unforgeability the type exists for would be gone. A storage
+          # concern must not widen a security-relevant type's surface.
+          #
+          # So every clearance-group id column maps to its primitive, and
+          # pgregistry converts through domain.ParseClearanceGroupID on the
+          # way out and domain.ClearanceGroupID.String() on the way in. One
+          # conversion per field, at one boundary, and the invariant is
+          # untouched. Spelled out explicitly rather than left to the
+          # iam.ulid default above, because it is a decision and not an
+          # omission.
+          - column: "iam.clearance_groups.id"
+            go_type: "string"
+          - column: "iam.clearance_group_members.clearance_group_id"
+            go_type: "string"
+          - column: "iam.clearance_group_changes.clearance_group_id"
+            go_type: "string"
+          - column: "iam.live_clearance_group_members.clearance_group_id"
+            go_type: "string"
+
+          - column: "iam.clearance_groups.tenant_id"
+            go_type:
+              import: "github.com/laenen-ai/iam/internal/domain"
+              type: "TenantID"
+          - column: "iam.clearance_groups.channel"
+            go_type:
+              import: "github.com/laenen-ai/iam/internal/domain"
+              type: "MandatoryChannel"
+
+          - column: "iam.clearance_group_members.principal_id"
+            go_type:
+              import: "github.com/laenen-ai/iam/internal/domain"
+              type: "PrincipalID"
+          - column: "iam.clearance_group_members.channel"
+            go_type:
+              import: "github.com/laenen-ai/iam/internal/domain"
+              type: "MandatoryChannel"
+          - column: "iam.clearance_group_members.actor_principal_id"
+            go_type:
+              import: "github.com/laenen-ai/iam/internal/domain"
+              type: "PrincipalID"
+
+          - column: "iam.clearance_group_changes.id"
+            go_type:
+              import: "github.com/laenen-ai/iam/internal/domain"
+              type: "ChangeID"
+          # NULL for a 'created' entry, which names no principal.
+          - column: "iam.clearance_group_changes.principal_id"
+            go_type:
+              import: "github.com/laenen-ai/iam/internal/domain"
+              type: "PrincipalID"
+              pointer: true
+          - column: "iam.clearance_group_changes.kind"
+            go_type:
+              import: "github.com/laenen-ai/iam/internal/domain"
+              type: "ClearanceChangeKind"
+          - column: "iam.clearance_group_changes.channel"
+            go_type:
+              import: "github.com/laenen-ai/iam/internal/domain"
+              type: "MandatoryChannel"
+          - column: "iam.clearance_group_changes.actor_principal_id"
+            go_type:
+              import: "github.com/laenen-ai/iam/internal/domain"
+              type: "PrincipalID"
+
+          # The two views are the artifact design §9's predicate joins, not
+          # something this package queries from Go; their columns are typed
+          # here anyway so models.go describes the schema uniformly.
+          - column: "iam.live_group_members.principal_id"
+            go_type:
+              import: "github.com/laenen-ai/iam/internal/domain"
+              type: "PrincipalID"
+          - column: "iam.live_group_members.group_id"
+            go_type:
+              import: "github.com/laenen-ai/iam/internal/domain"
+              type: "GroupID"
+          - column: "iam.live_group_members.source"
+            go_type:
+              import: "github.com/laenen-ai/iam/internal/domain"
+              type: "GroupSource"
+          - column: "iam.live_clearance_group_members.principal_id"
+            go_type:
+              import: "github.com/laenen-ai/iam/internal/domain"
+              type: "PrincipalID"
