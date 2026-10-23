@@ -16,23 +16,7 @@ type AgentRunSpec = registry.AgentRunSpec
 
 func Canonical(t time.Time) time.Time
 
-type ChangeID = domain.ChangeID
-
 type Claims = registry.Claims
-
-type ClearanceChange = domain.ClearanceChange
-
-const ClearanceChangeAdded = domain.ClearanceChangeAdded
-
-const ClearanceChangeCreated = domain.ClearanceChangeCreated
-
-type ClearanceChangeKind = domain.ClearanceChangeKind
-
-const ClearanceChangeRemoved = domain.ClearanceChangeRemoved
-
-type ClearanceGroup = domain.ClearanceGroup
-
-type ClearanceGroupID = domain.ClearanceGroupID
 
 type Clock = domain.Clock
 
@@ -40,11 +24,7 @@ var ErrAgentRunExpired = domain.ErrAgentRunExpired
 
 var ErrCapabilityUnconfigured = domain.ErrCapabilityUnconfigured
 
-var ErrChannelMismatch = domain.ErrChannelMismatch
-
 var ErrConflict = domain.ErrConflict
-
-var ErrGroupKindMismatch = domain.ErrGroupKindMismatch
 
 var ErrInvalidClaims = domain.ErrInvalidClaims
 
@@ -57,8 +37,6 @@ var ErrInvalidPrincipal = domain.ErrInvalidPrincipal
 var ErrIssuerNotRegistered = domain.ErrIssuerNotRegistered
 
 var ErrMalformedID = domain.ErrMalformedID
-
-var ErrMandatoryChannelRequired = domain.ErrMandatoryChannelRequired
 
 var ErrNotFound = domain.ErrNotFound
 
@@ -92,14 +70,6 @@ type KeySet = idp.KeySet
 
 type KeySource = idp.KeySource
 
-type MandatoryAct = domain.MandatoryAct
-
-type MandatoryChannel = domain.MandatoryChannel
-
-const MandatoryChannelClassify = domain.MandatoryChannelClassify
-
-const MandatoryChannelDirectorySync = domain.MandatoryChannelDirectorySync
-
 type Membership = domain.Membership
 
 func MigrateUp(ctx context.Context, pool *pgxpool.Pool) error
@@ -108,15 +78,9 @@ type Migration = migrate.Applied
 
 func MigrationStatus(ctx context.Context, pool *pgxpool.Pool) ([]Migration, error)
 
-func NewChangeID(clock Clock) ChangeID
-
-func NewClearanceGroupID(clock Clock) ClearanceGroupID
-
 func NewGroupID(clock Clock) GroupID
 
 func NewJITProvisioner(policy IssuerPolicy, reg Registry) (*JITProvisioner, error)
-
-func NewMandatoryAct(channel MandatoryChannel, actor PrincipalID, reason string, at time.Time) (MandatoryAct, error)
 
 func NewMemoryRegistry(cfg RegistryConfig) (Registry, error)
 
@@ -127,10 +91,6 @@ func NewPrincipalID(clock Clock) PrincipalID
 func NewStaticIssuerPolicy(accepted map[TenantID][]string) *StaticIssuerPolicy
 
 func NewTenantID(clock Clock) TenantID
-
-func ParseChangeID(s string) (ChangeID, error)
-
-func ParseClearanceGroupID(s string) (ClearanceGroupID, error)
 
 func ParseExternalSubject(issuer, subject string) (ExternalSubject, error)
 
@@ -207,6 +167,8 @@ type Assignment struct {
 	Label string
 }
 
+func AttributeEnforceable(f Fixture, ref Ref) (bool, string)
+
 func Available() []Capability
 
 func C(kind ClaimKind, subject, detail, why string) Claim
@@ -214,8 +176,6 @@ func C(kind ClaimKind, subject, detail, why string) Claim
 func CanExpress(kind ResourceKind, r Relation) (bool, string)
 
 const CapAttributePredicate Capability = "AttributePredicate"
-
-const CapClassificationStore Capability = "ClassificationStore"
 
 const CapDecide Capability = "Decide"
 
@@ -236,9 +196,7 @@ type Claim struct {
 	Why string
 }
 
-const ClaimAbsoluteHasNoLift ClaimKind = "absolute-has-no-lift"
-
-const ClaimAnyActorMayClassify ClaimKind = "any-actor-may-classify"
+const ClaimAttributeEnforceable ClaimKind = "attribute-enforceable"
 
 const ClaimCryptoUnreadable ClaimKind = "crypto-unreadable"
 
@@ -246,15 +204,11 @@ const ClaimEntityVisibility ClaimKind = "entity-visibility"
 
 type ClaimKind string
 
-const ClaimLabelSet ClaimKind = "label-set"
-
-const ClaimLiveClearances ClaimKind = "live-clearances"
-
 const ClaimLiveGroups ClaimKind = "live-groups"
 
-const ClaimMembershipChangeTakesEffect ClaimKind = "membership-change-takes-effect"
+const ClaimMarkingSet ClaimKind = "marking-set"
 
-const ClaimNoClearanceFromDiscretion ClaimKind = "no-clearance-from-discretion"
+const ClaimMembershipChangeTakesEffect ClaimKind = "membership-change-takes-effect"
 
 const ClaimNoDirectPath ClaimKind = "no-direct-path"
 
@@ -266,8 +220,6 @@ const ClaimProviderPermitted ClaimKind = "provider-permitted"
 
 const ClaimProviderRefused ClaimKind = "provider-refused"
 
-const ClaimRowEnforceable ClaimKind = "row-enforceable"
-
 const ClaimSchemaAccepted ClaimKind = "schema-accepted"
 
 const ClaimSchemaRejected ClaimKind = "schema-rejected"
@@ -277,21 +229,6 @@ const ClaimStableUnderWrite ClaimKind = "stable-under-write"
 const ClaimTuplesPerHop ClaimKind = "tuples-per-hop"
 
 const ClaimVisibleSet ClaimKind = "visible-set"
-
-type Classification struct {
-	Label string
-	Enforcement EnforcementClass
-	Attribute string
-	Why string
-}
-
-type ClearanceGroupSpec struct {
-	Name string
-	Channel iam.MandatoryChannel
-	Members []string
-	Labels []string
-	Reason string
-}
 
 func CountTuples(f Fixture) (TupleCount, error)
 
@@ -309,11 +246,6 @@ type Derivation struct {
 	Output Ref
 	Inputs []Ref
 	Note string
-}
-
-type DirectClearance struct {
-	Principal string
-	Label string
 }
 
 func DirectPath(f Fixture, child Ref) ([]Ref, error)
@@ -337,7 +269,7 @@ type EnforcementClass string
 
 const EnforcementCrypto EnforcementClass = "crypto"
 
-const EnforcementPolicy EnforcementClass = "policy"
+const EnforcementNone EnforcementClass = "none"
 
 func EntityExistsFor(f Fixture, principal string, entity Ref) (bool, error)
 
@@ -348,23 +280,21 @@ type Env struct {
 	// has unexported fields
 }
 
-func (*Env) ClearanceGroup(name string) (iam.ClearanceGroup, bool)
-
 func (*Env) Group(name string) (iam.Group, bool)
 
 func (*Env) Principal(name string) (iam.Principal, bool)
 
 func (*Env) PrincipalID(name string) (iam.PrincipalID, bool)
 
-var ErrClearanceInTier1 = errors.New("a clearance group can never be referenced in a tier-1 tuple (design §8.3)")
-
-var ErrCryptoEnforced = errors.New("content is crypto-enforced: the deployment does not hold the key (design §7.3)")
+var ErrCryptoEnforced = errors.New("content is crypto-enforced: the deployment does not hold the key")
 
 var ErrMarkingNotAllowlisted = errors.New("provider is not allowlisted for this classification (KGS §9.5)")
 
+var ErrNoDenyMechanism = errors.New("there is no deny mechanism, by design")
+
 var ErrNoDirectPath = errors.New("containment is a DAG here, so there is no single direct path (design §8.2, finding F3)")
 
-var ErrUnexpressible = errors.New("outside the permitted tier-1 subset (design §8.5)")
+var ErrUnexpressible = errors.New("outside the permitted subset (design §8.5)")
 
 type Expectation struct {
 	Principal string
@@ -383,20 +313,18 @@ type Fixture struct {
 	Kinds []ResourceKind
 	Principals []PrincipalSpec
 	Groups []GroupSpec
-	ClearanceGroups []ClearanceGroupSpec
-	DirectClearances []DirectClearance
 	Containment []Edge
 	Tuples []Tuple
-	Classifications []Classification
+	Markings []Marking
 	Assignments []Assignment
 	Derivations []Derivation
 	Mentions []Mention
 	LaterWrites []LaterWrite
 }
 
-func (Fixture) Classification(label string) (Classification, bool)
-
 func (Fixture) Kind(name string) (ResourceKind, bool)
+
+func (Fixture) Marking(label string) (Marking, bool)
 
 func (Fixture) Principal(name string) (PrincipalSpec, bool)
 
@@ -407,8 +335,6 @@ type GroupSpec struct {
 	Members []string
 	Note string
 }
-
-func LabelsOf(f Fixture, resource Ref) ([]string, error)
 
 type LaterWrite struct {
 	What string
@@ -428,6 +354,14 @@ type LedgerLine struct {
 func LintSchema(f Fixture) error
 
 func M(fact, entity string) Mention
+
+type Marking struct {
+	Label string
+	Enforcement EnforcementClass
+	Why string
+}
+
+func MarkingsOf(f Fixture, resource Ref) ([]string, error)
 
 func Materialize(ctx context.Context, reg iam.Registry, f Fixture, clock iam.Clock) (*Env, error)
 
@@ -459,8 +393,6 @@ type PrincipalSpec struct {
 func R(s string) Ref
 
 func Readable(f Fixture, resource Ref) error
-
-const ReasonClassification ReasonKind = "classification"
 
 const ReasonDirect ReasonKind = "direct-tuple"
 
@@ -504,8 +436,6 @@ type ResourceKind struct {
 	Relations []Relation
 	Actions map[string]string
 }
-
-func RowEnforceable(f Fixture, label string) (bool, string)
 
 func RunCorpus(t *testing.T, scenarios []Scenario, newRegistry func(t *testing.T) iam.Registry)
 
@@ -588,10 +518,6 @@ package discretionary // examples/discretionary
 
 func Scenarios() []scenario.Scenario
 
-package mandatory // examples/mandatory
-
-func Scenarios() []scenario.Scenario
-
 package household // examples/household
 
 func Scenarios() []scenario.Scenario
@@ -608,44 +534,6 @@ package domain // internal/domain
 
 func Canonical(t time.Time) time.Time
 
-type ChangeID string
-
-type ClearanceChange struct {
-	ID ChangeID
-	ClearanceGroupID ClearanceGroupID
-	PrincipalID PrincipalID
-	Kind ClearanceChangeKind
-	Channel MandatoryChannel
-	Actor PrincipalID
-	Reason string
-	ActedAt time.Time
-	RecordedAt time.Time
-}
-
-const ClearanceChangeAdded ClearanceChangeKind = "added"
-
-const ClearanceChangeCreated ClearanceChangeKind = "created"
-
-type ClearanceChangeKind string
-
-const ClearanceChangeRemoved ClearanceChangeKind = "removed"
-
-type ClearanceGroup struct {
-	ID ClearanceGroupID
-	TenantID TenantID
-	Name string
-	Channel MandatoryChannel
-	CreatedAt time.Time
-}
-
-type ClearanceGroupID struct {
-	// has unexported fields
-}
-
-func (ClearanceGroupID) IsZero() bool
-
-func (ClearanceGroupID) String() string
-
 type Clock interface {
 	Now() time.Time
 }
@@ -654,11 +542,7 @@ var ErrAgentRunExpired = errors.New("agent run expired")
 
 var ErrCapabilityUnconfigured = errors.New("capability unconfigured")
 
-var ErrChannelMismatch = errors.New("mandatory channel mismatch")
-
 var ErrConflict = errors.New("conflict")
-
-var ErrGroupKindMismatch = errors.New("group kind mismatch")
 
 var ErrInvalidClaims = errors.New("invalid claims")
 
@@ -671,8 +555,6 @@ var ErrInvalidPrincipal = errors.New("invalid principal")
 var ErrIssuerNotRegistered = errors.New("issuer not registered")
 
 var ErrMalformedID = errors.New("malformed id")
-
-var ErrMandatoryChannelRequired = errors.New("mandatory channel required")
 
 var ErrNotFound = errors.New("not found")
 
@@ -720,28 +602,6 @@ const GroupSourceClaim GroupSource = "claim"
 
 const GroupSourceLocal GroupSource = "local"
 
-type MandatoryAct struct {
-	// has unexported fields
-}
-
-func (MandatoryAct) Actor() PrincipalID
-
-func (MandatoryAct) At() time.Time
-
-func (MandatoryAct) Channel() MandatoryChannel
-
-func (MandatoryAct) IsZero() bool
-
-func (MandatoryAct) Reason() string
-
-type MandatoryChannel string
-
-func (MandatoryChannel) Valid() bool
-
-const MandatoryChannelClassify MandatoryChannel = "classify-permission"
-
-const MandatoryChannelDirectorySync MandatoryChannel = "directory-sync"
-
 type Membership struct {
 	GroupID GroupID
 	PrincipalID PrincipalID
@@ -749,23 +609,13 @@ type Membership struct {
 	AddedAt time.Time
 }
 
-func NewChangeID(clock Clock) ChangeID
-
-func NewClearanceGroupID(clock Clock) ClearanceGroupID
-
 func NewFixedClock(t time.Time) *FixedClock
 
 func NewGroupID(clock Clock) GroupID
 
-func NewMandatoryAct(channel MandatoryChannel, actor PrincipalID, reason string, at time.Time) (MandatoryAct, error)
-
 func NewPrincipalID(clock Clock) PrincipalID
 
 func NewTenantID(clock Clock) TenantID
-
-func ParseChangeID(s string) (ChangeID, error)
-
-func ParseClearanceGroupID(s string) (ClearanceGroupID, error)
 
 func ParseExternalSubject(issuer, subject string) (ExternalSubject, error)
 
@@ -840,8 +690,6 @@ type AgentRunSpec struct {
 	DisplayName string
 }
 
-func ChannelMismatchError(cg domain.ClearanceGroup, act domain.MandatoryAct) error
-
 type Claims struct {
 	TenantID domain.TenantID
 	Subject domain.ExternalSubject
@@ -864,15 +712,7 @@ type Memory struct {
 	// has unexported fields
 }
 
-func (*Memory) AddClearanceGroupMember(ctx context.Context, act domain.MandatoryAct, g domain.ClearanceGroupID, p domain.PrincipalID) error
-
 func (*Memory) AddGroupMember(ctx context.Context, g domain.GroupID, p domain.PrincipalID) error
-
-func (*Memory) ClearanceGroupChanges(ctx context.Context, g domain.ClearanceGroupID) ([]domain.ClearanceChange, error)
-
-func (*Memory) ClearanceGroupMembers(ctx context.Context, g domain.ClearanceGroupID, asOf time.Time) ([]domain.PrincipalID, error)
-
-func (*Memory) ClearanceGroupsOf(ctx context.Context, p domain.PrincipalID, asOf time.Time) ([]domain.ClearanceGroup, error)
 
 func (*Memory) CollectExpiredAgentRuns(ctx context.Context, asOf time.Time) (int, error)
 
@@ -882,8 +722,6 @@ func (*Memory) DelegateAgentRun(ctx context.Context, parent domain.PrincipalID, 
 
 func (*Memory) Deprovision(ctx context.Context, p domain.PrincipalID) error
 
-func (*Memory) EnsureClearanceGroup(ctx context.Context, act domain.MandatoryAct, tenant domain.TenantID, name string) (domain.ClearanceGroup, error)
-
 func (*Memory) EnsureGroup(ctx context.Context, tenant domain.TenantID, name string) (domain.Group, error)
 
 func (*Memory) GroupMembers(ctx context.Context, g domain.GroupID, asOf time.Time) ([]domain.PrincipalID, error)
@@ -891,8 +729,6 @@ func (*Memory) GroupMembers(ctx context.Context, g domain.GroupID, asOf time.Tim
 func (*Memory) GroupsOf(ctx context.Context, p domain.PrincipalID, asOf time.Time) ([]domain.Group, error)
 
 func (*Memory) PrincipalByID(ctx context.Context, id domain.PrincipalID) (domain.Principal, error)
-
-func (*Memory) RemoveClearanceGroupMember(ctx context.Context, act domain.MandatoryAct, g domain.ClearanceGroupID, p domain.PrincipalID) error
 
 func (*Memory) RemoveGroupMember(ctx context.Context, g domain.GroupID, p domain.PrincipalID) error
 
@@ -914,18 +750,10 @@ type Registry interface {
 	RemoveGroupMember(ctx context.Context, g domain.GroupID, p domain.PrincipalID) error
 	GroupsOf(ctx context.Context, p domain.PrincipalID, asOf time.Time) ([]domain.Group, error)
 	GroupMembers(ctx context.Context, g domain.GroupID, asOf time.Time) ([]domain.PrincipalID, error)
-	EnsureClearanceGroup(ctx context.Context, act domain.MandatoryAct, tenant domain.TenantID, name string) (domain.ClearanceGroup, error)
-	AddClearanceGroupMember(ctx context.Context, act domain.MandatoryAct, g domain.ClearanceGroupID, p domain.PrincipalID) error
-	RemoveClearanceGroupMember(ctx context.Context, act domain.MandatoryAct, g domain.ClearanceGroupID, p domain.PrincipalID) error
-	ClearanceGroupsOf(ctx context.Context, p domain.PrincipalID, asOf time.Time) ([]domain.ClearanceGroup, error)
-	ClearanceGroupMembers(ctx context.Context, g domain.ClearanceGroupID, asOf time.Time) ([]domain.PrincipalID, error)
-	ClearanceGroupChanges(ctx context.Context, g domain.ClearanceGroupID) ([]domain.ClearanceChange, error)
 	DelegateAgentRun(ctx context.Context, parent domain.PrincipalID, spec AgentRunSpec) (domain.Principal, error)
 	CollectExpiredAgentRuns(ctx context.Context, asOf time.Time) (int, error)
 	Deprovision(ctx context.Context, p domain.PrincipalID) error
 }
-
-func RequireMandatoryAct(act domain.MandatoryAct) error
 
 func ValidateAgentRunSpec(spec AgentRunSpec, maxTTL time.Duration) error
 

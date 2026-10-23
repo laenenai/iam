@@ -218,10 +218,16 @@ the other had it backwards.
     column. Typed ids survive to the boundary and a generated layer never hands
     back a bare string.
   - **A deliberately opaque type** — a struct with an unexported field, so that
-    no package outside `internal/domain` can forge or convert one, as
-    `iam.ClearanceGroupID` is — maps to its **primitive**, and the adapter
-    converts through the validating parser (`ParseClearanceGroupID`) at its own
-    boundary. One conversion per field, and the invariant is untouched.
+    no package outside `internal/domain` can forge or convert one — maps to its
+    **primitive**, and the adapter converts through that type's validating
+    parser at its own boundary. One conversion per field, and the invariant is
+    untouched.
+
+    `iam.ClearanceGroupID` was this convention's worked example and the module
+    no longer has one: it went with the mandatory tier (design A3), along with
+    the `sqlc.yaml` override that demonstrated the pattern. The technique is
+    kept here because the next value that must be unforgeable will need it, and
+    because the reason it was right outlives the type.
 
   **Never give such a type `sql.Scanner` or `driver.Valuer`.** Those methods are
   exported, so any package could then construct one from an arbitrary string —

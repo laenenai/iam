@@ -6,6 +6,17 @@
 This spike measures. It does not amend `iam` or `kgs` — the owner folds in what
 it finds.
 
+> **Read later than 2026-10-23: half of what this measured no longer exists,
+> and the measurement is why.** The fixture below carries a `classification`
+> table, a `fact_classification` table and a `principal_clearance` table,
+> because `iam` had a mandatory tier when this ran. It does not any more
+> (design anti-goal A3). This document is left exactly as measured, because it
+> is the evidence rather than a description of the design: the tier-2 anti-join
+> it clocked at **296 ms** against a closure join of **0.006 ms per row** is
+> the performance half of the argument that removed the tier. Its F1 conclusion
+> — a fragment plus a key — is unaffected and still binding, and so is its
+> observation that condition (iii) depends on F3.
+
 ---
 
 ## 0. The answer, first
