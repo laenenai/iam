@@ -23,13 +23,27 @@ import (
 var updateAPI = flag.Bool("update-api", false, "rewrite api.txt from the current source")
 
 // apiPackages are the directories api.txt covers, in the order they appear
-// in the file. The two importable packages come first; the internal ones
-// follow because the facade re-exports them as aliases, so a change to an
-// internal signature is a change to the public surface even though Go's
-// internal rule keeps the import path private.
+// in the file. The importable packages come first — the facade, the
+// conformance suites, and the use-case corpus a consumer runs against its
+// own wiring — and the internal ones follow because the facade re-exports
+// them as aliases, so a change to an internal signature is a change to the
+// public surface even though Go's internal rule keeps the import path
+// private.
+//
+// The examples/ packages are listed because they are importable and a
+// consumer does import them: examples/scenario is the language the corpus
+// is written in and the harness that runs it, and CHARTER.md makes running
+// this module's suites against a consumer's own wiring the adoption test.
 var apiPackages = []string{
 	".",
 	"iamtest",
+	"examples",
+	"examples/scenario",
+	"examples/discretionary",
+	"examples/mandatory",
+	"examples/household",
+	"examples/agents",
+	"examples/unexpressible",
 	"internal/domain",
 	"internal/registry",
 	"internal/idp",
@@ -39,8 +53,9 @@ const apiHeader = `# Public API of github.com/laenen-ai/iam, as a golden file.
 #
 # Regenerate with: go test . -run TestAPIGolden -update-api
 #
-# "package audit" is the facade a consumer imports; "package audittest" is
-# the conformance suite it runs against its own wiring. The internal
+# "package iam" is the facade a consumer imports; "package iamtest" is the
+# conformance suite it runs against its own wiring, and the examples/
+# packages are the use-case corpus it runs the same way. The internal
 # packages are listed too, because the facade re-exports their types as
 # aliases: a change to one of those signatures changes what a consumer
 # sees, even though the import path itself is private. Growing this file is

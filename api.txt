@@ -2,8 +2,9 @@
 #
 # Regenerate with: go test . -run TestAPIGolden -update-api
 #
-# "package audit" is the facade a consumer imports; "package audittest" is
-# the conformance suite it runs against its own wiring. The internal
+# "package iam" is the facade a consumer imports; "package iamtest" is the
+# conformance suite it runs against its own wiring, and the examples/
+# packages are the use-case corpus it runs the same way. The internal
 # packages are listed too, because the facade re-exports their types as
 # aliases: a change to one of those signatures changes what a consumer
 # sees, even though the import path itself is private. Growing this file is
@@ -182,6 +183,424 @@ type TenantID = domain.TenantID
 package iamtest // iamtest
 
 func RunRegistrySuite(t *testing.T, newRegistry func(t *testing.T) iam.Registry)
+
+package examples // examples
+
+func All() []scenario.Scenario
+
+package scenario // examples/scenario
+
+const APIGoldenPath = "../api.txt"
+
+func AS(resource, label string) Assignment
+
+const Allow Verdict = "allow"
+
+func Ancestors(f Fixture, child Ref) ([]Ref, error)
+
+func AssertTripwire(t *testing.T, scenarios []Scenario, apiGoldenPath string)
+
+type Assignment struct {
+	Resource Ref
+	Label string
+}
+
+func Available() []Capability
+
+func C(kind ClaimKind, subject, detail, why string) Claim
+
+func CanExpress(kind ResourceKind, r Relation) (bool, string)
+
+const CapAttributePredicate Capability = "AttributePredicate"
+
+const CapClassificationStore Capability = "ClassificationStore"
+
+const CapDecide Capability = "Decide"
+
+const CapDerivation Capability = "Derivation"
+
+const CapPredicate Capability = "Predicate"
+
+const CapTupleStore Capability = "TupleStore"
+
+const CapVisibleBelow Capability = "VisibleBelow"
+
+type Capability string
+
+type Claim struct {
+	Kind ClaimKind
+	Subject string
+	Detail string
+	Why string
+}
+
+const ClaimAbsoluteHasNoLift ClaimKind = "absolute-has-no-lift"
+
+const ClaimAnyActorMayClassify ClaimKind = "any-actor-may-classify"
+
+const ClaimCryptoUnreadable ClaimKind = "crypto-unreadable"
+
+const ClaimEntityVisibility ClaimKind = "entity-visibility"
+
+type ClaimKind string
+
+const ClaimLabelSet ClaimKind = "label-set"
+
+const ClaimLiveClearances ClaimKind = "live-clearances"
+
+const ClaimLiveGroups ClaimKind = "live-groups"
+
+const ClaimMembershipChangeTakesEffect ClaimKind = "membership-change-takes-effect"
+
+const ClaimNoClearanceFromDiscretion ClaimKind = "no-clearance-from-discretion"
+
+const ClaimNoDirectPath ClaimKind = "no-direct-path"
+
+const ClaimPathCount ClaimKind = "path-count"
+
+const ClaimPrincipalUnusable ClaimKind = "principal-unusable"
+
+const ClaimProviderPermitted ClaimKind = "provider-permitted"
+
+const ClaimProviderRefused ClaimKind = "provider-refused"
+
+const ClaimRowEnforceable ClaimKind = "row-enforceable"
+
+const ClaimSchemaAccepted ClaimKind = "schema-accepted"
+
+const ClaimSchemaRejected ClaimKind = "schema-rejected"
+
+const ClaimStableUnderWrite ClaimKind = "stable-under-write"
+
+const ClaimTuplesPerHop ClaimKind = "tuples-per-hop"
+
+const ClaimVisibleSet ClaimKind = "visible-set"
+
+type Classification struct {
+	Label string
+	Enforcement EnforcementClass
+	Attribute string
+	Why string
+}
+
+type ClearanceGroupSpec struct {
+	Name string
+	Channel iam.MandatoryChannel
+	Members []string
+	Labels []string
+	Reason string
+}
+
+func CountTuples(f Fixture) (TupleCount, error)
+
+func Decide(f Fixture, principal, action string, resource Ref) (Decision, error)
+
+type Decision struct {
+	Verdict Verdict
+	Reason ReasonKind
+	Because string
+}
+
+const Deny Verdict = "deny"
+
+type Derivation struct {
+	Output Ref
+	Inputs []Ref
+	Note string
+}
+
+type DirectClearance struct {
+	Principal string
+	Label string
+}
+
+func DirectPath(f Fixture, child Ref) ([]Ref, error)
+
+func E(child, parent string) Edge
+
+type Edge struct {
+	Child Ref
+	Parent Ref
+	Kind EdgeKind
+	Predicate string
+}
+
+const EdgeExplicit EdgeKind = "explicit"
+
+type EdgeKind string
+
+const EdgePredicate EdgeKind = "predicate"
+
+type EnforcementClass string
+
+const EnforcementCrypto EnforcementClass = "crypto"
+
+const EnforcementPolicy EnforcementClass = "policy"
+
+func EntityExistsFor(f Fixture, principal string, entity Ref) (bool, error)
+
+type Env struct {
+	Tenant iam.TenantID
+	Registry iam.Registry
+	Now time.Time
+	// has unexported fields
+}
+
+func (*Env) ClearanceGroup(name string) (iam.ClearanceGroup, bool)
+
+func (*Env) Group(name string) (iam.Group, bool)
+
+func (*Env) Principal(name string) (iam.Principal, bool)
+
+func (*Env) PrincipalID(name string) (iam.PrincipalID, bool)
+
+var ErrClearanceInTier1 = errors.New("a clearance group can never be referenced in a tier-1 tuple (design §8.3)")
+
+var ErrCryptoEnforced = errors.New("content is crypto-enforced: the deployment does not hold the key (design §7.3)")
+
+var ErrMarkingNotAllowlisted = errors.New("provider is not allowlisted for this classification (KGS §9.5)")
+
+var ErrNoDirectPath = errors.New("containment is a DAG here, so there is no single direct path (design §8.2, finding F3)")
+
+var ErrUnexpressible = errors.New("outside the permitted tier-1 subset (design §8.5)")
+
+type Expectation struct {
+	Principal string
+	Action string
+	Resource Ref
+	Want Verdict
+	Reason ReasonKind
+	Because string
+	Note string
+	Unreachable string
+}
+
+type Fixture struct {
+	Tenant string
+	Issuer string
+	Kinds []ResourceKind
+	Principals []PrincipalSpec
+	Groups []GroupSpec
+	ClearanceGroups []ClearanceGroupSpec
+	DirectClearances []DirectClearance
+	Containment []Edge
+	Tuples []Tuple
+	Classifications []Classification
+	Assignments []Assignment
+	Derivations []Derivation
+	Mentions []Mention
+	LaterWrites []LaterWrite
+}
+
+func (Fixture) Classification(label string) (Classification, bool)
+
+func (Fixture) Kind(name string) (ResourceKind, bool)
+
+func (Fixture) Principal(name string) (PrincipalSpec, bool)
+
+func (Fixture) Relation(kind, relation string) (Relation, bool)
+
+type GroupSpec struct {
+	Name string
+	Members []string
+	Note string
+}
+
+func LabelsOf(f Fixture, resource Ref) ([]string, error)
+
+type LaterWrite struct {
+	What string
+	AddEdges []Edge
+	AddAssignments []Assignment
+}
+
+func Ledger(scenarios []Scenario) string
+
+type LedgerLine struct {
+	ID string
+	Status Status
+	Waiting string
+	Title string
+}
+
+func LintSchema(f Fixture) error
+
+func M(fact, entity string) Mention
+
+func Materialize(ctx context.Context, reg iam.Registry, f Fixture, clock iam.Clock) (*Env, error)
+
+func MayReceive(f Fixture, resource Ref, allowlisted []string) error
+
+type Mention struct {
+	Fact Ref
+	Entity Ref
+}
+
+func P(name string) Subject
+
+func Paths(f Fixture, child Ref) ([][]Ref, error)
+
+func PredicateEdges(f Fixture) []Edge
+
+type PrincipalSpec struct {
+	Name string
+	Kind iam.PrincipalKind
+	Issuer string
+	Subject string
+	ClaimGroups []string
+	DelegatedBy string
+	TTL time.Duration
+	Deprovisioned bool
+	Role string
+}
+
+func R(s string) Ref
+
+func Readable(f Fixture, resource Ref) error
+
+const ReasonClassification ReasonKind = "classification"
+
+const ReasonDirect ReasonKind = "direct-tuple"
+
+const ReasonInherited ReasonKind = "inherited-tuple"
+
+type ReasonKind string
+
+const ReasonNoGrant ReasonKind = "no-grant"
+
+const ReasonPrincipalUnusable ReasonKind = "principal-unusable"
+
+const ReasonUnion ReasonKind = "union"
+
+const ReasonUserset ReasonKind = "userset-tuple"
+
+type Ref struct {
+	Kind string
+	ID string
+	Attribute string
+}
+
+func (Ref) IsZero() bool
+
+func (Ref) Object() Ref
+
+func (Ref) String() string
+
+type Relation struct {
+	Name string
+	Direct bool
+	Usersets []string
+	InheritFromParent []string
+	Union []string
+	Exclude []string
+	AttributeCondition string
+}
+
+type ResourceKind struct {
+	Name string
+	Shape Shape
+	Relations []Relation
+	Actions map[string]string
+}
+
+func RowEnforceable(f Fixture, label string) (bool, string)
+
+func RunCorpus(t *testing.T, scenarios []Scenario, newRegistry func(t *testing.T) iam.Registry)
+
+func RunScenario(t *testing.T, s Scenario, reg iam.Registry)
+
+type Scenario struct {
+	ID string
+	Title string
+	Models string
+	Governs []string
+	Status Status
+	PendingOn []Capability
+	Finding string
+	Cost string
+	Fixture Fixture
+	Expect []Expectation
+	Claims []Claim
+}
+
+func (Scenario) Unreachable() []Expectation
+
+func (Scenario) Validate() error
+
+type Shape string
+
+const ShapeColumnar Shape = "columnar"
+
+const ShapeRow Shape = "row"
+
+type Status string
+
+const StatusLive Status = "live"
+
+const StatusPending Status = "pending"
+
+const StatusUnexpressible Status = "unexpressible"
+
+type Subject struct {
+	Principal string
+	Userset *Userset
+}
+
+func (Subject) String() string
+
+func T(object, relation string, subject Subject) Tuple
+
+func Tripwire(apiGoldenPath string) ([]Capability, error)
+
+type Tuple struct {
+	Object Ref
+	Relation string
+	Subject Subject
+	Note string
+}
+
+func (Tuple) String() string
+
+type TupleCount struct {
+	Tuples int
+	Objects int
+	CrossProduct int
+}
+
+func US(object, relation string) Subject
+
+type Userset struct {
+	Object Ref
+	Relation string
+}
+
+func (Userset) String() string
+
+type Verdict string
+
+func Visible(f Fixture, principal string) ([]Ref, error)
+
+func WithLaterWrites(f Fixture) Fixture
+
+package discretionary // examples/discretionary
+
+func Scenarios() []scenario.Scenario
+
+package mandatory // examples/mandatory
+
+func Scenarios() []scenario.Scenario
+
+package household // examples/household
+
+func Scenarios() []scenario.Scenario
+
+package agents // examples/agents
+
+func Scenarios() []scenario.Scenario
+
+package unexpressible // examples/unexpressible
+
+func Scenarios() []scenario.Scenario
 
 package domain // internal/domain
 
