@@ -10,17 +10,29 @@ prune at plan time. Runtime pruning still gives correct results, but the
 planner has already produced a plan containing every partition, and paying for
 that plan is not free.
 
-Worse, the generic plan is built once and reused: a plan shaped by a
-500-element array stays in force when the next caller passes a 1-element
-array.
+A plausible further worry is that the generic plan, once built, is reused: a
+plan shaped by a 500-element array would stay in force when the next caller
+passes a 1-element array.
 
-This script measures, for one 1,000-partition table and one 0.1%-selectivity
-principal:
+MEASURED RESULT (see plancache.txt): the first effect is real but small --
+~3 ms for executions 1-5 against ~9 ms for executions 6+, on a query whose
+custom-plan cost is ~2 ms. The second effect did NOT reproduce: after 30
+executions with a 500-zone array on the same prepared statement, a 1-zone
+query on that connection still ran in ~2 ms, i.e. PostgreSQL kept choosing
+custom plans. So the cross-probe contamination hypothesis is NOT supported,
+and the write-up does not claim it.
 
-  * latency per execution, 1..N, with prepared statements allowed
-  * the same with plan_cache_mode = force_custom_plan
-  * the same with the key inlined as a literal (a new statement every time,
-    so never prepared)
+This script exists because the first (uncontrolled) run of the matrix showed
+partitioned-query p50s of 340-715 ms at every selectivity, including the
+1-partition case, where the controlled re-run shows 2-7 ms. This script was
+written to attribute that gap to plan caching and failed to: the gap is not
+explained by generic planning, nor by cold shared_buffers (tested separately:
+32 ms on the first query after a restart, 2 ms thereafter). The most likely
+remaining cause is checkpoint I/O still draining from the 1,000-partition
+index build that had just completed, but that is unverified. What the episode
+does establish is that the latency of this plan shape is not stable enough to
+be trusted from a single benchmark run -- which is the argument for iam §13's
+predicate plan tests asserting plan SHAPE in CI, not just a latency budget.
 
 It is deliberately separate from 04-measure.py, which switches auto-prepare
 off so this effect does not contaminate the recall matrix.

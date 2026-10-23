@@ -1,0 +1,14 @@
+     step      |           key_shape           |                    event                    | objects_reachable | rows_written |                                         note                                         
+---------------+-------------------------------+---------------------------------------------+-------------------+--------------+--------------------------------------------------------------------------------------
+ baseline      | -                             | reachable objects                           |            200000 |            0 | L2 container
+ baseline      | -                             | reachable objects                           |             20000 |            0 | L3 container
+ baseline      | access-class key              | distinct access classes over 2,000,000 rows |           2000000 |         1996 | cardinality of the key: how many partitions it would imply
+ initial-share | per-principal materialization | share L2 with 50-member team                |            200000 |     10000000 | the cross product A2 forbids
+ add-member    | access-class key              | +1 member to 50-member team                 |            200000 |            2 | membership is not part of the key, so 0 fact rows rewritten
+ add-member    | ancestry-zone key (b)         | +1 member to 50-member team                 |            200000 |            2 | identical to shape 1: zone is a function of container only, so 0 fact rows rewritten
+ add-member    | closures only (§9.2)          | +1 member to 50-member team                 |            200000 |            2 | membership_closure rows only; facts untouched
+ add-member    | per-principal materialization | +1 member to 50-member team                 |            200000 |       200000 | O(reachable resources), not O(members)
+ add-grant     | access-class key              | +1 grant on L2 container                    |            200000 |       200000 | every reachable row changes access class; O(reachable resources)
+ add-grant     | ancestry-zone key (b)         | +1 grant on L2 container                    |            200000 |            1 | 1 grant_tuple row; 0 fact rows rewritten
+(10 rows)
+
