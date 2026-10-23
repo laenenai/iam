@@ -3,9 +3,11 @@ package idp_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/laenenai/iam/iamtest"
 	"github.com/laenenai/iam/internal/domain"
 	"github.com/laenenai/iam/internal/idp"
 	"github.com/laenenai/iam/internal/registry"
@@ -176,5 +178,46 @@ func TestNewJITProvisioner_RejectsNilDependencies(t *testing.T) {
 	}
 	if _, err := idp.NewJITProvisioner(idp.NewStaticIssuerPolicy(nil), nil); !errors.Is(err, domain.ErrInvalidConfig) {
 		t.Fatalf("NewJITProvisioner(nil registry) error = %v, want ErrInvalidConfig", err)
+	}
+}
+
+// TestKeySetRendersNoKeyMaterial holds idp.KeySet to CONVENTIONS.md's
+// "Rendering a secret" convention through the named subtest.
+//
+// Raw's doc comment says the document is "never logged and never placed in an
+// error". Before KeySet had rendering methods, nothing enforced that: %v
+// printed the document's bytes, %#v printed them as a Go literal, and
+// json.Marshal — which an exported []byte reaches directly — emitted the whole
+// thing as base64.
+//
+// On substance a JWKS is public, so this is not a confidentiality fix. It is a
+// fix for a type that declared an invariant it had no mechanism for, and it
+// means the next KeySource adapter inherits the mechanism rather than having
+// to notice it is needed.
+func TestKeySetRendersNoKeyMaterial(t *testing.T) {
+	t.Parallel()
+
+	// A plausible JWKS document, with a sentinel where the modulus goes so
+	// that a match in a rendering is a leak and not a coincidence.
+	const sentinel = "CANARY-7f3a9c-modulus-must-not-render"
+	raw := []byte(`{"keys":[{"kty":"RSA","kid":"k1","n":"` + sentinel + `","e":"AQAB"}]}`)
+
+	ks := idp.KeySet{
+		Issuer: "https://idp.example",
+		KeyIDs: []string{"k1", "k2"},
+		Raw:    raw,
+	}
+
+	iamtest.NoSecretLeaksInAnyRendering(t, ks, raw)
+
+	// The other half of the convention: a placeholder that identifies
+	// nothing is a log line nobody can act on. The issuer and the key id
+	// count are not secrets and are what a rotation-aware caller is
+	// diagnosing.
+	rendered := ks.String()
+	for _, want := range []string{"idp.KeySet", "https://idp.example", "KeyIDs: 2"} {
+		if !strings.Contains(rendered, want) {
+			t.Errorf("KeySet.String() = %q, want it to contain %q", rendered, want)
+		}
 	}
 }

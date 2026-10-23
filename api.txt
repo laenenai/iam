@@ -182,6 +182,8 @@ type TenantID = domain.TenantID
 
 package iamtest // iamtest
 
+func NoSecretLeaksInAnyRendering(t *testing.T, v any, material []byte)
+
 func RunRegistrySuite(t *testing.T, newRegistry func(t *testing.T) iam.Registry)
 
 package examples // examples
@@ -944,6 +946,14 @@ type KeySet struct {
 	KeyIDs []string
 	Raw []byte
 }
+
+func (KeySet) Format(s fmt.State, _ rune)
+
+func (KeySet) LogValue() slog.Value
+
+func (KeySet) MarshalJSON() ([]byte, error)
+
+func (KeySet) String() string
 
 type KeySource interface {
 	KeySet(ctx context.Context, issuer string) (KeySet, error)
