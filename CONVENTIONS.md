@@ -16,8 +16,17 @@ repos read as one codebase.
 - **`forbidigo` forbids `fmt.Print*` and `panic`** outside `cmd/`. Return
   errors; log through the injected logger.
 - `mise` tasks, same names and same meanings as `cas`: `fmt`, `fmt-check`,
-  `lint`, `generate`, `test`, `build`, `test-all`, `check`.
-  `check` depends on `fmt-check lint build test-all` and is the gate.
+  `lint`, `test`, `build`, `test-all`, plus `api`, and `check` as the gate —
+  it depends on `fmt-check lint build test-all`.
+  There is no `api-check` task: the golden file is verified by an ordinary
+  test, so `test` and `test-all` already cover it and the check cannot be
+  forgotten. `api` only rewrites it.
+- **A module's `mise.toml` is not a copy of cas's.** cas's `migrate`, `dev`,
+  `up`, `down`, `reset`, `db` and observability tasks reference `./cmd/casd`
+  and `deploy/compose/`, and its `generate` runs `sqlc`/`buf`; none of that
+  exists in a library module. A task list with dangling entries trains people
+  to ignore task lists. A module that later grows migrations or generated code
+  adds the task it actually needs, under cas's name for it.
 
 ## Testing
 
@@ -106,8 +115,31 @@ charter's adoption row should say so.
   else.
 - A root facade file (`<module>.go`) re-exports what a consumer must name, as
   **type aliases** so a value the internals produce and a value the consumer
-  holds are the identical type. It declares aliases and sentinel errors only —
-  no behaviour, no constructors beyond the single `Open`.
+  holds are the identical type.
+- **The facade carries aliases, sentinels, exported constants, AND the module's
+  entry points** — its constructor(s) and any free function a consumer must be
+  able to call. What it must not carry is *logic*.
+
+  Corrected 2026-10-23: an earlier version said "aliases and sentinel errors
+  only", copied from `cas/cas.go`. But that file says in its own doc comment
+  that it is aliases-only *because a later task is the one that adds the
+  constructor* — it is a staging note, not a permanent rule, and promoting it
+  to a convention produced a real defect: in `audit`, `Verify`,
+  `VerifyEntries`, `NewMemory` and `BreakKind`'s constants ended up unreachable
+  from outside the module, so a consumer could not use it. A facade that hides
+  what the module is for is not a facade. Reachability is checked by `api.txt`:
+  if a consumer would need to name it, it belongs in the golden file.
+
+### Postgres timestamp precision
+
+**Canonicalize every timestamp to UTC at microsecond precision** before it
+enters a digest, an idempotency key, or any equality comparison. Postgres
+`timestamptz` holds microseconds; a value carrying nanoseconds round-trips
+equal in memory and unequal through the database. Two modules hit this
+independently on the same day — `audit`, where a chain committing to
+nanoseconds would verify in memory and then report every persisted entry as
+tampered, and `meter`, where it would have made a conformance suite pass for
+the wrong reason.
 - One `Open(ctx, Config)` constructor. Config is a struct, validated, with
   typed errors.
 - Adapters behind ports. The core performs no I/O and is unit-testable with
@@ -137,5 +169,17 @@ charter's adoption row should say so.
 
 - `CHARTER.md` is binding. Code that does not fit the charter belongs in a
   different module — raise it rather than widening the charter.
-- `api.txt` is the public API as a golden file, regenerated and diffed in CI.
-  Growing the public surface is a reviewed diff.
+- `api.txt` is the public API as a golden file. Growing the public surface is
+  a reviewed diff.
+- **It is generated and checked by an ordinary test**, `api_test.go`, with an
+  `-update-api` flag to rewrite it — Go's golden-file idiom. Not by a
+  `cmd/apilist` main package: that puts a `main` in a library module's public
+  tree, and it has to be remembered. A test runs inside `go test`, so `test`
+  and `test-all` verify the surface automatically and there is no separate
+  `api-check` task to forget. `mise run api` only rewrites.
+- **`api.txt` must cover the `internal/` packages the facade aliases**, not
+  only the importable ones. Because the facade re-exports internal types as
+  aliases, **a change to an internal signature is a change to the public
+  surface** even though Go's internal rule keeps the import path private. A
+  generator listing only importable packages reports an incomplete surface —
+  converting `meter` took its golden file from 76 lines to 261.
