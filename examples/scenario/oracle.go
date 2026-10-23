@@ -10,9 +10,9 @@ import (
 // ErrCryptoEnforced is the typed refusal design §7.3 requires: the API
 // must refuse processing operations on crypto-enforced content with a
 // typed error rather than failing obscurely later. It is returned by
-// Readable, never by Decide — the whole point of tier 3 is that it is not
-// part of the decision.
-var ErrCryptoEnforced = errors.New("content is crypto-enforced: the deployment does not hold the key (design §7.3)")
+// Readable, never by Decide — the whole point of the cryptographic tier is
+// that it is not part of the decision.
+var ErrCryptoEnforced = errors.New("content is crypto-enforced: the deployment does not hold the key")
 
 // ErrMarkingNotAllowlisted is the typed refusal KGS §9.5 requires of a
 // model-provider gate: a provider not allowlisted for a marking never
@@ -26,18 +26,22 @@ type Decision struct {
 	Verdict Verdict
 	// Reason names why.
 	Reason ReasonKind
-	// Because names the specific tuple or classification responsible, in
-	// the design's notation.
+	// Because names the specific tuple responsible, in the design's
+	// notation.
 	Because string
 }
 
-// Decide is the reference decision procedure: design §7.1's conjunction,
+// Decide is the reference decision procedure: design §7.1, which is now
+// one term rather than a conjunction,
 //
-//	mandatory_gate(principal, resource) AND discretionary_allows(principal, action, resource)
+//	discretionary_allows(principal, action, resource)
 //
-// evaluated mandatory-first, because the gate is cheap and because a
-// principal who fails it must not have the discretionary layer consulted
-// at all — the attempt is auditable without being informative.
+// and default-deny. It used to be `mandatory_gate(...) AND
+// discretionary_allows(...)`, evaluated mandatory-first; the gate was a
+// deny administered by policy and went with the deny mechanism. The
+// remaining half is the whole decision, which is exactly what makes the
+// whole decision a single SQL predicate: there is no live, unprojectable
+// term that a compiled fragment would have to be conjoined with.
 //
 // It is an oracle for the corpus and emphatically not an engine. It
 // implements exactly design §8.2's four composition forms, refuses
@@ -48,24 +52,15 @@ type Decision struct {
 // and diffed — which is design §9.4's differential authorization audit
 // aimed one layer up.
 //
-// Deny-wins is structural here exactly as the design says it is: it is a
-// property of the conjunction, not a rule anyone had to remember to write.
+// Note what is *not* in this function, and read it as the specification it
+// is: no label is consulted, no exclusion is subtracted, and no epoch is
+// checked. Every deny it can return is the absence of a grant.
 func Decide(f Fixture, principal, action string, resource Ref) (Decision, error) {
 	if err := LintSchema(f); err != nil {
 		return Decision{}, err
 	}
 	if _, ok := f.Principal(principal); !ok {
 		return Decision{}, fmt.Errorf("unknown principal %q", principal)
-	}
-
-	labels, err := LabelsOf(f, resource)
-	if err != nil {
-		return Decision{}, err
-	}
-	for _, label := range labels {
-		if !satisfies(f, principal, label) {
-			return Decision{Verdict: Deny, Reason: ReasonClassification, Because: label}, nil
-		}
 	}
 
 	kind, ok := f.Kind(resource.Kind)
@@ -93,21 +88,22 @@ func actionNames(k ResourceKind) []string {
 	return out
 }
 
-// groupMemberRelation is the relation an ordinary group's membership is
-// read through. It is one name, used by every fixture, so the lint and the
+// groupMemberRelation is the relation a group's membership is read
+// through. It is one name, used by every fixture, so the lint and the
 // oracle agree about what a group is.
 const groupMemberRelation = "member"
 
-// groupHasMember reports whether the principal is a member of the ordinary
-// group named by object, through either of the two channels the registry
-// has: a locally-written membership (Fixture.Groups) or a claim-derived one
-// the issuer asserted (PrincipalSpec.ClaimGroups, which the registry
-// upserts into the registry on sight).
+// groupHasMember reports whether the principal is a member of the group
+// named by object, through either of the two channels the registry has: a
+// locally-written membership (Fixture.Groups) or a claim-derived one the
+// issuer asserted (PrincipalSpec.ClaimGroups, which the registry upserts
+// on sight).
 //
 // Both channels are consulted because both produce the same joinable row,
 // and a corpus that saw only one would be unable to express the scenario
 // that matters most about the second: a new joiner whose claim-derived
-// membership lets him work on day one while he holds no clearance at all.
+// membership lets him work on day one without anybody writing a grant for
+// him by name.
 func groupHasMember(f Fixture, object Ref, principal string) bool {
 	name := object.String()
 	for _, g := range f.Groups {
@@ -117,29 +113,6 @@ func groupHasMember(f Fixture, object Ref, principal string) bool {
 	}
 	for _, p := range f.Principals {
 		if p.Name == principal && slices.Contains(p.ClaimGroups, name) {
-			return true
-		}
-	}
-	return false
-}
-
-// satisfies reports whether the principal holds the clearance for label,
-// either directly or through a clearance group. There is deliberately no
-// third way: no tuple, no group membership, no ownership and no delegation
-// appears in this function, which is design §8.3's "a classification
-// cannot be granted away, delegated, transferred with ownership, or
-// satisfied by any tier-1 relation" expressed as the absence of code.
-func satisfies(f Fixture, principal, label string) bool {
-	for _, dc := range f.DirectClearances {
-		if dc.Principal == principal && dc.Label == label {
-			return true
-		}
-	}
-	for _, cg := range f.ClearanceGroups {
-		if !slices.Contains(cg.Labels, label) {
-			continue
-		}
-		if slices.Contains(cg.Members, principal) {
 			return true
 		}
 	}
@@ -166,7 +139,7 @@ func holds(f Fixture, principal string, object Ref, relation string, depth int) 
 		return Decision{}, fmt.Errorf("kind %q registers no relation %q", object.Kind, relation)
 	}
 
-	// Form 1: direct. Ordinary-group membership is declared once, in the
+	// Form 1: direct. Group membership is declared once, in the
 	// fixture's Groups, because that is the declaration the live registry
 	// is materialized from — so a fixture does not state the same
 	// membership twice and cannot state it two different ways. The
@@ -357,27 +330,34 @@ func Visible(f Fixture, principal string) ([]Ref, error) {
 }
 
 // Readable reports whether a principal that Decide permitted can actually
-// read the resource, which is a different question. Design §7.3: tier 3 is
-// not part of the decision. `Decide` may well return allow for a
-// crypto-enforced resource and the caller still cannot read it without a
-// key the deployment does not hold.
+// read the resource, which is a different question. The cryptographic tier
+// is not part of the decision: `Decide` may well return allow for a sealed
+// resource and the caller still cannot read it without a key the
+// deployment does not hold.
 //
-// This module's entire responsibility for tier 3 is the enforcement class
-// field, and this function is what makes that field worth recording:
-// it is how a consumer tells a user *why* something is unreadable, and how
-// the API refuses a processing operation with a typed error rather than
-// failing obscurely later.
+// This is now the *only* mechanism in the design that withholds something
+// from a principal a grant reached, and that is the point of the no-deny
+// decision rather than an awkwardness of it. A policy deny was only as
+// absolute as whoever administered the policy; this one survives the
+// administrator, the operator, a subpoena and every future policy change,
+// because the deployment cannot decrypt.
+//
+// This module's entire responsibility here is the enforcement class field,
+// and this function is what makes that field worth recording: it is how a
+// consumer tells a user *why* something is unreadable, and how the API
+// refuses a processing operation with a typed error rather than failing
+// obscurely later.
 func Readable(f Fixture, resource Ref) error {
-	labels, err := LabelsOf(f, resource)
+	markings, err := MarkingsOf(f, resource)
 	if err != nil {
 		return err
 	}
-	for _, label := range labels {
-		c, ok := f.Classification(label)
+	for _, label := range markings {
+		m, ok := f.Marking(label)
 		if !ok {
-			return fmt.Errorf("undeclared label %q on %s", label, resource)
+			return fmt.Errorf("undeclared marking %q on %s", label, resource)
 		}
-		if c.Enforcement == EnforcementCrypto {
+		if m.Enforcement == EnforcementCrypto {
 			return fmt.Errorf("%w: %s carries %s", ErrCryptoEnforced, resource, label)
 		}
 	}
@@ -431,16 +411,23 @@ func readAction(k ResourceKind) (string, bool) {
 // (ErrMarkingNotAllowlisted) so the pipeline fails closed rather than
 // degrading to a lesser model or a redacted prompt.
 //
-// It resolves the content's labels through LabelsOf, so a *derived* object
-// is gated by the union of its inputs' classifications — which is leak
+// It resolves the content's markings through MarkingsOf, so a *derived*
+// object is gated by the union of its inputs' markings — which is leak
 // channel #15: a consolidator that saw privileged evidence must not emit
 // an observation a non-allowlisted provider may then read.
+//
+// Note what this gate is and is not. It is an egress constraint a
+// consumer's own pipeline applies to a *provider*, and it is not an access
+// decision about a principal: no principal is refused anything by it, and
+// nothing here is consulted by Decide. A marking that denied a principal
+// access would be a deny administered by policy, which is what this design
+// no longer has.
 func MayReceive(f Fixture, resource Ref, allowlisted []string) error {
-	labels, err := LabelsOf(f, resource)
+	markings, err := MarkingsOf(f, resource)
 	if err != nil {
 		return err
 	}
-	for _, label := range labels {
+	for _, label := range markings {
 		if !slices.Contains(allowlisted, label) {
 			return fmt.Errorf("%w: %s carries %s and the provider is allowlisted only for %v",
 				ErrMarkingNotAllowlisted, resource, label, allowlisted)

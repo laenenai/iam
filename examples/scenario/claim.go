@@ -42,43 +42,51 @@ const (
 	// of refs. It is how "the path to it and only that path, not its
 	// siblings" is tested rather than described.
 	ClaimVisibleSet ClaimKind = "visible-set"
-	// ClaimLabelSet asserts the exact classification set a resource
-	// resolves to: Subject is the resource, Detail a comma-separated set
-	// of labels. For a derived object this is the union of its inputs',
+	// ClaimMarkingSet asserts the exact marking set a resource resolves
+	// to: Subject is the resource, Detail a comma-separated set of
+	// labels. For a derived object this is the union of its inputs',
 	// which is the propagation a pipeline must not be able to launder
 	// around.
-	ClaimLabelSet ClaimKind = "label-set"
-	// ClaimRowEnforceable asserts that the named classification can be
-	// enforced by the SQL predicate design §9 compiles. False is finding
-	// F4.
-	ClaimRowEnforceable ClaimKind = "row-enforceable"
+	ClaimMarkingSet ClaimKind = "marking-set"
+	// ClaimAttributeEnforceable asserts whether a restriction scoped to
+	// the named attribute-bearing ref — `document:payroll.salary` — could
+	// be enforced by the SQL fragment design §9 compiles. Detail is
+	// "true" or "false", and false is finding F4.
+	//
+	// It names no label, deliberately. The old form of this claim asked
+	// whether an attribute-scoped *classification* was enforceable; the
+	// classification is gone and F4 is not, because the question was never
+	// about which tier the restriction was written in. It was always about
+	// whether a `WHERE` clause can hide a column.
+	ClaimAttributeEnforceable ClaimKind = "attribute-enforceable"
 	// ClaimStableUnderWrite asserts that the named resource's ancestry
-	// closure and label set are unchanged by the fixture's declared later
-	// writes. False means an ordinary data write moved an authorization
-	// answer with no authorization operation having happened, which is
-	// what a predicate-defined entity-set does.
+	// closure and marking set are unchanged by the fixture's declared
+	// later writes. False means an ordinary data write moved an
+	// authorization answer with no authorization operation having
+	// happened, which is what a predicate-defined entity-set does.
 	ClaimStableUnderWrite ClaimKind = "stable-under-write"
 	// ClaimCryptoUnreadable asserts that the named resource is unreadable
-	// because its classification's enforcement class is crypto, whatever
+	// because a marking it carries has enforcement class crypto, whatever
 	// the decision procedure answered. It is the claim that separates the
-	// decision from the enforcement tier.
+	// decision from the enforcement tier, and with the mandatory tier gone
+	// it is the only claim in the corpus that asserts something is
+	// withheld.
 	ClaimCryptoUnreadable ClaimKind = "crypto-unreadable"
 	// ClaimProviderRefused asserts that a model provider allowlisted for
 	// Detail's labels is refused the named resource, with a typed error.
 	ClaimProviderRefused ClaimKind = "provider-refused"
-	// ClaimNoClearanceFromDiscretion is the A3 mini-suite: it enumerates
-	// every discretionary operation the identity registry exposes, applies
-	// each on behalf of the named principal, and asserts that the
-	// principal still holds no clearance afterwards. It runs live against
-	// the real registry.
-	ClaimNoClearanceFromDiscretion ClaimKind = "no-clearance-from-discretion"
-	// ClaimLiveClearances asserts the exact clearance groups a principal
-	// is in according to the real registry: Subject is the principal,
-	// Detail a comma-separated set of clearance-group names, empty for
-	// none. It is the live half of the mandatory scenarios.
-	ClaimLiveClearances ClaimKind = "live-clearances"
-	// ClaimLiveGroups asserts the exact ordinary groups a principal is in
-	// according to the real registry.
+	// ClaimLiveGroups asserts the exact groups a principal is in
+	// according to the real registry: Subject is the principal, Detail a
+	// comma-separated set of group names, empty for none.
+	//
+	// There were two more live claims beside it — live-clearances and
+	// no-clearance-from-discretion, the A3 mini-suite that applied every
+	// discretionary operation the registry exposed and then asserted the
+	// principal still held no clearance. They went with the mandatory
+	// tier, and the invariant they protected no longer needs protecting:
+	// with nothing but grants, a principal holds exactly what has been
+	// granted to it, and "can a discretionary operation open a mandatory
+	// gate" has no gate left to ask about.
 	ClaimLiveGroups ClaimKind = "live-groups"
 	// ClaimPrincipalUnusable asserts that the real registry refuses to
 	// read the named principal's memberships, because it is deprovisioned,
@@ -101,24 +109,6 @@ const (
 	// ClaimProviderPermitted is ClaimProviderRefused's positive twin: a
 	// provider allowlisted for Detail's labels may receive the resource.
 	ClaimProviderPermitted ClaimKind = "provider-permitted"
-	// ClaimAbsoluteHasNoLift asserts that no discretionary operation the
-	// registry exposes gives the named principal the clearance for the
-	// label in Detail. The assertion is identical to
-	// ClaimNoClearanceFromDiscretion and its *meaning* is the opposite: in
-	// a mandatory scenario the absence of a discretionary path is the
-	// feature, and here it is the cost. A requirement that only wanted
-	// "don't show her the salary" has become an absolute that the resource
-	// owner cannot lift.
-	ClaimAbsoluteHasNoLift ClaimKind = "absolute-has-no-lift"
-	// ClaimAnyActorMayClassify asserts that the named principal, holding
-	// no particular permission, can nonetheless perform a mandatory act
-	// and add itself to a clearance group. It is a gap claim: it passes
-	// today because design §16 question 2 — who may create and assign
-	// classifications — is unanswered, so the registry demands a *witness*
-	// of the mandatory channel and never checks the actor's authority.
-	// When a classify permission lands, this claim fails, which is exactly
-	// what should happen.
-	ClaimAnyActorMayClassify ClaimKind = "any-actor-may-classify"
 )
 
 // Claim is one structural assertion, as data.
@@ -126,7 +116,7 @@ type Claim struct {
 	// Kind is what is being claimed.
 	Kind ClaimKind
 	// Subject is what the claim is about: a resource, a principal, a
-	// classification label, or a count, depending on Kind.
+	// marking label, or a count, depending on Kind.
 	Subject string
 	// Detail is the claim's expected value, in the form Kind documents.
 	Detail string
@@ -145,8 +135,7 @@ func C(kind ClaimKind, subject, detail, why string) Claim {
 // registry, as opposed to being a pure function over fixture data.
 func (c Claim) needsRegistry() bool {
 	switch c.Kind {
-	case ClaimNoClearanceFromDiscretion, ClaimLiveClearances, ClaimLiveGroups, ClaimPrincipalUnusable,
-		ClaimMembershipChangeTakesEffect, ClaimAbsoluteHasNoLift, ClaimAnyActorMayClassify:
+	case ClaimLiveGroups, ClaimPrincipalUnusable, ClaimMembershipChangeTakesEffect:
 		return true
 	default:
 		return false
@@ -168,10 +157,10 @@ func (c Claim) evalStatic(f Fixture) error {
 		return claimNoDirectPath(f, c)
 	case ClaimVisibleSet:
 		return claimVisibleSet(f, c)
-	case ClaimLabelSet:
-		return claimLabelSet(f, c)
-	case ClaimRowEnforceable:
-		return claimRowEnforceable(f, c)
+	case ClaimMarkingSet:
+		return claimMarkingSet(f, c)
+	case ClaimAttributeEnforceable:
+		return claimAttributeEnforceable(f, c)
 	case ClaimStableUnderWrite:
 		return claimStableUnderWrite(f, c)
 	case ClaimCryptoUnreadable:
@@ -262,25 +251,27 @@ func claimVisibleSet(f Fixture, c Claim) error {
 	return compareRefs(got, c.Detail, fmt.Sprintf("the set %s can navigate to", c.Subject))
 }
 
-func claimLabelSet(f Fixture, c Claim) error {
-	got, err := LabelsOf(f, R(c.Subject))
+func claimMarkingSet(f Fixture, c Claim) error {
+	got, err := MarkingsOf(f, R(c.Subject))
 	if err != nil {
 		return err
 	}
-	return compareStrings(got, c.Detail, fmt.Sprintf("the classification set of %s", c.Subject))
+	return compareStrings(got, c.Detail, fmt.Sprintf("the marking set of %s", c.Subject))
 }
 
-func claimRowEnforceable(f Fixture, c Claim) error {
+func claimAttributeEnforceable(f Fixture, c Claim) error {
 	want := c.Detail != "false"
-	ok, why := RowEnforceable(f, c.Subject)
+	ok, why := AttributeEnforceable(f, R(c.Subject))
 	if ok == want {
 		return nil
 	}
 	if want {
-		return fmt.Errorf("classification %q should be enforceable by the compiled predicate but is not: %s", c.Subject, why)
+		return fmt.Errorf("a restriction scoped to %s should be enforceable by the compiled fragment and is "+
+			"not: %s", c.Subject, why)
 	}
-	return fmt.Errorf("classification %q is enforceable by a row predicate, but this scenario claims it is not — "+
-		"finding F4 may have been resolved, in which case this scenario moves out of UNEXPRESSIBLE.md", c.Subject)
+	return fmt.Errorf("a restriction scoped to %s is enforceable by a row predicate, but this scenario claims "+
+		"it is not — finding F4 may have been resolved, in which case this scenario moves out of "+
+		"UNEXPRESSIBLE.md", c.Subject)
 }
 
 func claimStableUnderWrite(f Fixture, c Claim) error {
@@ -294,7 +285,7 @@ func claimStableUnderWrite(f Fixture, c Claim) error {
 	if err != nil {
 		return err
 	}
-	beforeLabels, err := LabelsOf(f, resource)
+	beforeMarkings, err := MarkingsOf(f, resource)
 	if err != nil {
 		return err
 	}
@@ -304,18 +295,19 @@ func claimStableUnderWrite(f Fixture, c Claim) error {
 	if err != nil {
 		return err
 	}
-	afterLabels, err := LabelsOf(after, resource)
+	afterMarkings, err := MarkingsOf(after, resource)
 	if err != nil {
 		return err
 	}
 
-	stable := refsEqual(beforeAncestors, afterAncestors) && slices.Equal(beforeLabels, afterLabels)
+	stable := refsEqual(beforeAncestors, afterAncestors) && slices.Equal(beforeMarkings, afterMarkings)
 	if stable == want {
 		return nil
 	}
 	if want {
 		return fmt.Errorf("%s's authorization inputs moved when an ordinary data write landed: ancestors %v -> %v, "+
-			"labels %v -> %v", c.Subject, renderRefs(beforeAncestors), renderRefs(afterAncestors), beforeLabels, afterLabels)
+			"markings %v -> %v", c.Subject, renderRefs(beforeAncestors), renderRefs(afterAncestors),
+			beforeMarkings, afterMarkings)
 	}
 	return fmt.Errorf("%s's authorization inputs were stable under the declared write, but this scenario claims they "+
 		"are not; the write declared was: %s", c.Subject, f.LaterWrites[0].What)

@@ -22,27 +22,45 @@ const (
 	// consumer's own statement. A consumer that can only call Decide will
 	// post-filter, which is KGS leak channel #6.
 	CapPredicate Capability = "Predicate"
-	// CapTupleStore is the tier-1 relation-tuple store of design §8.2 and
-	// the registered-schema registry of §8.4.
+	// CapTupleStore is the relation-tuple store of design §8.2 and the
+	// registered-schema registry of §8.4.
 	CapTupleStore Capability = "TupleStore"
-	// CapClassificationStore is the tier-2 store of design §8.3: labels on
-	// resources, clearances on clearance groups, the enforcement class.
-	// The identity registry holds clearance-group *membership* today; what
-	// a clearance group *satisfies* is this store's state and does not
-	// exist.
-	CapClassificationStore Capability = "ClassificationStore"
-	// CapDerivation is design §8.3's declared derivations, through which a
-	// derived object acquires the union of its inputs' classifications.
+	// CapDerivation is the declared-derivation surface, through which a
+	// derived object acquires the union of its inputs' markings. It still
+	// names something real — content derived from sealed content is
+	// sealed, and a consumer's egress gate has to be able to see that —
+	// and it is no longer an authorization input, so nothing pending
+	// waits on it.
 	CapDerivation Capability = "Derivation"
 	// CapVisibleBelow is design §8.2's bottom-up navigational visibility
-	// as an explicit relation.
+	// as an explicit relation. Untouched by the removal of the mandatory
+	// tier: it is a grant-layer relation, D7's table waits on it, and F3
+	// still decides what it can even mean once containment is a DAG.
 	CapVisibleBelow Capability = "VisibleBelow"
-	// CapAttributePredicate is a `Predicate` that can enforce an
-	// attribute-scoped classification on a columnar resource kind. It is
-	// listed as a capability because finding F4 says it may never exist in
-	// this module at all, in which case the scenarios pending on it move
-	// to UNEXPRESSIBLE rather than becoming live.
+	// CapAttributePredicate is a `Predicate` that can express an
+	// attribute-scoped restriction over a columnar resource kind — a
+	// fragment plus a permitted-attribute set the consumer applies.
+	//
+	// It means more than it did, not less. It used to be one of two ways
+	// to meet an attribute-granular requirement, the other being "declare
+	// a classification scoped to that attribute". That option is gone, so
+	// this is now the *only* candidate resolution for findings F4 and F7
+	// both, and it is the one that moves part of the trust boundary into
+	// consumer code.
+	//
+	// Nothing in the corpus pends on it, and that is a known hole rather
+	// than a tidy state: U1 and U4 are the scenarios it would release, and
+	// they are `unexpressible` rather than `pending`, so AssertTripwire —
+	// which only looks at pending scenarios — will not fire when
+	// `PermittedAttributes` reaches the facade. Whoever lands it has to
+	// remember those two by hand.
 	CapAttributePredicate Capability = "AttributePredicate"
+
+	// There was a CapClassificationStore here: the tier-2 store of labels
+	// on resources and clearances on clearance groups. It went with the
+	// deny mechanism. The scenarios that waited on it now wait on
+	// `Decide` and the tuple store, because what they assert has become an
+	// ordinary question about grants.
 )
 
 // Available reports which capabilities this build of `iam` actually has.
@@ -58,13 +76,12 @@ func Available() []Capability { return nil }
 // facade and regenerating the golden file is enough to set this off — no
 // discipline required, and nothing to remember.
 var tripwireSymbols = map[Capability][]string{
-	CapDecide:              {"func Decide(", "Decide(ctx"},
-	CapPredicate:           {"func Predicate(", "type Predicate"},
-	CapTupleStore:          {"type Tuple", "func WriteTuple"},
-	CapClassificationStore: {"type Classification", "func Classify"},
-	CapDerivation:          {"type Derivation", "func DeclareDerivation"},
-	CapVisibleBelow:        {"VisibleBelow"},
-	CapAttributePredicate:  {"type AttributePredicate", "PermittedAttributes"},
+	CapDecide:             {"func Decide(", "Decide(ctx"},
+	CapPredicate:          {"func Predicate(", "type Predicate"},
+	CapTupleStore:         {"type Tuple", "func WriteTuple"},
+	CapDerivation:         {"type Derivation", "func DeclareDerivation"},
+	CapVisibleBelow:       {"VisibleBelow"},
+	CapAttributePredicate: {"type AttributePredicate", "PermittedAttributes"},
 }
 
 // facadeHeader is the line api.txt uses to start the facade's own
@@ -72,7 +89,7 @@ var tripwireSymbols = map[Capability][]string{
 // *consumer* can name it, which per CONVENTIONS means when it reaches the
 // facade. Scanning the whole file would also match this corpus's own
 // declarations, since examples/scenario necessarily declares a Tuple, a
-// Classification and a Decide of its own.
+// Marking and a Decide of its own.
 const facadeHeader = "package iam // ."
 
 // Tripwire reads the module's public golden file and reports every

@@ -61,10 +61,11 @@ const suiteAgentRunTTL = time.Hour
 // shared resource, and a conformance suite that assumed otherwise would
 // make a correct adapter look broken.
 //
-// Four of the subtests below are security invariants rather than
+// Two of the subtests below are security invariants rather than
 // behavioural ones, and every adapter is forced to exercise them:
-// NewPrincipalHoldsNoClearances, DeprovisioningDeniesImmediately,
-// StalenessPastBoundForcesResync and OrdinaryGroupCannotActAsClearanceGroup.
+// DeprovisioningDeniesImmediately and StalenessPastBoundForcesResync.
+// There were four. The other two held a mandatory tier to its rules, and
+// went with it: see the design document's "no deny mechanism" anti-goal.
 func RunRegistrySuite(t *testing.T, newRegistry func(t *testing.T) iam.Registry) {
 	t.Helper()
 
@@ -240,8 +241,8 @@ func RunRegistrySuite(t *testing.T, newRegistry func(t *testing.T) iam.Registry)
 
 	// ReissuedExternalIdentityKeepsInternalID: design §8.1's reason for
 	// having internal ids at all. Renaming a user, changing their email,
-	// or re-issuing the same subject must leave every grant, clearance
-	// and audit row pointing at the same principal — and must not be
+	// or re-issuing the same subject must leave every grant and every
+	// audit row pointing at the same principal — and must not be
 	// inferable from the id, which carries no function of the subject.
 	t.Run("ReissuedExternalIdentityKeepsInternalID", func(t *testing.T) {
 		reg := newRegistry(t)
@@ -342,9 +343,6 @@ func RunRegistrySuite(t *testing.T, newRegistry func(t *testing.T) iam.Registry)
 		// Membership reads refuse on the principal's side...
 		if _, err := reg.GroupsOf(ctx, p.ID, now()); !errors.Is(err, domain.ErrPrincipalDeprovisioned) {
 			t.Fatalf("GroupsOf after Deprovision error = %v, want ErrPrincipalDeprovisioned", err)
-		}
-		if _, err := reg.ClearanceGroupsOf(ctx, p.ID, now()); !errors.Is(err, domain.ErrPrincipalDeprovisioned) {
-			t.Fatalf("ClearanceGroupsOf after Deprovision error = %v, want ErrPrincipalDeprovisioned", err)
 		}
 		// ...and the principal stops appearing on the group's side,
 		// which is what a SQL predicate joining membership actually
@@ -476,77 +474,6 @@ func RunRegistrySuite(t *testing.T, newRegistry func(t *testing.T) iam.Registry)
 		}
 	})
 
-	// NewPrincipalHoldsNoClearances: design §8.3's fail-closed rule. JIT
-	// provisioning grants identity, never clearance, so a new joiner sees
-	// nothing classified until a mandatory act includes them.
-	t.Run("NewPrincipalHoldsNoClearances", func(t *testing.T) {
-		reg := newRegistry(t)
-		ctx := context.Background()
-		tenant := newTenant()
-
-		// Provision with every claim-shaped thing that might be mistaken
-		// for a clearance: group names that look exactly like
-		// compartments, and a clearance group of the same name that
-		// already exists in the tenant.
-		act := mustAct(t, domain.MandatoryChannelClassify, "security admin seeding the compartment")
-		existing, err := reg.EnsureClearanceGroup(ctx, act, tenant, "privileged")
-		if err != nil {
-			t.Fatalf("EnsureClearanceGroup: %v", err)
-		}
-
-		p, err := reg.UpsertFromClaims(ctx, userClaims(t, tenant,
-			"https://idp.example", "anne", "privileged", "conflict-screen-acme", "all-timekeepers"))
-		if err != nil {
-			t.Fatalf("UpsertFromClaims: %v", err)
-		}
-
-		held, err := reg.ClearanceGroupsOf(ctx, p.ID, now())
-		if err != nil {
-			t.Fatalf("ClearanceGroupsOf: %v", err)
-		}
-		if len(held) != 0 {
-			t.Fatalf("a newly provisioned principal holds %d clearance groups (%v); it must hold none", len(held), held)
-		}
-
-		// A group claim named identically to a clearance group must have
-		// created an ordinary group, not joined the compartment.
-		assertNames(t, groupNames(t, reg, p.ID, now()),
-			[]string{"all-timekeepers", "conflict-screen-acme", "privileged"},
-			"claim-derived ordinary groups")
-		members, err := reg.ClearanceGroupMembers(ctx, existing.ID, now())
-		if err != nil {
-			t.Fatalf("ClearanceGroupMembers: %v", err)
-		}
-		if len(members) != 0 {
-			t.Fatalf("the clearance group named by a claim gained %d members", len(members))
-		}
-
-		// A delegated agent run inherits nothing either: delegation is a
-		// discretionary act, and a discretionary act that conferred a
-		// clearance is anti-goal A3 breached.
-		if err := reg.AddClearanceGroupMember(ctx, act, existing.ID, p.ID); err != nil {
-			t.Fatalf("AddClearanceGroupMember: %v", err)
-		}
-		run, err := reg.DelegateAgentRun(ctx, p.ID, registry.AgentRunSpec{TTL: suiteAgentRunTTL, DisplayName: "nightly consolidation"})
-		if err != nil {
-			t.Fatalf("DelegateAgentRun: %v", err)
-		}
-		inherited, err := reg.ClearanceGroupsOf(ctx, run.ID, now())
-		if err != nil {
-			t.Fatalf("ClearanceGroupsOf(agent run): %v", err)
-		}
-		if len(inherited) != 0 {
-			t.Fatalf("an agent run inherited %d clearance groups from its parent; it must inherit none", len(inherited))
-		}
-		inheritedGroups, err := reg.GroupsOf(ctx, run.ID, now())
-		if err != nil {
-			t.Fatalf("GroupsOf(agent run): %v", err)
-		}
-		if len(inheritedGroups) != 0 {
-			t.Fatalf("an agent run inherited %d ordinary groups from its parent; it must inherit none", len(inheritedGroups))
-		}
-	})
-
 	// StalenessPastBoundForcesResync: design §8.1's staleness bound,
 	// enforced by the registry rather than trusted to the caller. The
 	// suite does not know the deployment's bound; it reads it back from
@@ -601,9 +528,6 @@ func RunRegistrySuite(t *testing.T, newRegistry func(t *testing.T) iam.Registry)
 		if _, err := reg.GroupsOf(ctx, p.ID, pastBound); !errors.Is(err, domain.ErrResyncRequired) {
 			t.Fatalf("GroupsOf past the bound error = %v, want ErrResyncRequired", err)
 		}
-		if _, err := reg.ClearanceGroupsOf(ctx, p.ID, pastBound); !errors.Is(err, domain.ErrResyncRequired) {
-			t.Fatalf("ClearanceGroupsOf past the bound error = %v, want ErrResyncRequired", err)
-		}
 		// And on the joinable side, a stale principal stops matching.
 		group, err := reg.EnsureGroup(ctx, tenant, "eng")
 		if err != nil {
@@ -632,253 +556,6 @@ func RunRegistrySuite(t *testing.T, newRegistry func(t *testing.T) iam.Registry)
 			t.Fatalf("Condition after resync: %v", err)
 		} else if !cond.Usable() {
 			t.Fatalf("a re-synced principal is still not usable: %+v", cond)
-		}
-	})
-
-	// OrdinaryGroupCannotActAsClearanceGroup: the runtime half of design
-	// §8.3's tier separation, for an id that arrived as text — from a
-	// config file, an API request, another service — and so bypassed the
-	// type system. domain.ClearanceGroupID makes the confusion
-	// unwriteable in Go (see TestOrdinaryGroupIDIsNotAClearanceGroupID,
-	// which requires the compiler to reject it); this requires every
-	// adapter to refuse it at runtime as well, because a parser cannot
-	// know what a registry stores.
-	t.Run("OrdinaryGroupCannotActAsClearanceGroup", func(t *testing.T) {
-		reg := newRegistry(t)
-		ctx := context.Background()
-		tenant := newTenant()
-		act := mustAct(t, domain.MandatoryChannelClassify, "matter 4471 conflict screen")
-
-		p, err := reg.UpsertFromClaims(ctx, userClaims(t, tenant, "https://idp.example", "anne"))
-		if err != nil {
-			t.Fatalf("UpsertFromClaims: %v", err)
-		}
-		group, err := reg.EnsureGroup(ctx, tenant, "eng")
-		if err != nil {
-			t.Fatalf("EnsureGroup: %v", err)
-		}
-		clearance, err := reg.EnsureClearanceGroup(ctx, act, tenant, "privileged")
-		if err != nil {
-			t.Fatalf("EnsureClearanceGroup: %v", err)
-		}
-
-		// An ordinary group's id, re-parsed as a clearance group id
-		// (which succeeds: both are well-formed ULIDs, and syntax
-		// cannot carry kind), must be refused by every clearance write.
-		asClearance, err := domain.ParseClearanceGroupID(string(group.ID))
-		if err != nil {
-			t.Fatalf("ParseClearanceGroupID of a well-formed ULID: %v", err)
-		}
-		if err := reg.AddClearanceGroupMember(ctx, act, asClearance, p.ID); !errors.Is(err, domain.ErrGroupKindMismatch) {
-			t.Fatalf("AddClearanceGroupMember with an ordinary group's id error = %v, want ErrGroupKindMismatch", err)
-		}
-		if err := reg.RemoveClearanceGroupMember(ctx, act, asClearance, p.ID); !errors.Is(err, domain.ErrGroupKindMismatch) {
-			t.Fatalf("RemoveClearanceGroupMember with an ordinary group's id error = %v, want ErrGroupKindMismatch", err)
-		}
-		if _, err := reg.ClearanceGroupMembers(ctx, asClearance, now()); !errors.Is(err, domain.ErrGroupKindMismatch) {
-			t.Fatalf("ClearanceGroupMembers with an ordinary group's id error = %v, want ErrGroupKindMismatch", err)
-		}
-		if _, err := reg.ClearanceGroupChanges(ctx, asClearance); !errors.Is(err, domain.ErrGroupKindMismatch) {
-			t.Fatalf("ClearanceGroupChanges with an ordinary group's id error = %v, want ErrGroupKindMismatch", err)
-		}
-
-		// And the reverse: a clearance group may never be referenced
-		// where a tier-1 group is expected, because a tier-1 reference
-		// is a discretionary handle on a mandatory object.
-		asGroup, err := domain.ParseGroupID(clearance.ID.String())
-		if err != nil {
-			t.Fatalf("ParseGroupID: %v", err)
-		}
-		if err := reg.AddGroupMember(ctx, asGroup, p.ID); !errors.Is(err, domain.ErrGroupKindMismatch) {
-			t.Fatalf("AddGroupMember with a clearance group's id error = %v, want ErrGroupKindMismatch", err)
-		}
-		if _, err := reg.GroupMembers(ctx, asGroup, now()); !errors.Is(err, domain.ErrGroupKindMismatch) {
-			t.Fatalf("GroupMembers with a clearance group's id error = %v, want ErrGroupKindMismatch", err)
-		}
-
-		// An id naming nothing at all is simply absent, and must not be
-		// reported as a kind confusion — the two refusals mean different
-		// things to an operator.
-		unknown, err := domain.ParseClearanceGroupID("01K0000000000000000000000Z")
-		if err != nil {
-			t.Fatalf("ParseClearanceGroupID: %v", err)
-		}
-		if err := reg.AddClearanceGroupMember(ctx, act, unknown, p.ID); !errors.Is(err, domain.ErrNotFound) {
-			t.Fatalf("AddClearanceGroupMember with an unknown id error = %v, want ErrNotFound", err)
-		}
-
-		// Membership of an ordinary group named like a compartment
-		// confers no clearance.
-		if err := reg.AddGroupMember(ctx, group.ID, p.ID); err != nil {
-			t.Fatalf("AddGroupMember: %v", err)
-		}
-		held, err := reg.ClearanceGroupsOf(ctx, p.ID, now())
-		if err != nil {
-			t.Fatalf("ClearanceGroupsOf: %v", err)
-		}
-		if len(held) != 0 {
-			t.Fatalf("ordinary group membership produced %d clearance groups", len(held))
-		}
-	})
-
-	// ClearanceMembershipRequiresAMandatoryChannel: design §8.3's
-	// mandatory channel, enforced at the port. There is no discretionary
-	// path into a clearance group, so a write without a witness is a
-	// refusal and never a defaulted-to-ordinary write.
-	t.Run("ClearanceMembershipRequiresAMandatoryChannel", func(t *testing.T) {
-		reg := newRegistry(t)
-		ctx := context.Background()
-		tenant := newTenant()
-		act := mustAct(t, domain.MandatoryChannelClassify, "matter 4471 conflict screen")
-
-		p, err := reg.UpsertFromClaims(ctx, userClaims(t, tenant, "https://idp.example", "anne"))
-		if err != nil {
-			t.Fatalf("UpsertFromClaims: %v", err)
-		}
-		cg, err := reg.EnsureClearanceGroup(ctx, act, tenant, "privileged")
-		if err != nil {
-			t.Fatalf("EnsureClearanceGroup: %v", err)
-		}
-
-		var noAct domain.MandatoryAct
-		if _, err := reg.EnsureClearanceGroup(ctx, noAct, tenant, "sneaked-in"); !errors.Is(err, domain.ErrMandatoryChannelRequired) {
-			t.Fatalf("EnsureClearanceGroup without an act error = %v, want ErrMandatoryChannelRequired", err)
-		}
-		if err := reg.AddClearanceGroupMember(ctx, noAct, cg.ID, p.ID); !errors.Is(err, domain.ErrMandatoryChannelRequired) {
-			t.Fatalf("AddClearanceGroupMember without an act error = %v, want ErrMandatoryChannelRequired", err)
-		}
-		if err := reg.RemoveClearanceGroupMember(ctx, noAct, cg.ID, p.ID); !errors.Is(err, domain.ErrMandatoryChannelRequired) {
-			t.Fatalf("RemoveClearanceGroupMember without an act error = %v, want ErrMandatoryChannelRequired", err)
-		}
-
-		// A clearance group's channel is fixed at creation: a
-		// directory-synced compartment cannot be edited by hand, and a
-		// hand-administered one cannot be overwritten by a sync.
-		synced := mustAct(t, domain.MandatoryChannelDirectorySync, "hr feed")
-		if err := reg.AddClearanceGroupMember(ctx, synced, cg.ID, p.ID); !errors.Is(err, domain.ErrChannelMismatch) {
-			t.Fatalf("AddClearanceGroupMember through the wrong channel error = %v, want ErrChannelMismatch", err)
-		}
-		if _, err := reg.EnsureClearanceGroup(ctx, synced, tenant, "privileged"); !errors.Is(err, domain.ErrChannelMismatch) {
-			t.Fatalf("EnsureClearanceGroup through the wrong channel error = %v, want ErrChannelMismatch", err)
-		}
-
-		// The right channel works, and is idempotent.
-		if err := reg.AddClearanceGroupMember(ctx, act, cg.ID, p.ID); err != nil {
-			t.Fatalf("AddClearanceGroupMember: %v", err)
-		}
-		if err := reg.AddClearanceGroupMember(ctx, act, cg.ID, p.ID); err != nil {
-			t.Fatalf("second AddClearanceGroupMember: %v", err)
-		}
-		held, err := reg.ClearanceGroupsOf(ctx, p.ID, now())
-		if err != nil {
-			t.Fatalf("ClearanceGroupsOf: %v", err)
-		}
-		if len(held) != 1 || held[0].ID != cg.ID {
-			t.Fatalf("ClearanceGroupsOf = %+v, want exactly the one clearance group", held)
-		}
-		if held[0].Channel != domain.MandatoryChannelClassify {
-			t.Fatalf("clearance group channel = %q, want %q", held[0].Channel, domain.MandatoryChannelClassify)
-		}
-
-		members, err := reg.ClearanceGroupMembers(ctx, cg.ID, now())
-		if err != nil {
-			t.Fatalf("ClearanceGroupMembers: %v", err)
-		}
-		if len(members) != 1 || members[0] != p.ID {
-			t.Fatalf("ClearanceGroupMembers = %v, want exactly %q", members, p.ID)
-		}
-
-		if err := reg.RemoveClearanceGroupMember(ctx, act, cg.ID, p.ID); err != nil {
-			t.Fatalf("RemoveClearanceGroupMember: %v", err)
-		}
-		// Removing an absent membership is not an error.
-		if err := reg.RemoveClearanceGroupMember(ctx, act, cg.ID, p.ID); err != nil {
-			t.Fatalf("second RemoveClearanceGroupMember: %v", err)
-		}
-		held, err = reg.ClearanceGroupsOf(ctx, p.ID, now())
-		if err != nil {
-			t.Fatalf("ClearanceGroupsOf after removal: %v", err)
-		}
-		if len(held) != 0 {
-			t.Fatalf("ClearanceGroupsOf after removal = %+v, want none", held)
-		}
-	})
-
-	// ClearanceGroupChangesAreAudited: design §8.3 requires clearance
-	// membership to be audited. The trail is append-only, so a removal
-	// records a removal rather than erasing the addition — a mandatory
-	// control whose history can be edited is not evidence of anything.
-	t.Run("ClearanceGroupChangesAreAudited", func(t *testing.T) {
-		reg := newRegistry(t)
-		ctx := context.Background()
-		tenant := newTenant()
-		create := mustAct(t, domain.MandatoryChannelClassify, "open the acme conflict screen")
-		add := mustAct(t, domain.MandatoryChannelClassify, "anne is on the acme matter")
-		remove := mustAct(t, domain.MandatoryChannelClassify, "anne left the acme matter")
-
-		p, err := reg.UpsertFromClaims(ctx, userClaims(t, tenant, "https://idp.example", "anne"))
-		if err != nil {
-			t.Fatalf("UpsertFromClaims: %v", err)
-		}
-		cg, err := reg.EnsureClearanceGroup(ctx, create, tenant, "conflict-screen-acme")
-		if err != nil {
-			t.Fatalf("EnsureClearanceGroup: %v", err)
-		}
-		if err := reg.AddClearanceGroupMember(ctx, add, cg.ID, p.ID); err != nil {
-			t.Fatalf("AddClearanceGroupMember: %v", err)
-		}
-		if err := reg.RemoveClearanceGroupMember(ctx, remove, cg.ID, p.ID); err != nil {
-			t.Fatalf("RemoveClearanceGroupMember: %v", err)
-		}
-
-		changes, err := reg.ClearanceGroupChanges(ctx, cg.ID)
-		if err != nil {
-			t.Fatalf("ClearanceGroupChanges: %v", err)
-		}
-		wantKinds := []domain.ClearanceChangeKind{
-			domain.ClearanceChangeCreated,
-			domain.ClearanceChangeAdded,
-			domain.ClearanceChangeRemoved,
-		}
-		if len(changes) != len(wantKinds) {
-			t.Fatalf("trail has %d entries (%+v), want %d", len(changes), changes, len(wantKinds))
-		}
-		for i, want := range wantKinds {
-			got := changes[i]
-			if got.Kind != want {
-				t.Fatalf("trail[%d].Kind = %q, want %q", i, got.Kind, want)
-			}
-			if got.ID == "" || got.ClearanceGroupID != cg.ID {
-				t.Fatalf("trail[%d] = %+v, want an id and the clearance group", i, got)
-			}
-			if got.Reason == "" || got.Actor == "" || got.ActedAt.IsZero() || got.RecordedAt.IsZero() {
-				t.Fatalf("trail[%d] = %+v, want channel, actor, reason and instants recorded", i, got)
-			}
-			if got.Channel != domain.MandatoryChannelClassify {
-				t.Fatalf("trail[%d].Channel = %q", i, got.Channel)
-			}
-		}
-		if changes[1].PrincipalID != p.ID || changes[2].PrincipalID != p.ID {
-			t.Fatalf("the membership entries do not name the principal: %+v", changes[1:])
-		}
-		if changes[1].Reason != add.Reason() || changes[2].Reason != remove.Reason() {
-			t.Fatalf("the recorded reasons were not the acts' own: %q, %q", changes[1].Reason, changes[2].Reason)
-		}
-
-		// A refused write leaves no entry: the trail records what
-		// happened, not what was attempted and denied, because a trail
-		// that mixed the two could not be read as a list of who holds
-		// what.
-		var noAct domain.MandatoryAct
-		if err := reg.AddClearanceGroupMember(ctx, noAct, cg.ID, p.ID); err == nil {
-			t.Fatal("AddClearanceGroupMember without an act succeeded")
-		}
-		after, err := reg.ClearanceGroupChanges(ctx, cg.ID)
-		if err != nil {
-			t.Fatalf("ClearanceGroupChanges: %v", err)
-		}
-		if len(after) != len(changes) {
-			t.Fatalf("a refused write appended to the trail: %d entries, was %d", len(after), len(changes))
 		}
 	})
 
@@ -1014,26 +691,6 @@ func RunRegistrySuite(t *testing.T, newRegistry func(t *testing.T) iam.Registry)
 		if _, err := reg.EnsureGroup(ctx, a, ""); err == nil {
 			t.Fatal("EnsureGroup accepted an empty name")
 		}
-
-		act := mustAct(t, domain.MandatoryChannelDirectorySync, "hr feed")
-		cgFirst, err := reg.EnsureClearanceGroup(ctx, act, a, "all-timekeepers")
-		if err != nil {
-			t.Fatalf("EnsureClearanceGroup: %v", err)
-		}
-		cgSecond, err := reg.EnsureClearanceGroup(ctx, act, a, "all-timekeepers")
-		if err != nil {
-			t.Fatalf("second EnsureClearanceGroup: %v", err)
-		}
-		if cgSecond.ID != cgFirst.ID {
-			t.Fatalf("EnsureClearanceGroup minted a second clearance group: %q then %q", cgFirst.ID, cgSecond.ID)
-		}
-		// A clearance group and an ordinary group may share a name
-		// without sharing anything else: they are different kinds of
-		// object in different namespaces, and conflating the namespaces
-		// would make a tier-1 name a lever on a tier-2 object.
-		if _, err := reg.EnsureGroup(ctx, a, "all-timekeepers"); err != nil {
-			t.Fatalf("EnsureGroup of a name a clearance group already uses: %v", err)
-		}
 	})
 
 	t.Run("UpsertFromClaimsRejectsUnprovisionableClaims", func(t *testing.T) {
@@ -1114,30 +771,14 @@ func RunRegistrySuite(t *testing.T, newRegistry func(t *testing.T) iam.Registry)
 			}
 		}
 
-		// A caller-supplied instant — a MandatoryAct's — must survive the
-		// trail intact, because a trail whose timestamps differ from the
-		// act's by a few hundred nanoseconds cannot be reconciled with
-		// anything else that recorded the same act.
-		actedAt := time.Date(2026, 10, 23, 12, 0, 0, 123456789, time.FixedZone("UTC+4", 4*60*60))
-		act, err := domain.NewMandatoryAct(domain.MandatoryChannelClassify,
-			domain.NewPrincipalID(domain.SystemClock{}), "matter 4471 conflict screen", actedAt)
-		if err != nil {
-			t.Fatalf("NewMandatoryAct: %v", err)
-		}
-		cg, err := reg.EnsureClearanceGroup(ctx, act, tenant, "conflict-screen-acme")
-		if err != nil {
-			t.Fatalf("EnsureClearanceGroup: %v", err)
-		}
-		changes, err := reg.ClearanceGroupChanges(ctx, cg.ID)
-		if err != nil {
-			t.Fatalf("ClearanceGroupChanges: %v", err)
-		}
-		if len(changes) != 1 {
-			t.Fatalf("trail has %d entries, want 1", len(changes))
-		}
-		if !changes[0].ActedAt.Equal(act.At()) {
-			t.Fatalf("acted_at did not round-trip: act carried %v, trail recorded %v", act.At(), changes[0].ActedAt)
-		}
+		// There was a third assertion here, on a caller-supplied
+		// instant: the witness a mandatory write carried had to survive
+		// into the trail intact, because a trail whose timestamps differ
+		// from the act's by a few hundred nanoseconds cannot be
+		// reconciled with anything else that recorded the same act. No
+		// method on this port now stores an instant the caller chose, so
+		// the property has nothing left to hold and is not replaced by a
+		// weaker one. It returns when something stores a caller's time.
 	})
 
 	t.Run("UnknownPrincipalReadsAreErrPrincipalNotFound", func(t *testing.T) {
@@ -1153,9 +794,6 @@ func RunRegistrySuite(t *testing.T, newRegistry func(t *testing.T) iam.Registry)
 		}
 		if _, err := reg.GroupsOf(ctx, unknown, now()); !errors.Is(err, domain.ErrPrincipalNotFound) {
 			t.Fatalf("GroupsOf error = %v, want ErrPrincipalNotFound", err)
-		}
-		if _, err := reg.ClearanceGroupsOf(ctx, unknown, now()); !errors.Is(err, domain.ErrPrincipalNotFound) {
-			t.Fatalf("ClearanceGroupsOf error = %v, want ErrPrincipalNotFound", err)
 		}
 
 		// A malformed id on a lookup path is "not found" rather than
@@ -1201,20 +839,6 @@ func mustSubject(t *testing.T, issuer, subject string) domain.ExternalSubject {
 		t.Fatalf("ParseExternalSubject(%q, %q): %v", issuer, subject, err)
 	}
 	return s
-}
-
-// mustAct builds a MandatoryAct or fails the test. Its actor is a fresh
-// principal id: the suite does not require the actor to be a principal the
-// registry knows, because a directory sync's service identity and a
-// deployment-level security admin may both live outside the tenant whose
-// clearance they are administering.
-func mustAct(t *testing.T, channel domain.MandatoryChannel, reason string) domain.MandatoryAct {
-	t.Helper()
-	act, err := domain.NewMandatoryAct(channel, domain.NewPrincipalID(domain.SystemClock{}), reason, time.Now())
-	if err != nil {
-		t.Fatalf("NewMandatoryAct: %v", err)
-	}
-	return act
 }
 
 // userClaims builds a user claim set for the given subject and claim-derived groups.

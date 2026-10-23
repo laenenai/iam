@@ -102,86 +102,21 @@ sql:
               import: "github.com/laenenai/iam/internal/domain"
               type: "GroupSource"
 
-          # ---------------------------------------------------------------
-          # The one column that is deliberately NOT its domain type.
-          # ---------------------------------------------------------------
+          # There was a block here for the one column that was deliberately
+          # NOT its domain type: a clearance group's id, which was a struct
+          # with an unexported field so that no package outside
+          # internal/domain could forge one or convert a GroupID into one.
+          # Mapping it would have needed sql.Scanner and driver.Valuer —
+          # both exported — so it mapped to its primitive instead and
+          # pgregistry converted through the validating parser at its own
+          # boundary.
           #
-          # A clearance group's id is domain.ClearanceGroupID: a struct
-          # with an unexported field, so no package outside internal/domain
-          # can forge one, convert a GroupID into one, or read the string
-          # back out of one (design §8.3, and
-          # TestOrdinaryGroupIDIsNotAClearanceGroupID requires the compiler
-          # to reject the attempt).
-          #
-          # Mapping it here would need sql.Scanner and driver.Valuer on the
-          # type — both exported, so any package could then build a
-          # ClearanceGroupID from an arbitrary string and the
-          # unforgeability the type exists for would be gone. A storage
-          # concern must not widen a security-relevant type's surface.
-          #
-          # So every clearance-group id column maps to its primitive, and
-          # pgregistry converts through domain.ParseClearanceGroupID on the
-          # way out and domain.ClearanceGroupID.String() on the way in. One
-          # conversion per field, at one boundary, and the invariant is
-          # untouched. Spelled out explicitly rather than left to the
-          # iam.ulid default above, because it is a decision and not an
-          # omission.
-          - column: "iam.clearance_groups.id"
-            go_type: "string"
-          - column: "iam.clearance_group_members.clearance_group_id"
-            go_type: "string"
-          - column: "iam.clearance_group_changes.clearance_group_id"
-            go_type: "string"
-          - column: "iam.live_clearance_group_members.clearance_group_id"
-            go_type: "string"
+          # The type went with the mandatory tier (design anti-goal A3) and
+          # the overrides went with it. CONVENTIONS.md keeps the technique,
+          # because the next value that must be unforgeable will need it.
 
-          - column: "iam.clearance_groups.tenant_id"
-            go_type:
-              import: "github.com/laenenai/iam/internal/domain"
-              type: "TenantID"
-          - column: "iam.clearance_groups.channel"
-            go_type:
-              import: "github.com/laenenai/iam/internal/domain"
-              type: "MandatoryChannel"
-
-          - column: "iam.clearance_group_members.principal_id"
-            go_type:
-              import: "github.com/laenenai/iam/internal/domain"
-              type: "PrincipalID"
-          - column: "iam.clearance_group_members.channel"
-            go_type:
-              import: "github.com/laenenai/iam/internal/domain"
-              type: "MandatoryChannel"
-          - column: "iam.clearance_group_members.actor_principal_id"
-            go_type:
-              import: "github.com/laenenai/iam/internal/domain"
-              type: "PrincipalID"
-
-          - column: "iam.clearance_group_changes.id"
-            go_type:
-              import: "github.com/laenenai/iam/internal/domain"
-              type: "ChangeID"
-          # NULL for a 'created' entry, which names no principal.
-          - column: "iam.clearance_group_changes.principal_id"
-            go_type:
-              import: "github.com/laenenai/iam/internal/domain"
-              type: "PrincipalID"
-              pointer: true
-          - column: "iam.clearance_group_changes.kind"
-            go_type:
-              import: "github.com/laenenai/iam/internal/domain"
-              type: "ClearanceChangeKind"
-          - column: "iam.clearance_group_changes.channel"
-            go_type:
-              import: "github.com/laenenai/iam/internal/domain"
-              type: "MandatoryChannel"
-          - column: "iam.clearance_group_changes.actor_principal_id"
-            go_type:
-              import: "github.com/laenenai/iam/internal/domain"
-              type: "PrincipalID"
-
-          # The two views are the artifact design §9's predicate joins, not
-          # something this package queries from Go; their columns are typed
+          # The view is the artifact design §9's predicate joins, not
+          # something this package queries from Go; its columns are typed
           # here anyway so models.go describes the schema uniformly.
           - column: "iam.live_group_members.principal_id"
             go_type:
@@ -195,7 +130,3 @@ sql:
             go_type:
               import: "github.com/laenenai/iam/internal/domain"
               type: "GroupSource"
-          - column: "iam.live_clearance_group_members.principal_id"
-            go_type:
-              import: "github.com/laenenai/iam/internal/domain"
-              type: "PrincipalID"

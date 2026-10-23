@@ -12,8 +12,12 @@ Three systems need the same answer to the same question, and the question is
 not "who is this?" but **"may this principal see this, and can that answer be
 computed inside a SQL statement over ten million rows?"**
 
-- **CAS** needs it for documents, filesets and slots, with legal-grade
-  conflict screens that no firm-wide grant may defeat (CAS §9.3).
+- **CAS** needs it for documents, filesets and slots, including legal conflict
+  screens (CAS §9.3). CAS asked for a screen "that no firm-wide grant may
+  defeat"; what it gets is default-deny — a matter outside the firm-wide
+  container that nothing names the screened principal on — plus `escrow` for
+  anything that must survive a future administrator. §7.2 explains why that
+  is the honest answer rather than a reduced one.
 - **kgs** needs it for entities, facts and observations, where a wrong answer
   is not an error page but a disclosure, and where the authorization predicate
   must compile into the same statement as a vector search (KGS §9.4, A3).
@@ -36,11 +40,16 @@ option that denies.
 
 1. **An authorization decision that compiles into a SQL predicate**, joinable
    in the consumer's own query, with no network call and no post-filtering
-   (§9).
-2. **Three enforcement tiers that compose** rather than compete: discretionary
-   relationships, mandatory classifications, and cryptographic custody (§7).
-3. **Absolute negatives that cannot be defeated** by any grant, any owner, any
-   future schema change, or forgetting to write an exclusion (§7.2).
+   (§9). Since the whole decision is now one term (§7.1), the whole decision
+   is one predicate.
+2. **Two enforcement tiers that do different jobs** rather than compose:
+   discretionary relationships with default-deny, and cryptographic custody
+   (§7). There were three. The middle one was a deny mechanism and it is
+   gone — see anti-goal A3.
+3. **Exactly two honest strengths of "no", and no third that pretends.**
+   "She may not see this" is a grant nobody wrote, liftable by anyone who may
+   share. "Nobody may ever see this, whatever rule ever happens" is a key the
+   deployment does not hold. There is nothing in between, by design (§7.2).
 4. **Google-Drive-shaped sharing**: containers, inheritance, groups, roles,
    link sharing — expressed once, inherited down, navigable up (§8.2).
 5. **Teams and roles without multiplication**: a role is an object, not a
@@ -65,11 +74,13 @@ option that denies.
   are `captoken`. This module answers "may this principal?"; `captoken`
   answers "is this credential valid and what does it permit?"
 - **Not a key manager.** `keyring` wraps DEKs; `escrow` holds shares. This
-  module records that a classification is *crypto-enforced*; it never touches
-  key material.
+  module records that a marking is *crypto-enforced*; it never touches key
+  material.
 - **Not a policy-as-code engine.** No Rego, no Cedar, no general-purpose
-  expression language in v1. A deliberately restricted relationship schema plus
-  classifications (§8.5 explains the restriction as a feature).
+  expression language in v1. A deliberately restricted relationship schema and
+  nothing else (§8.5 explains the restriction as a feature). Note that the
+  restriction is now load-bearing in a way it was not: §8.5's escape hatch used
+  to be "express it as a classification", and there is no classification.
 - **Not a reasoner or an inference engine.**
 - **Not an admin UI.** Headless: a Go library and an API.
 - **No cross-tenant anything.** The registry is global; every rule is
@@ -92,23 +103,29 @@ beyond a Postgres connection string and one constructor call, it has failed.
 
 ### A2 — The decision is too slow to be used where it matters
 
-Budgets at: 2,000 principals, 200 overlapping groups, 10,000 grants, 500
-classifications, a containment hierarchy of depth 6, and a consumer table of
-**10,000,000 rows** (KGS A2's fact count).
+Budgets at: 2,000 principals, 200 overlapping groups, 10,000 grants, a
+containment hierarchy of depth 6, and a consumer table of **10,000,000 rows**
+(KGS A2's fact count).
+
+There used to be a sixth number, "500 classifications", and it is gone with
+the tier it budgeted. What happened to it is worth keeping, because it is one
+of the two reasons A3 inverted.
 
 - A single decision against a warm projection: **p95 < 5 ms**.
 - The projection join added as a predicate to a consumer's existing query over
   10,000,000 rows: **adds < 20 ms at p95**, and the plan must show an index
   join, never a sequential scan or a materialization of the rule set.
 
-  > **Measured 2026-10-23 and falsified as written (F1 spike, F2).** The tier-1
-  > closure join meets this comfortably — 0.006 ms per candidate row,
-  > index-served. The **tier-2 classification anti-join does not**: at 200,394
-  > assignment rows it turned a 0.46 ms keyset page into **296 ms**. The budget
-  > is therefore restated as two separate budgets, because they have different
-  > causes and different fixes: the **tier-1 join** must add < 20 ms, and the
-  > **tier-2 gate** must add < 20 ms *given a stated assignment cardinality*
-  > that the §4 fixture carries. A single number hid which half was failing.
+  > **Measured 2026-10-23 (F1 spike, F2), and the measurement removed half the
+  > budget rather than restating it.** The discretionary closure join meets
+  > this comfortably — 0.006 ms per candidate row, index-served. The tier-2
+  > classification anti-join did not: at 200,394 assignment rows it turned a
+  > 0.46 ms keyset page into **296 ms**, and the gate's cost was a function of
+  > *assignment* cardinality, which KGS propagates to every derived fact,
+  > observation and vector. An earlier draft split this into two budgets, one
+  > per tier. The tier is gone, so there is one budget again and it is the one
+  > that was already met. This is the performance half of A3's inversion; the
+  > correctness half is in §7.2.
 - Grant propagation to every projection: **p95 < 2 s**.
 - Denial, revocation and deprovisioning propagation: **p95 < 500 ms** — and
   correctness must not depend on that number (§9.3's epoch check is
@@ -125,37 +142,103 @@ classifications, a containment hierarchy of depth 6, and a consumer table of
 **Reference fixture** (Claude's call): a seeded generator producing the above,
 plus the three consumer schemas (CAS's `tenant > fileset > document > slot`,
 kgs's `tenant > graph > entity-set | episode > fact`, and a synthetic
-workspace/team shape), with grants and classifications placed at every level,
-overlapping and disjoint group membership, and the KGS §1 household scenario
-and a legal conflict screen encoded as named cases.
+workspace/team shape), with grants placed at every level, overlapping and
+disjoint group membership, and the KGS §1 household scenario and a legal
+conflict screen encoded as named cases. Note that the household scenario now
+needs a grant per episode rather than one per graph (see §7.2's cost), so the
+fixture's tuple count is a function of its episode count.
 
-### A3 — A mandatory control that can be defeated
+### A3 — A deny mechanism
 
-The anti-goal this module exists for, stated as a testable invariant:
+**Inverted on 2026-10-23.** This anti-goal used to read "a mandatory control
+that can be defeated", and it was the anti-goal the module existed for. It now
+reads the other way round:
 
-> No sequence of discretionary operations — grants, shares, role assignments,
-> ownership transfers, schema changes, or link creation — performed by any
-> principal, can cause a classification gate to pass for a principal that does
-> not satisfy it.
+> **There is no deny mechanism, at all.** No classification, no clearance, no
+> deny tuple, no exclusion operator, and no plan for one. A principal is
+> refused by the absence of a grant and by nothing else. An absolute that must
+> survive a future administrator is a key the deployment does not hold, which
+> is `escrow`, not a policy row.
 
-Enforced by a **mandatory-control adversarial suite**: for each classification
-in the fixture, enumerate every discretionary operation available to every
-principal (including owners and project admins), apply them in combination up
-to a bounded depth, and assert the gate never opens. Fails the build on any
-breach.
+Enforced by the schema lint, which **rejects any exclusion operator** on a
+registered relation and names `escrow` in the error, and by the decision
+procedure having one term (§7.1) with no second place for a refusal to come
+from. The `examples/` corpus's expectation language has no `Reason` value for a
+deny that is not "no grant reaches this principal".
 
-Two corollaries, each its own test:
+#### Why: a classification is a deny
 
-- **A classification cannot be removed by the act of deriving.** A derived
-  object carries the union of its inputs' classifications (§8.3). A pipeline
-  that reads classified inputs and writes an unclassified output is the failure
-  Foundry tolerates at its read boundary (KGS §8.7) and this module must not.
-- **An absolute may never be expressed as a relationship.** A "blocked" or
-  "denied" relation in a consumer's schema is a design error, because
-  exclusion in a relationship model is *local to the permission where it is
-  written* (§5a) — one forgotten exclusion is a silent bypass. CI lints
-  registered schemas and **rejects any exclusion operator**, naming the
-  classification mechanism in the error.
+A deny administered by policy is only as absolute as whoever administers the
+policy. The previous design admitted this and tried to contain it —
+classification membership moved only through a security function's channel,
+audited, with the witness unforgeable in Go — and the corpus then demonstrated
+against the real registry that *any* principal could construct that witness,
+because "who may classify" was an unanswered design question (the old F9). So
+the absolute was administered by whoever could call the registry.
+
+That is the correctness half. The performance half is A2's measurement above.
+
+#### The diagnosis, which is the general lesson
+
+The design anchored on "this principal may never see this" — a rare case — and
+made it the template for the common one. Every ordinary privacy preference
+arrived as an absolute no owner could lift: the household's invoice got the
+same mechanism as a legal ethical wall, and "actually, show her this one" had
+no operation behind it. That was the corpus's U2, and it was foreseeable from
+the paragraph that recommended the workaround.
+
+Three different things had been collapsed into one rejection of exclusion, and
+only two of them deserved it:
+
+- **(a) Attribute-conditioned rules** genuinely cannot precompute into a
+  closure. Refusing them is correct and costs §8.5's expressiveness. Open as
+  F7 and F4.
+- **(b) Relation-scoped exclusion**, OpenFGA's `but not` and SpiceDB's `-`, is
+  genuinely local to the permission it is written in. Refusing it is correct
+  and the locality argument is sound *for it specifically*.
+- **(c) A deny tuple on `(principal, resource)` inheriting through
+  containment** was never separately examined. It is not (a) — it precomputes
+  — and it is not (b) — it is not relation-scoped. It was refused by
+  association.
+
+The resolution was not to add (c) but to remove the need for any of them.
+
+#### The guardrail: a caveat is not a deny, and the distinction is one rule
+
+Caveats are **not being added now.** This records the shape one would have to
+take, because the rule is short and getting it wrong brings back everything
+just deleted.
+
+A caveat must be writable **only by the grantor** and **only onto the grant it
+attaches to**. Then it narrows something you hold, it has no effect without a
+grant to attach to, it can never make an ungranted thing denied, and it cannot
+punch a hole in someone else's grant. If anyone but the grantor can caveat
+your grant, that is a deny in disguise.
+
+Two further constraints, if caveats are ever wanted:
+
+- **A closed enum of kinds, each compiling to one SQL conjunct** over columns
+  the closure already carries. Never an expression language: CEL and OpenFGA
+  conditions cannot compile to SQL, so adopting either forfeits the in-query
+  predicate this module exists to produce.
+- **Stateful kinds — use counts, byte budgets — can exist only on `Decide`,
+  never on `Predicate`.** A filtered read over ten million rows has no single
+  operation to count.
+
+`iam` already has one caveat, unnamed: `live_group_members`' condition that a
+membership is only live while its principal is neither deprovisioned nor
+expired nor stale. It satisfies the rule above by accident — it narrows,
+it attaches to a membership, and nobody but the registry writes it.
+
+#### The corollary that survives
+
+**A marking cannot be removed by the act of deriving.** A derived object
+carries the union of its inputs' markings (§8.3). A pipeline that reads sealed
+inputs and writes an unsealed output is the failure Foundry tolerates at its
+read boundary (KGS §8.7) and this module must not. Note what this is *not* any
+more: it is not an access control, because a marking refuses no principal
+anything. It is a flow label gating egress, which is the same conclusion kgs
+reached independently.
 
 ### A4 — A projection that silently diverges
 
@@ -182,12 +265,19 @@ Decided by Pascal:
   without exponential complexity.
 - **Fine-grained single-purpose modules**, never a `platform` catch-all.
 
+Decided by Pascal on 2026-10-23, after the first draft of this document:
+
+- **There is no deny mechanism** (A3, §7.2). The mandatory tier is removed in
+  full. Two tiers remain: discretionary grants with default-deny, and
+  cryptographic custody.
+- **OpenFGA is dropped; `iam` owns its tuples and closures in Postgres** (§10).
+  `Predicate` must return a SQL fragment the consumer joins inside its own
+  query, so the authority the predicate reads has to be tables we own.
+
 Decided by Claude in this document (flagged, open to reversal):
 
-- **Two decision tiers plus one orthogonal enforcement tier** (§7), rather than
+- **One decision tier plus one orthogonal enforcement tier** (§7), rather than
   one unified policy lattice.
-- **Absolute negatives are classifications, not relationships** (§7.2, §8.3),
-  because exclusion is local and unflattenable.
 - **The registered schema is deliberately restricted** to union, group
   usersets and tuple-to-userset inheritance — the subset that flattens (§8.5).
 - **Bare and effective relations**, adopting Lakekeeper's v4.12 fix (§8.2).
@@ -195,8 +285,9 @@ Decided by Claude in this document (flagged, open to reversal):
   implicit derivation (§8.2).
 - **Two small closures, never the subject × resource cross product** (§9.2).
 - **Asymmetric staleness with a synchronous deny epoch** (§9.3).
-- **Engine selection deferred to the §10 spike**, with the module's own API
-  stable across either choice.
+- **No `Engine` port** (§10). A port with one implementation is speculative;
+  the seam belongs at `Decide` and `Predicate`, which is the boundary
+  consumers actually see.
 
 ### 5a. Prior art, and what is taken from each
 
@@ -207,20 +298,26 @@ borrowed, deliberately.
 |---|---|---|
 | **Zanzibar** | Relation tuples as the data model; userset rewrites; tuple-to-userset for hierarchy at **one tuple per hop**; the Leopard index as proof that *set expansion* is the part worth materializing. Google Drive is its flagship application, which is the owner's stated sharing requirement. | Its exclusion operator (see below). Its scale assumptions and its service-shaped deployment. |
 | **SpiceDB / AuthZed** | The authority-plus-projection pattern, productized as **Materialize** — consumes the Watch change stream, computes permission deltas, maintains a local denormalized view so "ACL-aware filtering becomes a simple JOIN". Independent confirmation of §9. Its escalation ladder: Check → BulkCheck → projection → Materialize. | Materialize is commercial, not open-source SpiceDB. And `pkg/embedded` is **`CheckPermission` only** — no writes, no lookup, no watch (§10), which rules it out as an embedded authority. |
-| **OpenFGA** | Apache-2.0, written in Go, so it embeds natively in a Go process. `ReadChanges` as a pollable changelog, which is a better projection source than a long-lived stream because it is resumable. The configuration language's `[user, team#member]` usersets and `X from Y` inheritance. | Its `but not` operator, for the reason below. |
-| **Lakekeeper** | The most instructive comparable — a production Iceberg catalog doing ReBAC over a hierarchy. **Roles as first-class objects** parented to a container with `assignee`/`ownership` relations, which is the teams-and-roles answer with no cross product. **Bi-directional inheritance**: top-down grants, plus bottom-up *navigational* visibility so a principal granted access to one deep object gets limited list rights on its ancestors and **only on the direct path**. And the **v4.12 bare/effective split** (§8.2), with numbers. | **It has no deny at all** — "permissions are additive", with `Managed Access` restricting who may grant rather than denying access. The one mature open-source implementation declined to attempt the owner's hardest requirement, which is the strongest available evidence that absolutes do not belong in the relationship layer. |
-| **Palantir Foundry** | The mandatory/discretionary split itself. Mandatory controls (markings, CBAC) **propagate through derivation** and cannot be granted away; discretionary row/column policies apply at the read layer. Marking allowlists governing what a language model may see. | Its read boundary: discretionary controls stop propagating once data is read, and "the rows that the user did receive are ordinary data… carry no metadata, classification, or tag that subsequent code can use to re-apply the policy." kgs cannot accept that (KGS §8.7), so §8.3 propagates through derivation unconditionally. |
+| **OpenFGA** | The configuration language's `[user, team#member]` usersets and `X from Y` inheritance, which is what §8.2's permitted subset is. `ReadChanges`' *shape* as a projection source — a pollable, cursored changelog rather than a long-lived stream, so a restarted worker resumes rather than rebuilds — which §9.3's own write-log copies. | **The engine itself, as of 2026-10-23 (§10).** It answers `Check`/`ListObjects` over its own store and cannot produce a SQL fragment, so it would be a second source of truth polled in order to populate the one that answers. Also its `but not` operator, for the reason below. |
+| **Lakekeeper** | The most instructive comparable — a production Iceberg catalog doing ReBAC over a hierarchy. **Roles as first-class objects** parented to a container with `assignee`/`ownership` relations, which is the teams-and-roles answer with no cross product. **Bi-directional inheritance**: top-down grants, plus bottom-up *navigational* visibility so a principal granted access to one deep object gets limited list rights on its ancestors and **only on the direct path**. And the **v4.12 bare/effective split** (§8.2), with numbers. | **It has no deny at all** — "permissions are additive", with `Managed Access` restricting who may grant rather than denying access. This design now agrees with that, and arrived there by a different route. An earlier draft of this cell called the absence "the strongest available evidence that absolutes do not belong in the relationship layer", and that is **weak support and should not be leaned on**: Lakekeeper governs data-catalog hierarchies for org-internal analytics, a domain with no per-resource owner asserting privacy against a peer and therefore no demand for the thing it lacks. The agreement is a coincidence of conclusions, not shared evidence. |
+| **Palantir Foundry** | **Marking propagation through derivation**, and marking allowlists governing what a language model may see. §8.3 keeps both, as flow labels rather than as access rules. | **The mandatory/discretionary split itself**, which this design adopted and then removed (A3): a mandatory control administered by a security function is only as absolute as that administration, and routing ordinary privacy through it makes every preference an absolute. Also its read boundary: controls stop propagating once data is read, and "the rows that the user did receive are ordinary data… carry no metadata, classification, or tag that subsequent code can use to re-apply the policy." kgs cannot accept that (KGS §8.7), so §8.3's markings propagate through derivation unconditionally. |
 
 **On exclusion operators, since three of these systems have one.** In OpenFGA
 (`but not`) and SpiceDB (`-`), exclusion is **local to the single relation
-definition in which it is written**. To make "this principal may never see
-this" absolute, the exclusion must appear in every permission on every resource
-type, and be remembered for every type added later — N permissions × M
-exclusion dimensions, growing with the schema, where one omission is a silent
-bypass rather than an error. Exclusion is also the one operator that cannot be
+definition in which it is written**. To make a restriction absolute, the
+exclusion must appear in every permission on every resource type, and be
+remembered for every type added later — N permissions × M exclusion
+dimensions, growing with the schema, where one omission is a silent bypass
+rather than an error. Exclusion is also the one operator that cannot be
 flattened into a precomputed closure, so using it forfeits §9's projection and
-with it the A2 budget. Both reasons point the same way: **absolutes are
-classifications** (§7.2).
+with it the A2 budget.
+
+Both reasons still hold and the conclusion they point to has changed. They
+used to point at "absolutes are classifications". They now point at **no
+absolute is a policy object at all** (§7.2) — because the locality argument is
+an objection to relation-scoped exclusion specifically, and it was being made
+to carry an argument about where absolutes should live instead. Where they live
+is `escrow`.
 
 ## 6. Architecture
 
@@ -232,23 +329,31 @@ classifications** (§7.2).
         v                      v
    +--------------------------------------------------+
    |                      core                        |
-   |  decision procedure, schema registry, class-     |
-   |  ification evaluation, predicate compiler,       |
-   |  projection maintenance, differential audit      |
+   |  decision procedure, schema registry, tuple      |
+   |  store, closure maintainer, predicate compiler,   |
+   |  write log + cursor, differential audit          |
    +--------------------------------------------------+
-     |            |             |            |
-   engine      identity     projection    audit
-   port         port           port        port
-     |            |             |            |
-  ReBAC        Zitadel      Postgres      audit
-  engine       OIDC/JIT     (per pool)    module
-  (in-process) + registry
-     |
+        |             |             |
+    identity      projection      audit
+     port            port          port
+        |             |             |
+     Zitadel       Postgres       audit
+     OIDC/JIT      (per pool)     module
+     + registry
+        |
   Postgres (own schema, same instance)
 ```
 
-- **Ports**: `Engine`, `IdentityProvider`, `ProjectionStore`, `AuditSink`,
-  `Clock`, `Tenancy` (from the `tenancy` module), `EventSink`.
+- **Ports**: `IdentityProvider`, `ProjectionStore`, `AuditSink`, `Clock`,
+  `Tenancy` (from the `tenancy` module), `EventSink`.
+
+  There was an `Engine` port. It is gone with OpenFGA (§10): a port with one
+  implementation is speculative, and the seam consumers actually see is
+  `Decide` and `Predicate`. What sat behind that port is now ordinary code in
+  the core — a tuple store, a closure maintainer and a write log — because
+  with exclusion, conditions and the mandatory gate all removed, what remains
+  is union, usersets and containment inheritance. That is a closure
+  maintainer, not a policy engine.
 - **Two consumer-facing surfaces, and the second is the point.** `Decide` for a
   single decision; **`Predicate`** returns a composable SQL fragment plus its
   bound parameters, to be embedded in the consumer's own statement. A consumer
@@ -258,80 +363,123 @@ classifications** (§7.2).
 - **`iamd`** is the service shape; the embedded path is `iam.Open(ctx, Config)`
   returning the same interface. Conformance tests run against both.
 
-## 7. The three enforcement tiers
+## 7. The two enforcement tiers
 
-The spine of the design. They are not three ways of writing rules; they are
-three different things that enforce, with different survival properties.
+The spine of the design. They are not two ways of writing rules; they are two
+different things, one of which decides and one of which does not.
 
 | Tier | Mechanism | Survives | Costs |
 |---|---|---|---|
-| **1. Discretionary** | Relation tuples, usersets, inheritance | nothing in particular — it is the everyday, shareable, revocable layer | nothing |
-| **2. Mandatory** | Classifications on resources, clearances on principals | any grant, any owner, any project admin, any future discretionary rule, and any forgotten exclusion | some query surface; must propagate through every derivation |
-| **3. Cryptographic** | A key the system does not hold (`keyring` + `escrow`) | the administrator, the operator, a subpoena, a stolen backup, and every future policy change | **everything** — no extraction, indexing, embedding or summarisation; unrecoverable if the key is lost |
+| **1. Discretionary** | Relation tuples, usersets, inheritance, default-deny | nothing in particular — it is the everyday, shareable, revocable layer, and the only thing that decides | nothing |
+| **2. Cryptographic** | A key the deployment does not hold (`keyring` + `escrow`) | the administrator, the operator, a subpoena, a stolen backup, and every future policy change | **everything** — no extraction, indexing, embedding or summarisation; unrecoverable if the key is lost |
+
+There were three. The middle tier was classifications on resources and
+clearances on principals, and it is removed: see A3 for the two reasons and
+§7.2 for what replaces it.
 
 ### 7.1 The decision procedure
 
 ```
 Decide(principal, action, resource, at) =
-      mandatory_gate(principal, resource)        // tier 2, live, never projected
-  AND discretionary_allows(principal, action, resource)   // tier 1, projected
+      discretionary_allows(principal, action, resource)   // and nothing else
 ```
 
-Both must pass. Neither can override the other. **Deny-wins is therefore
-structural** — it is a property of the conjunction, not a rule anyone has to
-remember to write. CAS §9.3's "any applicable denial wins, at any level,
-regardless of specificity" is this conjunction, with denials promoted from
-rules to classifications.
+Default-deny. One term, projected, and **this is what makes the whole decision
+a single SQL predicate** — there is no live, unprojectable second term that a
+compiled fragment would have to be conjoined with outside the query.
 
-Evaluation order is mandatory-first, because it is cheap, and because a
-principal who fails the gate must not have the discretionary layer consulted
-at all — the attempt is auditable without being informative.
+It used to read `mandatory_gate(principal, resource) AND
+discretionary_allows(...)`, evaluated mandatory-first because the gate was
+cheap and because a principal who failed it should not have the discretionary
+layer consulted at all. "Cheap" was falsified by measurement (A2), and the gate
+was a deny administered by policy (A3).
 
-### 7.2 Why absolutes are tier 2 and not tier 1
+CAS §9.3's "any applicable denial wins, at any level, regardless of
+specificity" has no counterpart here, and CAS must be told so rather than left
+to discover it: there are no denials, so there is nothing for a precedence rule
+to order. §12 says what CAS does instead.
 
-Three independent reasons, each sufficient:
+### 7.2 Why there is no deny, and what replaces it
 
-1. **Locality.** Exclusion in a relationship model applies only to the
-   permission it is written in (§5a). Absolutes written there are absolute only
-   where someone remembered them.
-2. **Unflattenability.** Union, usersets and inheritance precompute into a
-   closure; arbitrary exclusion does not. Tier 1 is restricted precisely so
-   that §9's projection is possible, and that restriction is what buys the A2
-   budget.
-3. **Evidence.** Lakekeeper, the one production open-source ReBAC-over-a-
-   hierarchy implementation, has no deny mechanism at all (§5a). The absence is
-   not an oversight; it is what the model is bad at.
+A3 gives the reasons. This section is the consequence a consumer has to design
+against: there are exactly **two honest strengths of "no"**, and nothing in
+between.
 
-### 7.3 Why tier 3 exists at all
+**"She may not see this" is a grant nobody wrote.** Default-deny is the only
+thing that refuses. It is liftable by anybody who may share, which for a
+private letter or a household invoice is the correct property — the owner
+asked for a default, not a prohibition, and the previous design handed them a
+prohibition. The `examples/` corpus's D6 and H1 are this.
+
+**"Nobody may ever see this, whatever rule ever happens" is a key the
+deployment does not hold.** That is §7.3, and it is the only mechanism in the
+design that withholds something from a principal a grant did reach.
+
+Three consequences worth stating plainly, because two of them are costs.
+
+- **The legal ethical wall has no policy mechanism.** It is a matter outside
+  the firm-wide container that nothing names the screened principal on, plus
+  `escrow` for anything that must survive a future administrator. The corpus's
+  D8 is that, and it says in its own prose that it survives nobody: any
+  principal who may share the matter can share it tomorrow. This is a
+  reduction in what the design claims and not in what it delivered, because
+  the old mechanism's absoluteness depended on an unanswered question about
+  who could administer it.
+- **Privacy inside a shared container becomes grant granularity.** The
+  household used to share a graph with one tuple and keep one episode private
+  with a label. With no label, the grant moves down to the episode — which is
+  also KGS §9.3's own default for a new episode. §9.2's closure budget is
+  untouched (a per-episode grant still reaches every fact inside it at one
+  tuple per hop) but the tuple count a tenant carries is now a function of how
+  much it ingests rather than of how many principals it has.
+- **One kgs leak channel is worse, not merely unchanged.** Sending content to
+  a hosted model used to be guarded twice: the marking allowlist decided what
+  the provider could receive, and the mandatory gate decided what the pipeline
+  principal could read in the first place. One of those is gone, so an
+  over-granted pipeline principal is stopped by the allowlist or not at all.
+  kgs recorded the same finding on its own side; the corpus's A3 carries it as
+  a claim.
+
+### 7.3 Why the cryptographic tier exists at all
 
 From the owner's requirement: *"whatever rule ever happens my will document
 should always stay private except if I die and the lawyer gives the access
 key."*
 
-Tiers 1 and 2 are enforced by policy, which means they are enforced by whoever
-administers policy. No access-control system can promise that no future rule
-will grant access, because rules are mutable and administrators exist. The only
-mechanism that survives "whatever rule ever happens" is one where the system
-**cannot decrypt**.
+The discretionary tier is enforced by policy, which means it is enforced by
+whoever administers policy. No access-control system can promise that no future
+rule will grant access, because rules are mutable and administrators exist. The
+only mechanism that survives "whatever rule ever happens" is one where the
+system **cannot decrypt**.
 
-So tier 3 is **not part of the decision**. `Decide` may well return allow for a
-crypto-enforced resource; the caller still cannot read it without a key the
-deployment does not hold. This module's entire responsibility for tier 3 is one
-field: a classification carries an **enforcement class** of `policy` or
-`crypto`. `keyring` holds the wrapping; `escrow` holds the shares, the
+So this tier is **not part of the decision**. `Decide` may well return allow
+for a sealed resource; the caller still cannot read it without a key the
+deployment does not hold. This module's entire responsibility here is one
+field: a marking carries an **enforcement class** of `crypto` or `none`
+(§8.3). `keyring` holds the wrapping; `escrow` holds the shares, the
 custodians, the ceremony and the dead-man's switch. Recording the class here is
 what lets a consumer tell a user *why* something is unreadable, and lets the
-API refuse processing operations on crypto-enforced content with a typed error
-rather than failing obscurely later.
+API refuse processing operations on sealed content with a typed error rather
+than failing obscurely later.
+
+The enforcement class used to have the values `policy` and `crypto`. `policy`
+is now `none` — the class of a marking that enforces nothing by itself — and
+the renaming is A3 in one enum value. A label that refused a principal access
+was a deny administered by policy.
+
+This tier mattered before and matters more now: with the mandatory tier gone,
+it is the only thing left in the design that withholds anything from a
+principal a grant reached. That is not a weakening. A classification never
+survived "whatever rule ever happens" either; it only read as though it did.
 
 ## 8. Data model
 
 ### 8.1 Identity
 
 - **Principals** — users, services, and agent runs — are rows carrying a stable
-  internal id. Grants, classifications, audit chains and metering attribution
-  reference that id, never an external subject string, so re-issuing an
-  external identity never rewrites history (CAS §9.1).
+  internal id. Grants, audit chains and metering attribution reference that id,
+  never an external subject string, so re-issuing an external identity never
+  rewrites history (CAS §9.1).
 - **Groups** and membership are rows, **joinable inside the predicate**. This
   is the whole reason identity lives here rather than being read from token
   claims: §9's predicate must join membership in SQL, and claims cannot be
@@ -355,7 +503,7 @@ rather than failing obscurely later.
 - **Deprovisioning denies immediately**, regardless of token validity, via the
   deny epoch (§9.3).
 
-### 8.2 Tier 1: the discretionary layer
+### 8.2 The discretionary layer, which is the only one that decides
 
 **Relation tuples**, `object#relation@subject`, where a subject is a principal
 or a userset (`team:eng#member`). Stored as rows in this module's schema.
@@ -409,7 +557,11 @@ rather than being derived at read time.
 > *and* to zero or more nestable entity-sets there are several paths, and the
 > phrase names nothing. The three repairs are not equivalent: a union of paths
 > reopens leak channel #1, an intersection is usually empty, and designating a
-> primary container per write pushes the decision onto every consumer write. Do
+> primary container per write pushes the decision onto every consumer write.
+> This matters more since A3 than it did: with no deny mechanism, "the screened
+> principal navigates to nothing" is part of how a conflict screen is asserted
+> (the corpus's D8), so the phrase is load-bearing for a security property and
+> not only for navigation. Do
 > not build against this sentence until F3 is settled.
 
 This matters more here than in a catalog, because it is how a consumer answers
@@ -422,79 +574,66 @@ into KGS §7.3 as a result.
 identity, minted and constrained by `captoken`. This module stores the
 relationship; it does not interpret caveats.
 
-### 8.3 Tier 2: the mandatory layer
+### 8.3 Markings: content labels that decide nothing
 
-**Classifications** are labels on resources; **clearances** are the
-classifications a principal satisfies. Both are rows. The gate is set
-containment: every classification on the resource must be satisfied by the
-principal.
+**Removed on 2026-10-23: this section used to be the mandatory layer.** It
+described classifications on resources, clearances on principals, clearance
+groups administered through a security function's channel, and a gate that was
+set containment over a resource's resolved label set. A3 gives the two reasons
+it is gone and §7.2 gives what replaces it. One of its sentences is worth
+quoting as it is deleted, because it was already false by measurement rather
+than by argument: *"Classifications are small and change rarely, so the gate is
+evaluated against authoritative rows rather than a materialized copy."* F2
+measured 200,394 assignment rows in a fixture an order of magnitude smaller
+than KGS A2's, because KGS propagates an episode's markings to every derived
+fact, observation and vector.
 
-Properties, each non-negotiable and each a test in §13:
+What remains is much smaller, and it is not an access control.
 
-- **Mandatory.** A classification cannot be granted away, delegated,
-  transferred with ownership, or satisfied by any tier-1 relation. There is no
-  API that grants a clearance as a side effect of sharing.
-- **Propagates through derivation, with no read boundary.** A derived object
-  carries the **union** of its inputs' classifications. This is where the design
-  departs from Foundry (§5a), and it departs because kgs's consolidator reads
-  filtered facts and writes derived beliefs back into the same store; without
-  unconditional propagation a belief derived from privileged evidence lands
-  unclassified. Consumers declare derivations; the module computes the union.
-- **Checked live, never projected.** Classifications are small and change
-  rarely, so the gate is evaluated against authoritative rows rather than a
-  materialized copy. This is deliberate: it means an absolute is **never
-  stale**, which is the property that makes a conflict screen trustworthy, and
-  it is why §9.3's bounded staleness applies only to grants.
-- **Carries an enforcement class** of `policy` or `crypto` (§7.3).
-- **Scoped**: a classification may be declared over a whole resource, or over a
-  named attribute or field of it, which is how property-level and cell-level
-  security compose without a second mechanism (CAS §9.3, KGS §9.2).
-  **Conditional on storage shape — a caveat on the feature, not a footnote
-  (F4):** an attribute-scoped classification is enforceable by a row predicate
-  only where the attribute *is* a row. True for kgs, where facts are rows;
-  false for CAS, where a document's fields are columns and a `WHERE` clause
-  cannot hide one. Where it is false, either `Predicate` returns a
-  permitted-attribute set the consumer applies — moving part of A3's trust
-  boundary into consumer code — or the sensitive field becomes its own
-  resource. Declaring one over a column-shaped resource must fail loudly at
-  registration rather than appear to work.
-- **Creating and assigning classifications is itself permissioned and
-  audited**, and is not a power that ownership confers.
+**A marking is a label on a resource's content.** It carries an **enforcement
+class** of `crypto` or `none`, and `Decide` never reads one. Two things still
+need content labels now that nothing denies:
 
-**Who may hold a clearance — and why tier-1 groups may never.** Clearance may
-be held by a principal or by a **clearance group**, and a clearance group is a
-*mandatory* object: its membership is changed only through the classify
-permission or an authoritative directory sync, it is audited, and **it can
-never be referenced in a tier-1 tuple**. An ordinary team or workspace group
-may not hold a clearance.
+- **`crypto`** — the content is encrypted under a key the deployment does not
+  hold (§7.3). The class is recorded here so a consumer can tell a user *why*
+  something is unreadable and so the API can refuse a processing operation with
+  a typed error rather than failing obscurely later.
+- **`none`** — the marking enforces nothing by itself. It is metadata a
+  consumer's own egress gate reads: KGS §9.5's model-provider allowlist is the
+  one such gate across the three consumers. `none` is where the old `policy`
+  class went, and the renaming is A3 in one enum value.
 
-This distinction is not fussiness, it is A3. If a clearance could attach to a
-tier-1 group, then anyone able to add a member to that group could open a
-mandatory gate through a discretionary operation, and the invariant is breached
-by construction rather than by a bug. It is also how real mandatory access
-control has always worked: clearances and compartments are administered by a
-security function, not by data owners — Palantir's marking membership is
-administered separately from dataset ownership for the same reason.
+**Markings are flow labels, not access rules.** They propagate and they gate
+egress; they refuse no principal anything. kgs reached the same conclusion
+independently and relocated "what may a hosted model be shown?" out of
+authorization entirely, down to egress eligibility at its `LLMProvider` and
+`EmbeddingProvider` ports. This design agrees: a marking is content metadata
+`iam` stores, and the gate that reads it belongs to the consumer.
 
-And it is what makes administration tractable. "Everyone except Bob" is a
-clearance group that does not contain Bob, maintained through the mandatory
-channel, rather than 1,999 individual grants. A directory-synced clearance
-group (`all-timekeepers`) keeps a firm workable, because employment is an
-authoritative fact rather than a discretionary share.
+**Propagation, which survives for a different reason than it had.** A derived
+object carries the **union** of its inputs' markings, and a marking on a
+container reaches what the container holds (resolved over the ancestry closure
+of §9.2). For a `crypto` marking that is physics rather than policy — content
+derived from sealed content is sealed, and a cipher does not care which
+pipeline stage read it. For an egress marking it is KGS leak channel #15: a
+consolidator that saw privileged evidence must not emit an observation a
+non-allowlisted provider may then read. Consumers declare derivations; the
+module computes the union.
 
-**A newly provisioned principal holds no clearances.** JIT provisioning grants
-identity, never clearance. This is fail-closed and it means a new joiner sees
-nothing classified until a mandatory act includes them — directly or through a
-synced clearance group.
+What propagation is *not* any more: a mandatory control. The old §8.3 said a
+classification "cannot be granted away, delegated, transferred with ownership,
+or satisfied by any tier-1 relation", and that sentence was about an access
+decision. A marking has nothing to be granted away.
 
-**Classifications inherit through containment as well as derivation.**
-Derivation propagation (above) is what kgs needs; CAS needs the other
-direction — "mark this fileset `privileged`" must cover the documents inside
-it, and a document is *contained* by a fileset, not derived from it. So the
-gate resolves a resource's classification set over its ancestry closure (§9.2)
-as well as its derivation inputs. Consequence, stated because it costs
-something: the gate is a closure join rather than a single-table anti-join, and
-it is subject to the §9.3 staleness rule like everything else.
+**There is no attribute scope.** The old section permitted a classification
+"declared over a whole resource, or over a named attribute or field of it,
+which is how property-level and cell-level security compose without a second
+mechanism". Attribute-granular restriction was the half of that sentence F4 was
+already a caveat on, and with the label gone there is no mechanism for it at
+all — neither a rule language to express it (F7) nor a fragment that could
+enforce it over a column (F4). Those two findings are now a single fork with a
+single option on it. `examples/UNEXPRESSIBLE.md`'s U1 and U4 are the two faces
+of it.
 
 ### 8.4 Resource kinds, registered
 
@@ -509,31 +648,65 @@ widen access requires a review step and is audited; the module computes and
 reports the access delta between two schema versions before applying one, which
 is the only honest way to approve such a change.
 
+> **This report is now ours to build.** It was going to fall out of an OpenFGA
+> authorization-model diff. With the engine dropped (§10) there is no model to
+> diff, so the delta between two registered schema versions is computed here,
+> over our own tables. That is a real cost of §10 and it is recorded rather
+> than discovered later.
+
 ### 8.5 The restriction, as a feature
 
-Tier 1 permits union, usersets and tuple-to-userset inheritance. It does **not**
-permit arbitrary nested intersection, exclusion, or conditional expressions over
-attributes.
+The discretionary layer permits union, usersets and tuple-to-userset
+inheritance. It does **not** permit arbitrary nested intersection, exclusion,
+or conditional expressions over attributes.
 
-This is the central trade of the design and it is deliberate on three counts:
-the permitted subset is exactly what flattens into §9's closures; the excluded
-operators are the ones whose absence pushes absolutes into tier 2 where they
-belong; and a restricted language is one a consumer can be *lint-checked*
-against, which is how A3's "no exclusion operator" guard is possible at all.
+**The restriction stays. Its justification is narrower than it was, and the
+narrowing matters because the old version was load-bearing in the wrong
+place.** Two reasons survive and one is withdrawn:
 
-Where a real requirement cannot be expressed in the subset, the answer is a
-classification, not a richer language. If a requirement arrives that is neither
-— that is a design conversation, not a configuration change.
+1. **The permitted subset is exactly what flattens into §9's closures.** Union,
+   usersets and inheritance precompute; intersection over large sets and
+   conditional expressions over attributes do not. This is the reason that buys
+   the A2 budget and it is sufficient on its own.
+2. **A restricted language can be lint-checked**, which is how A3's "no
+   exclusion operator" guard is possible at all.
+3. ~~The excluded operators are the ones whose absence pushes absolutes into
+   tier 2 where they belong.~~ **Withdrawn.** There is no tier 2 to push them
+   into. This reason was doing most of the rhetorical work and it was circular:
+   exclusion was refused because absolutes belonged elsewhere, and absolutes
+   belonged elsewhere partly because exclusion was refused.
 
-**But "use a classification" is a one-way promotion, and saying so is part of
-the rule.** A classification is mandatory and non-delegable, so answering a
-*discretionary* requirement with one does not express it differently — it
-converts "don't show her the salary figures" into an absolute **no owner can
-lift**, and someone who wanted a default has been handed a prohibition. That is
-a change in meaning, not in syntax, and it must be refused at registration
-rather than absorbed. A requirement that is genuinely discretionary and
-genuinely outside the subset is F7 — and F7 and F4 resolve to the same fork, so
-decide them together.
+**On the locality argument, which is sound and should not be made to carry
+more than it holds.** Exclusion in a relationship model applies only to the
+relation definition it is written in, so a restriction meant to be absolute is
+absolute only where somebody remembered it. That is a correct objection to
+**relation-scoped exclusion specifically** — OpenFGA's `but not`, SpiceDB's
+`-`. It is not an argument about exclusion in general, and in particular it
+says nothing about a deny tuple on `(principal, resource)` inheriting through
+containment, which is neither relation-scoped nor unflattenable. A3's diagnosis
+names that conflation; the design's answer is that no form of deny is added,
+which is a decision rather than an inference from locality.
+
+**And discount the Lakekeeper evidence here.** §5a used to call Lakekeeper's
+complete absence of deny "the strongest available evidence that this is what
+the model is bad at". It is weak support for the conclusion this design needs:
+Lakekeeper governs data-catalog hierarchies for org-internal analytics, a
+domain with no per-resource owner asserting privacy against a peer, so it has
+no demand for the mechanism it lacks. Its agreement with this design is a
+coincidence of conclusions and not shared evidence.
+
+**Where a requirement cannot be expressed in the subset, there is no longer a
+second mechanism to redirect it to.** This paragraph used to read "the answer
+is a classification, not a richer language", with a following paragraph warning
+that answering a *discretionary* requirement that way was a one-way promotion
+of a preference into an absolute. Both are gone: the warning because the thing
+it warned about cannot happen, and the redirect because there is nowhere to
+redirect to.
+
+So the honest statement is shorter and harder. A requirement outside the subset
+is a design conversation, not a configuration change, and it has no workaround
+in the meantime. F7 is where those requirements are registered, F4 is the same
+fork from the other side, and `examples/UNEXPRESSIBLE.md` is the list.
 
 ## 9. The projection
 
@@ -585,8 +758,12 @@ The predicate then compiles to an index join over small tables:
      ⋈ ancestry closure        (resource → ancestors)
      ⋈ grant tuples            (bare+effective relation on any ancestor)
      ⋈ membership closure      (subject ∈ principal's usersets)
-   ANTI-⋈ unsatisfied classifications   (tier 2, live)
 ```
+
+There was a fourth line, `ANTI-⋈ unsatisfied classifications (tier 2, live)`.
+It is gone with the tier, and its removal is the whole of why the decision is
+now one predicate: it was the term that could not be projected, and F2
+measured it turning a 0.46 ms keyset page into 296 ms.
 
 Sharing that 100,000-object container stays **one tuple plus an ancestry
 join**. The 50-member team costs 50 membership rows. This is the design's
@@ -602,54 +779,59 @@ symmetric and must not share a path.
   projection fails closed** — it denies rather than serving old decisions. A
   projection that cannot confirm its freshness is stale and therefore denies;
   `ErrReadinessBlocked` is the honest answer.
-- **Classifications are never projected** (§8.3), so every absolute is
-  evaluated live against authoritative rows. This is why the asymmetry is
-  tolerable at all: the thing that must never be wrong is never cached.
-- **Revocations, denials and deprovisioning ride a deny epoch.** Every
+- **Revocations and deprovisioning ride a deny epoch.** Every
   projection row carries an epoch; every decision checks the current epoch
   synchronously; bumping it invalidates affected rows at once. So revocation
   does not wait for a refresh, and a slow propagation path denies rather than
   permits. The epoch check is the one synchronous dependency in the read path
   and is a single indexed lookup.
-- Propagation is fed by the engine's **changelog**, polled and resumable
-  (§10), with the cursor stored so a restarted worker resumes rather than
-  rebuilds.
+- Propagation is fed by **this module's own write log**, polled and resumable,
+  with the cursor stored so a restarted worker resumes rather than rebuilds.
+  That shape is copied from OpenFGA's `ReadChanges`, which was the projection
+  source until the engine was dropped (§10): a pollable, cursored changelog
+  rather than a long-lived stream is resumable by construction. We now write
+  the log, which is a cost §10 records.
 
-**One rule, stated once, replacing two asymmetries that were drifting apart:**
+**One rule, stated once:**
 
 > **The restrictive change propagates on the fast path. The permissive change
 > may lag, and lagging fails closed.**
 
-Applied to tier 1 that reads: a grant may lag; a revocation may not. Applied to
-tier 2 it reads the other way round, and an earlier draft got this wrong by
-claiming classifications are "never projected": *adding* a classification is
-restrictive and must propagate fast, because a missed addition is a disclosure;
-*removing* one is permissive and may lag, because a missed removal is only an
-outage. Both tiers are projected — §9.5's pools can be separate databases and a
-SQL predicate cannot join another database — and both obey the one rule above.
-What makes an absolute trustworthy is therefore not that it is unprojected but
-that its *restrictive* direction is synchronous and its projection fails closed.
+A grant may lag; a revocation may not. That is the whole of it now. An earlier
+draft needed a second paragraph here because the rule read one way for tier 1
+and the other way for tier 2 — *adding* a classification was restrictive and
+*removing* one was permissive — and the draft before that got it wrong by
+claiming classifications were "never projected" at all. With one tier there is
+one direction and no second reading.
 
-**A verified hazard in the changelog, which the fast path must not trust.**
-OpenFGA stamps each changelog entry's ULID from the application clock at write
-time, `ReadChanges` orders by `ulid asc` and resumes with `ulid > cursor`, and
-the only protection is a horizon guard `inserted_at < NOW() - horizon_offset`
-whose **default is zero**, with the operator knob denominated in whole minutes.
-At offset zero, a transaction that stamps a ULID at T but commits after the
-poller has passed T is **skipped permanently**. A dropped insert is a missed
-grant — benign. A dropped delete is a **missed revocation — a silent
-disclosure, in precisely the path this section claims is safe.**
+**A hazard the fast path must not trust, which is now ours rather than
+inherited.** The verified form of this was OpenFGA-specific: it stamped each
+changelog entry's ULID from the application clock at write time,
+`ReadChanges` ordered by `ulid asc` and resumed with `ulid > cursor`, and the
+only protection was a horizon guard `inserted_at < NOW() - horizon_offset`
+whose **default was zero**, with the operator knob denominated in whole
+minutes. At offset zero a transaction that stamps a ULID at T but commits after
+the poller has passed T is **skipped permanently**. A dropped insert is a
+missed grant — benign. A dropped delete is a **missed revocation — a silent
+disclosure.**
 
-So: the horizon offset must exceed the longest write transaction plus
-application-to-database clock skew, and that offset is a **hard floor on
-propagation latency** — which falsifies A2's "grant propagation p95 < 2 s" and
-"revocation p95 < 500 ms" as written if the changelog is the only channel.
-Therefore it is not: **revocations, denials, deprovisioning and classification
-assignments are written to this module's own tables in the same statement as
-the authority call, and the deny epoch is bumped from there**, with the
-changelog used only to converge the permissive direction. The changelog is a
-convergence mechanism, never the carrier of a restrictive change. §13 gains a
-test that injects a late-committing write and asserts no revocation is lost.
+Dropping the engine does not remove the hazard, it moves it: any
+timestamp-ordered, cursor-resumed log written by concurrent transactions has
+it. So the rule stands and is now a rule about our own log. Either order the
+log by a sequence assigned at commit rather than at statement time, or carry a
+horizon offset exceeding the longest write transaction plus clock skew — and
+in the second case that offset is a **hard floor on propagation latency**,
+which would falsify A2's "grant propagation p95 < 2 s" if the log were the only
+channel.
+
+It is not the only channel: **revocations and deprovisioning are written to
+this module's own projection tables in the same statement as the authority
+write, and the deny epoch is bumped from there**, with the log used only to
+converge the permissive direction. The log is a convergence mechanism, never
+the carrier of a restrictive change. §13 keeps the test that injects a
+late-committing write and asserts no revocation is lost; owning the log makes
+that test easier to write rather than harder, which is one of the few places
+§10's decision is a simplification.
 
 ### 9.4 The projection is audited, not trusted
 
@@ -677,77 +859,140 @@ reach as the rows they filter. This is the same control-plane/data-plane
 asymmetry `tenancy` documents for connection handling, and it preserves CAS's
 rule that cross-pool queries do not exist.
 
-## 10. Engine selection — resolved by spike, 2026-10-23
+## 10. Engine selection — resolved, 2026-10-23: there is no engine
 
-The spike asked two questions: can the engine run in-process without a
-separate service (A1), and does it expose a change stream to project from
-(§9.3). Run against `spicedb@v1.57.0` and `openfga@v1.22.0`.
+**Decided by Pascal: OpenFGA is dropped. `iam` owns its tuples and closures in
+Postgres.** The spike that selected it is kept below, because its findings
+about SpiceDB and about atomicity still hold and are still load-bearing.
+
+### 10.1 Why no third-party engine, and why the reason is structural
+
+`Predicate` must return a SQL fragment the consumer joins **inside its own
+query** — settled by the F1 spike, which measured what happens when it does
+not. OpenFGA answers `Check`, `BatchCheck` and `ListObjects` over its own
+store and has no surface that produces a fragment. So the authority the
+predicate reads has to be tables we own.
+
+That makes the engine's role the problem rather than its quality. It would not
+be the authority: it would be a **second source of truth we poll in order to
+populate the one that answers**, and owning the divergence between them forever
+is precisely §9.3's asymmetric-staleness problem and §16.5's unanswered
+divergence-tolerance question, acquired as a permanent architectural feature
+rather than as a bounded projection lag.
+
+And there is not much left to run. With exclusion, conditional expressions and
+the mandatory gate all gone (A3, §8.5), the permitted subset is union, usersets
+and containment inheritance. **That is a closure maintainer, not a policy
+engine.**
+
+Two findings close by deletion as a result, and the second is the more serious:
+
+- **F5 (store topology)** asked whether to run one OpenFGA store per tenant or
+  one global store with tenant-prefixed ids. There is no store.
+- **F6 (which `tenancy` connection the engine gets)** asked what happens when
+  a component that *sets no tenant context*, *runs its own migrations against
+  this project's goose decision*, and *inherits whatever RLS the pool's role
+  carries* sits next to `tenancy`'s RLS model. The honest answer was that it is
+  unacceptable, and the one-function-signature A1 argument that selected
+  OpenFGA (`postgres.NewWithDB`, below) was weaker than §10 claimed because it
+  answered connection *plumbing* and not connection *semantics*.
+
+### 10.2 No `Engine` port either
+
+The port is removed from §6. A port with one implementation is speculative, and
+the seam consumers actually see is `Decide` and `Predicate` — which is where
+the API stability §5 wanted was always going to come from. Nothing
+OpenFGA-specific ever reached the public API, so this costs no compatibility.
+
+### 10.3 What it costs, recorded rather than hidden
+
+Four things, and none of them is zero:
+
+- **`ReadChanges` was a genuinely good projection source.** A pollable,
+  cursored changelog is resumable by construction, and we now write our own
+  write log plus cursor. §9.3 keeps the shape and inherits the
+  commit-ordering hazard as our own problem.
+- **`ListUsers` and `ListObjects` are gone**, so "who can see this?" is a
+  query we write. §9.1 already rejected `ListObjects` as a *read* path
+  (it cannot enumerate a ten-million-row space), but it was still the obvious
+  implementation of the membership expansion §9.2's first closure needs and of
+  an admin "who has access" screen.
+- **§8.4's access-delta-between-schema-versions report** was going to fall out
+  of an authorization-model diff. It is ours to build.
+- **AuthZEN endpoints** came free with v1.22 and would have let the external
+  API speak a standard rather than a bespoke shape. If that is still wanted it
+  is now work, not a dependency upgrade.
+
+One thing it does **not** cost: **F3 was never solved by OpenFGA either.** DAG
+containment is a property of kgs's data model, not of an engine, so it stays
+open regardless and §14's "resolve the API-shaping findings by measurement"
+is unaffected.
+
+### 10.4 The spike, kept because two of its findings still bind
+
+The spike asked two questions: can the engine run in-process without a separate
+service (A1), and does it expose a change stream to project from (§9.3). Run
+against `spicedb@v1.57.0` and `openfga@v1.22.0`.
 
 **SpiceDB `pkg/embedded`: ruled out.** Its entire exported surface is
 `NewPermissions`, `Check` and `Close`. The package documentation is explicit —
 *"You need the full SpiceDB v1 API surface (schema writes, relationship writes,
 bulk operations, watch, lookup, reflection, etc.). This package only does
-`CheckPermission`."* So it can be neither the authority (no writes, no schema)
-nor the projection source (no watch). Using SpiceDB means running a real
-server, which costs A1. Noted separately: `spicedb@v1.57.0` requires Go ≥
+`CheckPermission`."* So it could be neither the authority (no writes, no
+schema) nor the projection source (no watch). Using SpiceDB means running a
+real server, which costs A1. Noted separately: `spicedb@v1.57.0` requires Go ≥
 1.26.9 and silently upgraded the spike's toolchain from 1.25.6, which would
 drag CAS's toolchain forward as a side effect of an authorization choice.
 
-**OpenFGA `pkg/server`: selected.** `Server` is an ordinary Go struct whose
-methods are the full API — `Check`, `BatchCheck`, `Write`,
-`WriteAuthorizationModel`, `Read`, `Expand`, `ListObjects`,
-`StreamedListObjects`, `ListUsers`, store CRUD — all callable in-process with
-no gRPC server, no sidecar and no network hop. Specifically:
+**OpenFGA `pkg/server` was selected and is now rejected.** `Server` is an
+ordinary Go struct whose methods are the full API, callable in-process with no
+gRPC server, no sidecar and no network hop, and
+`postgres.NewWithDB(primaryDB, secondaryDB *pgxpool.Pool, cfg)` accepts an
+existing pgx pool — which was read as the A1 answer in one function signature.
+F6 is the correction: sharing a pool is not the same as sharing a tenancy
+model, and an engine that sets no tenant context and runs its own migrations
+does not become acceptable by using someone else's connection.
 
-- **`ReadChanges`** is the projection source, and being a *pollable, cursored
-  changelog* rather than a long-lived stream it is resumable by construction —
-  a restarted projection worker continues from its stored cursor.
-- **`postgres.NewWithDB(primaryDB, secondaryDB *pgxpool.Pool, cfg)`** accepts
-  an **existing pgx pool**. This is the A1 answer in one function signature:
-  the engine shares the pool `tenancy` already manages, so there is no second
-  DSN, no second connection pool, and schema placement is controlled by the
-  pool's `search_path`. The owner's objection — "the complexity it brings from
-  an infra/tenant perspective" — is answered here rather than argued away.
-- **`ListUsers`** gives the membership expansion §9.2's first closure needs.
-- Apache-2.0, pure Go, no cgo, and it did not force a toolchain change.
-- **Lakekeeper is the production reference** for exactly this hierarchy pattern
-  (§5a), including the bare/effective fix this design adopts.
-- Bonus, and relevant to the standing preference for industry standards:
-  v1.22 ships **AuthZEN** endpoints (`Evaluation`, `Evaluations`,
-  `ResourceSearch`, `SubjectSearch`, `ActionSearch`), so this module's external
-  API can speak a standard rather than a bespoke shape.
-
-**Resolved, and the answer is no.** An earlier draft flagged
+**Still resolved, and still the answer: a grant and a consumer's write cannot
+commit atomically, in any deployment shape.** An earlier draft flagged
 `sqlcommon.NewTxConnector(tx *sql.Tx)` as a possible route to enlisting a rule
 write in a caller's transaction. Verified against the source: it is a
-`database/sql` connector, while the Postgres datastore reaches the database
-through its own private pgx connector, and `Datastore.Write` opens its own
-transaction with no exported way to supply one. **A grant and a consumer's
-write cannot commit atomically, in any deployment shape.**
+`database/sql` connector, while the Postgres datastore reached the database
+through its own private pgx connector, and `Datastore.Write` opened its own
+transaction with no exported way to supply one.
 
-Two consequences, both load-bearing. KGS §6.2 promised that the single-binary
-shape would maintain the projection in the same transaction as the rule change;
-that promise is withdrawn there and must not be reintroduced. And there is
-always a window between a classification being assigned and a derived row
-existing, which §8.3 must close by ordering rather than by atomicity: a
-consumer declares the derivation and receives its classification set **before**
-writing the derived row, and a row whose classification set cannot be resolved
-is not written.
+> **Owning the tables changes this, and the change is not claimed yet.** With
+> the tuple store in our own schema on the consumer's own pool, a grant write
+> *could* enlist in a caller's transaction. That is the one genuine upside of
+> §10 beyond the structural argument, and it is deliberately not promised here:
+> KGS §6.2 had its atomicity promise withdrawn on the strength of the paragraph
+> above, and reinstating it needs a design decision about whether `iam` accepts
+> a caller-supplied transaction at all — which is a boundary question, not a
+> capability question. Until that is decided, the consequence below stands.
 
-**The engine stays behind the `Engine` port.** Nothing OpenFGA-specific reaches
-this module's public API, so a reversal is an adapter plus tests.
+Two consequences, both still load-bearing. KGS §6.2 promised that the
+single-binary shape would maintain the projection in the same transaction as
+the rule change; **that promise stays withdrawn and must not be reintroduced
+without the decision above.** And there is always a window between a marking
+being assigned and a derived row existing, which §8.3 closes by ordering
+rather than by atomicity: a consumer declares the derivation and receives its
+marking set **before** writing the derived row, and a row whose marking set
+cannot be resolved is not written.
 
 ## 11. Deployment shapes
 
 - **Embedded** (default, and what A1 is about): `iam.Open(ctx, Config)` with a
-  Postgres DSN or an existing pool. OpenFGA runs in-process on the same pool;
-  the projection worker is a goroutine. Nothing else to deploy.
+  Postgres DSN or an existing pool. The tuple store and both closures are
+  tables in this module's own schema on that pool; the closure-maintenance
+  worker is a goroutine. Nothing else to deploy, and — since §10 — nothing
+  else *running* either: the embedded shape no longer starts an authorization
+  engine in-process.
 - **Service**: `iamd` serves the module's API (gRPC with a REST/JSON gateway,
-  mirroring CAS and kgs) and runs the projection workers. Projections still
-  live in each pool's database, so the service is control-plane only.
+  mirroring CAS and kgs) and runs the closure workers. Projections still live
+  in each pool's database, so the service is control-plane only.
 
 Identical semantics, conformance-tested against both. A household deployment
-runs CAS + kgs + iam + OpenFGA in one binary against one Postgres.
+runs CAS + kgs + iam in one binary against one Postgres.
 
 ## 12. Consumers
 
@@ -755,31 +1000,63 @@ Each registers a schema (§8.4) and gets two things: `Decide` for single
 decisions and `Predicate` for filtered reads.
 
 - **CAS** — `tenant > fileset > document > slot`. Its grants become tuples
-  unchanged; its **denials become classifications** (CAS §9.3's deny-wins is
-  §7.1's conjunction); its permission enum becomes relations. Conflict screens
-  are classifications with `policy` enforcement; vault-mode content is
-  `crypto`.
+  unchanged and its permission enum becomes relations.
+
+  **Its denials have nowhere to go, and CAS must be told rather than left to
+  find out.** An earlier draft said "its denials become classifications (CAS
+  §9.3's deny-wins is §7.1's conjunction)", and there are no classifications
+  and no conjunction. A CAS denial has to become one of three things, chosen
+  per denial: a grant that is not written, which means the resource moves out
+  of the container the broad grant covers; a `crypto` marking backed by
+  `escrow`, for vault-mode content and for any screen that must survive a
+  future administrator; or a requirement CAS drops. Conflict screens are the
+  first option plus, where the firm needs more, the second — see §7.2 and the
+  corpus's D8. CAS §9.3's precedence rule ("any applicable denial wins, at any
+  level, regardless of specificity") has nothing left to order and should be
+  deleted there rather than reinterpreted here.
 - **kgs** — `tenant > graph > [compartment] > entity-set | episode > fact`. Its
-  markings are classifications. Its per-fact escape-hatch rules are tuples on
-  fact objects. Its §9.4 predicate is this module's `Predicate`. Its sealed
-  episodes are `crypto`-class classifications backed by `escrow`.
+  markings stay markings (§8.3), as flow labels propagated through derivation
+  and gating egress at its provider ports — the conclusion kgs reached
+  independently. Its per-fact escape-hatch rules are tuples on fact objects.
+  Its §9.4 predicate is this module's `Predicate`. Its sealed episodes are
+  `crypto`-class markings backed by `escrow`.
   **`visible_below` (§8.2) is folded back into KGS §7.3**, replacing implicit
   derived existence with an explicit, testable relation.
+
+  Two things kgs has to absorb. Privacy inside a shared graph is now grant
+  granularity, so an episode nobody else may read is an episode with its own
+  grant — which is KGS §9.3's own default, so this is a confirmation rather
+  than a new requirement. And one leak channel is **worse**: LLM context had
+  two independent guards and now has one, because the union of markings no
+  longer also gates reads (§7.2).
 - **acre** — no code yet, so it adopts from birth and is the one consumer that
   costs nothing to onboard. Its event-sourced core is orthogonal: authorization
   decisions are not events, though every decision is an audit record.
 
 ## 13. Testing and verification
 
-- **A3's mandatory-control adversarial suite** — the most important suite in
-  the repository. For every classification, enumerate every discretionary
-  operation available to every principal including owners and admins, apply
-  them in combination to a bounded depth, assert the gate never opens.
+- **The mandatory-control adversarial suite is gone**, and it is worth saying
+  so where it used to be listed as "the most important suite in the
+  repository". It enumerated every discretionary operation available to every
+  principal, applied them in combination to a bounded depth, and asserted that
+  a classification gate never opened. There is no gate. What was load-bearing
+  about it — that a principal holds only what has been granted — is now true by
+  construction rather than by adversarial search, because there is no second
+  mechanism for a grant to interact with.
 - **Schema lint**: registered schemas are rejected if they use an exclusion
-  operator, with an error naming the classification mechanism (A3).
-- **Derivation propagation**: a derived object always carries the union of its
-  inputs' classifications; a pipeline cannot launder a classification by
-  deriving (A3 corollary, and KGS §8.7's departure from Foundry).
+  operator or a conditional expression over attributes. The exclusion error
+  names `escrow` and the no-deny anti-goal; the attribute error names findings
+  F7 and F4 and does **not** invent an alternative, because there is none
+  (A3, §8.5).
+- **Marking propagation**: a derived object always carries the union of its
+  inputs' markings; a pipeline cannot launder a marking by deriving (§8.3,
+  and KGS §8.7's departure from Foundry). Note what this tests now: an egress
+  property and, for a `crypto` marking, a property of the ciphertext. It is no
+  longer an access-control test.
+- **The egress gate fails closed**: a provider allowlisted for fewer markings
+  than the content carries receives nothing, with a typed error rather than a
+  degraded prompt. This test matters more than it did, because §7.2's third
+  consequence is that it is now the only guard on that path.
 - **The differential authorization audit**, exhaustive in CI over the fixture
   and sampled continuously in production, with zero tolerance (A4).
 - **Closure growth tests**: assert O(members) and not O(reachable resources) on
@@ -822,8 +1099,10 @@ What that changes, stated plainly because one of them is a cost:
   change than building adapters against an unfinished port. The duplication
   guards land at that moment.
 - **This module is no longer on anyone's critical path**, which is the right
-  place for it to be given §17 still holds eight open findings, two of which
-  (F3, and F1's dependency on it) can still move the public API.
+  place for it to be given §17 still holds **three open findings** (F3, F4,
+  F8), two of which can still move the public API: F3, and F1's resolution
+  which depends on it. The count was eight; A3 and §10 closed four by deletion
+  and resolved one.
 
 The superseded decision is kept below, because the reasoning in it is still
 the reasoning that applies if a date ever returns.
@@ -863,18 +1142,25 @@ compression comes from three things, not from starting more phases at once:
 2. **Write the port and the conformance suite centrally and first.** It is the
    seam CAS needs anyway, it forces the API decisions into the open, and it is
    the yardstick every parallel workstream is judged against. **It is not
-   delegated**, and nor is the A3 adversarial suite, which gets one owner
-   rather than being distributed.
+   delegated.** The A3 adversarial suite used to carry the same rule, and it
+   no longer exists (§13): with one mechanism there is no combination of
+   operations for an adversarial search to explore.
 3. **Parallelise only what does not depend on the API.** The identity registry
    (formerly phase 3) is wholly independent of F1/F3/F4 and moves to the front.
-   So are the `Engine` adapter plus the F5/F6 topology and connection spikes,
-   and the classification store for the tree case.
+   The `Engine` adapter and the F5/F6 topology and connection spikes were the
+   other items here and all three are deleted (§10). The classification store
+   for the tree case is deleted too (A3). So this item is now just the identity
+   registry, which is done.
 
 What acceleration cannot buy: **F7 is a design conversation with kgs, not a
-task.** Two of kgs §9.3's rule dimensions fall outside §8.5's permitted subset,
-and the resolution either removes a kgs capability or adds a tier-1 form that
-costs the projection. No amount of parallelism resolves it, and it should be
-settled before the projection is built on an assumption about it.
+task**, and it is now a shorter conversation with fewer outcomes. Two of kgs
+§9.3's rule dimensions fall outside §8.5's permitted subset. The resolution
+used to be "either kgs loses those dimensions, or the discretionary layer gains
+a form, or express it as a classification". The third option is deleted and the
+second is refused permanently (A3, §8.5), so the answer is that kgs loses the
+ontology-scope dimension — unless F4's consumer-applied attribute set is built,
+which is the same fork. It should still be settled before the projection is
+built on an assumption about it.
 
 Phases below are otherwise unchanged in content, with identity moved forward
 and the F1 spike prepended.
@@ -882,32 +1168,40 @@ and the F1 spike prepended.
 Ordered by what cannot be retrofitted.
 
 **Phase 1 — the decision and the predicate.** Schema registry, identity
-registry with joinable membership, tier-1 tuples through the OpenFGA adapter,
-tier-2 classifications evaluated live, the decision procedure, and the
-`Predicate` compiler against a hand-built closure. The A3 adversarial suite and
-the §4 fixture. Verify the `NewTxConnector` question. **Deliverable: the KGS §1
-household scenario and a legal conflict screen both decided correctly, with
-`EXPLAIN` showing an index join.**
+registry with joinable membership, the relation-tuple store in this module's
+own schema, the decision procedure, and the `Predicate` compiler against a
+hand-built closure. The schema lint and the §4 fixture. **Deliverable: the KGS
+§1 household scenario and a legal conflict screen both decided correctly, with
+`EXPLAIN` showing an index join** — noting that "correctly" for the conflict
+screen now means §7.2's answer, which is an ungranted matter plus `escrow`,
+and that the corpus's D8 is the acceptance test.
 
-**Phase 2 — the projection.** Closure maintenance from `ReadChanges`, the
-cursor, the deny epoch, the staleness contract, the differential audit, and the
-A2 benchmark suite. Phase 1's hand-built closure is replaced; its tests are
-not.
+**Phase 2 — the projection.** Closure maintenance from this module's own write
+log, the cursor, the deny epoch, the staleness contract, the differential
+audit, and the A2 benchmark suite. Phase 1's hand-built closure is replaced;
+its tests are not. The write log and its commit-ordering guarantee (§9.3) are
+work this phase acquired from §10 and did not previously have.
 
 **Phase 3 — identity completion.** Zitadel adapter, OIDC discovery and JWKS
 caching, JIT provisioning, claim-derived group upsert, staleness bound,
 agent-run delegation, deprovisioning through the deny epoch.
 
-**Phase 4 — consumer onboarding.** CAS's schema and the migration of its grants
-to tuples and denials to classifications; kgs's schema; acre's schema. Each
-lands with that consumer's conformance run.
+**Phase 4 — consumer onboarding.** CAS's schema and the migration of its
+grants to tuples — plus the per-denial decision §12 now requires of it, which
+is a design conversation with CAS rather than a mechanical migration; kgs's
+schema; acre's schema. Each lands with that consumer's conformance run.
 
-**Phase 5 — surface and operations.** `iamd`, the AuthZEN-shaped external API,
-schema-version access-delta reporting, the review step for widening changes,
-audit integration, metering.
+**Phase 5 — surface and operations.** `iamd`, an AuthZEN-shaped external API
+if that is still wanted (it came free with OpenFGA and is now work — §10.3),
+schema-version access-delta reporting (also now ours to build), the review step
+for widening changes, audit integration, metering.
 
 `escrow` integration is not a phase here: this module only records the
-enforcement class, and `escrow` ships on its own timeline.
+enforcement class, and `escrow` ships on its own timeline. Note that `escrow`
+is now the design's *only* answer to "an absolute that must survive a future
+administrator", so a consumer with that requirement is blocked on `escrow`'s
+timeline rather than on this module's. CAS's conflict screens are the first
+case.
 
 ## 15. Open decisions left to the builder
 
@@ -916,8 +1210,11 @@ enforcement class, and `escrow` ships on its own timeline.
 - **Whether the deny epoch is global, per tenant, or per principal.** Global is
   simplest and invalidates most aggressively; per principal is the finest and
   the most bookkeeping. The A2 revocation budget decides.
-- Projection update strategy: incremental deltas from `ReadChanges` versus
+- Projection update strategy: incremental deltas from the write log versus
   periodic full recompute per affected subtree, and the crossover point.
+- Whether the write log is ordered by a commit-time sequence or by a
+  statement-time stamp plus a horizon offset (§9.3). The first avoids a floor
+  on propagation latency and is more work.
 - Differential audit sampling rate and selection strategy in production.
 - Whether `Predicate` returns a SQL fragment, a CTE, or a joinable view, and
   how it is parameterized safely across the three consumers' query builders.
@@ -928,24 +1225,26 @@ enforcement class, and `escrow` ships on its own timeline.
 
 ## 16. Outstanding questions for the owner
 
-1. **Does a classification ever need to be scoped to a principal rather than a
-   clearance?** §8.3 models absolutes as labels: "this carries `personal:pascal`
-   and she holds no such clearance." That covers both stated cases — the
-   household invoice and the legal conflict screen — and it propagates through
-   derivation, which a named `(principal, resource)` block would not. If a real
-   requirement needs a named pair, the mandatory layer gains a second rule
-   shape and the A3 suite doubles. The design assumes **no**.
-2. **Who may create and assign classifications?** **No longer a design
-   preference — this is the blocking input to §17's F9, which the `examples/`
-   corpus demonstrated against the real registry: while it is unanswered, an
-   ordinary principal can construct a mandatory act naming themselves and walk
-   into a conflict screen's clearance group.** Classifications cannot be
-   granted away (§8.3), which means the power to classify is strictly more
-   dangerous than the power to grant. Candidates: a deployment-level security admin only; a
-   per-tenant security admin; or the resource owner at creation time with
-   changes restricted afterwards. The household case wants the third; the legal
-   case wants the second. This decides whether the permission is one role or
-   three.
+1. ~~**Does a classification ever need to be scoped to a principal rather than
+   a clearance?**~~ **Moot — there are no classifications** (A3). Recorded
+   rather than deleted because the question's framing is the no-deny decision in
+   miniature. It asked whether the mandatory layer needed a *second* rule shape
+   — a named `(principal, resource)` block — beside the label, and observed
+   that adding one would double the adversarial suite "since every absolute
+   would then have two ways to be satisfied instead of one". A3's diagnosis is
+   that the right move was neither shape: the named pair is case (c) in A3,
+   the one that was never separately examined, and the resolution was to remove
+   the need for any of them. **No answer is required.**
+2. ~~**Who may create and assign classifications?**~~ **Moot — nothing creates
+   or assigns one.** This is stated explicitly rather than dropped, because it
+   was the **blocking input to F9** and the owner should see it closed rather
+   than wonder whether it is still waiting. The `examples/` corpus had
+   demonstrated, against the real registry, that while this was unanswered any
+   principal could construct a mandatory act naming themselves and walk into a
+   conflict screen's clearance group. There are no mandatory acts, no clearance
+   groups and no classify permission, so F9 is closed by deletion and this
+   question needs no answer. **It is also one of the two reasons the tier went**
+   (A3): an absolute whose administration was undecided was not an absolute.
 3. **Is a schema change that widens access allowed to take effect without a
    human approving the computed delta?** §8.4 reports the access delta between
    schema versions. Making approval mandatory is safer and makes automated
@@ -963,18 +1262,28 @@ enforcement class, and `escrow` ships on its own timeline.
    dependency the full protocol, or only its semantics and schema? Nothing can
    be sequenced without this.
 
-5. **How much divergence tolerance is acceptable in production?** A4 makes zero
-   divergence a build failure. But the projection is *designed* to lag within a
-   bound, so during that window authority and projection legitimately differ.
-   Distinguishing lag from divergence needs a point-in-time read of the
-   authority at the projection's cursor — and OpenFGA has no read-at-revision:
-   it offers a `ConsistencyPreference` and nothing resembling a ZedToken, and
-   `ReadChanges`' continuation token is a changelog ULID, not a consistency
-   token `Check` accepts. So the audit can be exhaustive and zero-tolerance in
-   CI against a quiesced fixture, but in production it must either quiesce
-   writes (unacceptable) or tolerate a window. Since A4 is what makes the whole
-   projection defensible, which weakening is acceptable is the owner's call,
-   not the builder's.
+5. **How much divergence tolerance is acceptable in production?** **Still
+   open, and substantially smaller than it was.** A4 makes zero divergence a
+   build failure, while the projection is *designed* to lag within a bound, so
+   during that window authority and projection legitimately differ.
+
+   What shrank it is §10. The hard part of this question was that
+   distinguishing lag from divergence needs a point-in-time read of the
+   authority at the projection's cursor, and OpenFGA had no read-at-revision:
+   it offered a `ConsistencyPreference` and nothing resembling a ZedToken, and
+   `ReadChanges`' continuation token was a changelog ULID rather than a
+   consistency token `Check` would accept. With one source of truth in our own
+   Postgres, the authority *is* readable at a point in time — the tuple tables
+   are ordinary rows in the same database as the closures, so a repeatable-read
+   snapshot answers "what did the authority say at the cursor" directly, and
+   there is no second system whose notion of "now" has to be reconciled with
+   ours.
+
+   What is left is the ordinary question of how a sampled audit treats a
+   legitimately-lagging row, which is a tuning decision rather than an
+   architectural one. It is still the owner's call because A4 is what makes the
+   whole projection defensible, but it no longer requires accepting a
+   permanent, unmeasurable window.
 
 ## 17. Builder-check findings register (2026-10-23)
 
@@ -982,24 +1291,43 @@ Open items from the builder check, recorded rather than resolved, so none is
 lost and each has an owner. Items the check raised that *were* resolved are in
 §8.3, §9.3, §10 and §16 above.
 
+**The register was rewritten on 2026-10-23**, after the no-deny decision (A3)
+and the engine decision (§10). The arithmetic, because the README quotes a
+count and the count must be true:
+
+| Disposition | Findings |
+|---|---|
+| **Closed by deletion** | F5, F6, F9 |
+| **Resolved** | F1 (by measurement, conditions carried), F2 (half of it deleted, half carried), F7 |
+| **Open** | F3, F4, F8 |
+
+Three open. Two of the three can still move the public API — F3, and F1's
+resolution which depends on it — which is what §14 means by this module not
+being on anyone's critical path.
+
 | # | Finding | Status |
 |---|---|---|
-| F1 | ~~**Filtered ANN versus the predicate.**~~ **RESOLVED by measurement, 2026-10-23** — see `docs/superpowers/spikes/2026-10-23-f1-filtered-ann.md`. Postgres 18.6 / pgvector 0.8.7, 2,000,000 `halfvec(768)` rows, 30 queries per cell. **`Predicate` returns a fragment *plus* a key.** Pushing the predicate inside the ANN index scan (option a) failed at **every** selectivity, not merely the low ones — no variant reached recall@20 0.95 anywhere, defaults scored **0.000** on adversarial queries at 0.1%, and tuning it to a full index walk cost **18 seconds**. Pre-restricting the candidate set by a key (option b) reached 0.955–0.962 at 1% and 0.1% with a per-partition HNSW, and 1.000 in 5 ms with an exact scan over the pruned set. **And A2's closure budget survives intact:** the key is one scalar column per row holding the id of the row's ancestor at a declared containment depth, derived from the containment path only and naming no principal, group or grant — so adding a member to a 50-member team with access to 200,000 objects writes **2 rows and zero fact rows**, identical to the closures alone, where a per-principal key would write 200,000. The worry that (b) required the forbidden materialization was unfounded; §9.2 stands as written. | **Closed, with three conditions carried forward.** (i) **The fragment stays mandatory.** Key-only is not a slow path, it is a disclosure: with a grant finer than the key, a key-only top-20 returned **9 unauthorized rows out of 20**. The key pre-filters; it never authorizes. (ii) **The consumer must choose exact-versus-ANN explicitly** — the planner gets it wrong at 1% selectivity, scoring 0.100 where an exact scan over the same pruned set scores 1.000 in 131 ms. (iii) **A scalar key presumes a containment tree, so this answer depends on F3's.** Settle F3 before freezing the signature. | ~~**Filtered ANN versus the predicate.**~~ (original text below) |
+| F1 | ~~**Filtered ANN versus the predicate.**~~ **RESOLVED by measurement, 2026-10-23** — see `docs/superpowers/spikes/2026-10-23-f1-filtered-ann.md`. Postgres 18.6 / pgvector 0.8.7, 2,000,000 `halfvec(768)` rows, 30 queries per cell. **`Predicate` returns a fragment *plus* a key.** Pushing the predicate inside the ANN index scan (option a) failed at **every** selectivity, not merely the low ones — no variant reached recall@20 0.95 anywhere, defaults scored **0.000** on adversarial queries at 0.1%, and tuning it to a full index walk cost **18 seconds**. Pre-restricting the candidate set by a key (option b) reached 0.955–0.962 at 1% and 0.1% with a per-partition HNSW, and 1.000 in 5 ms with an exact scan over the pruned set. **And A2's closure budget survives intact:** the key is one scalar column per row holding the id of the row's ancestor at a declared containment depth, derived from the containment path only and naming no principal, group or grant — so adding a member to a 50-member team with access to 200,000 objects writes **2 rows and zero fact rows**, identical to the closures alone, where a per-principal key would write 200,000. The worry that (b) required the forbidden materialization was unfounded; §9.2 stands as written. | **Still closed, with three conditions carried forward, and one of them is a dependency rather than a caveat.** (i) **The fragment stays mandatory.** Key-only is not a slow path, it is a disclosure: with a grant finer than the key, a key-only top-20 returned **9 unauthorized rows out of 20**. The key pre-filters; it never authorizes. (ii) **The consumer must choose exact-versus-ANN explicitly** — the planner gets it wrong at 1% selectivity, scoring 0.100 where an exact scan over the same pruned set scores 1.000 in 131 ms. (iii) **A scalar key presumes a containment tree, so this answer depends on F3's, which is open.** Settle F3 before freezing the signature. Unaffected by A3 and by §10: the spike measured our own Postgres tables either way. |
+| F2 | **Half resolved by deletion, half carried into the containment key.** The spike measured the discretionary closure join at **0.006 ms per candidate row, index-served**: the closures were never the problem. The problem was the tier-2 classification anti-join, walking 200,394 `fact_classification` rows and turning a 0.46 ms keyset page into **296 ms** — and the gate's cost was a function of *assignment* cardinality, which KGS propagates to every derived fact, observation and vector. That half is **closed by deletion** (A3): there is no gate, no anti-join, and A2 is back to one budget, which was already met. §8.3's "classifications are small and change rarely" was false by this measurement and the sentence is deleted with its section. | **The containment-key half stays open and is the only half left.** The key is what made the measured query fast (3 ms) for reasons unrelated to ANN, so the §4 fixture must still carry a realistic containment shape and the predicate-plan tests must still assert an index join over it. What is no longer required is distinguishing label *definitions* from *assignments* in the fixture, because there are neither. |
+| F3 | **Containment is a DAG, not a tree.** §9.2's ancestry closure and §8.2's "only on the direct path" both assume one path, but a kgs fact has an episode *and* zero or more nestable, sometimes predicate-defined entity-sets. Many-to-many at fact cardinality, maintained on every write, and "the direct path" is undefined. | **Open, blocking for §9.2, and unchanged by anything decided on 2026-10-23.** Either kgs's entity-sets stop being an authorization container, or the closure and `visible_below` are redefined for multiple paths. Note that **OpenFGA never solved this either** — it is a property of kgs's data model, not of an engine — so §10 neither helps nor hurts it. One thing did change: navigational visibility now carries more weight, because with no deny mechanism a conflict screen is asserted partly by "the screened principal navigates to nothing" (the corpus's D8). So "what does `visible_below` mean in a DAG" is now also a question about how a screen is tested. |
+| F4 | **An attribute-granular restriction cannot be enforced by a row predicate.** A `WHERE` fragment hides rows, not columns. kgs is fine (facts are rows); CAS is not (document fields are columns). | **Open, and it lost a branch.** Either `Predicate` returns a permitted-attribute set the *consumer* applies — moving part of the trust boundary into consumer code, and making §9.4's audit responsible for consumer compliance — or this module becomes a query rewriter across three query builders. Two different modules; pick one before phase 1 fixes the API. **What changed:** the finding used to be about an attribute-scoped *classification*, and a third resolution existed implicitly — declare the label and accept that the gate answers correctly while `Predicate` cannot. There is no label, so F4 and F7 are now one fork with one option on it. CAS's own cheapest answer is unaffected and more attractive: make the sensitive field its own addressable resource, so the columnar case becomes a row case and an ordinary grant reaches it. |
+| F5 | ~~**OpenFGA store topology.**~~ One store per tenant versus one global store with tenant-prefixed ids, with §8.4's per-consumer schema versioning possibly uncomputable in the second shape. | **CLOSED BY DELETION, 2026-10-23 (§10).** There is no store. |
+| F6 | ~~**Which `tenancy` connection the engine gets.**~~ `tenancy`'s data-plane handles carry RLS session context and its control-plane path must not accept caller-supplied predicates; OpenFGA set no tenant context, ran its own migrations against this project's goose decision, and its queries inherited whatever RLS the pool's role carried. | **CLOSED BY DELETION, 2026-10-23 (§10), and it is the finding that most deserved it.** The honest resolution was never a wiring choice: a component that sets no tenant context and runs its own migrations is unacceptable next to `tenancy`'s RLS model, and the one-function-signature A1 argument that selected OpenFGA answered connection *plumbing* rather than connection *semantics*. §10 records this as one of the two reasons the engine is dropped. |
+| F7 | **Two of kgs §9.3's rule dimensions fall outside §8.5's permitted subset** — ontology scope ("may read `Person` but not `salary`": attribute-conditioned and exclusionary) and predicate-defined entity-sets (authorization as a function of data). The old answer was "use a classification", which converted a discretionary restriction into an absolute no owner could lift. | **RESOLVED, 2026-10-23, and the resolution is a refusal plus a definitive answer.** The discretionary-restriction form is **refused permanently**: A3 rules out exclusion and §8.5 rules out attribute conditions, and neither refusal is open to a case-by-case exception. And since classifications no longer exist, **"kgs loses the ontology-scope dimension" is the definitive answer rather than one of two** — the branch that made this a choice was the classification workaround. The one remaining way the requirement could be met is F4's consumer-applied attribute set, which is why the two findings are one fork. The predicate-defined-entity-set dimension stays unresolved but it lands in F3, not here: see `examples/UNEXPRESSIBLE.md`'s U5. Nothing here is a design conversation any more; what is left is a decision in kgs. |
+| F8 | **What is the audit unit on the `Predicate` path?** A filtered read over 10M rows makes no per-row decision and produces no denials — absent rows are not refusals. KGS §8.6 requires denied access to be audited. | **Open.** Likely the compiled predicate plus parameters plus epoch, but §7.1's "auditable without being informative" needs a concrete answer for the surface carrying the traffic. **Two notes.** The removal of the mandatory tier makes this slightly *simpler* in one respect — there is no "gate failed before any grant was consulted" event to audit separately — and leaves the hard part untouched, since the hard part was always that a filtered read has no per-row decision. And **caveats would make it worse**: a caveated grant means an absent row might be absent because a caveat narrowed it, which is a refusal with a reason the predicate path has no place to record. That is one more argument for A3's guardrail. |
+| F9 | ~~**Nothing checks whether the actor on a mandatory act may classify.**~~ The registry enforced the witness (a `MandatoryAct` carrying channel, actor, reason and instant, unforgeable in Go) and not the right, because §16.2 was unanswered — so an ordinary principal could construct an act naming themselves, join a conflict screen's clearance group, and the gate opened. The `examples/` corpus did exactly that against the real registry, and the registry accepted it. | **CLOSED BY DELETION, 2026-10-23 (A3).** There are no mandatory acts. **And it is one of the two reasons the tier was removed**, so this entry should be read as having been answered rather than discarded: an absolute administered through an unguarded channel was only as absolute as that channel, which is the correctness half of A3's argument. §16.2, which was this finding's blocking input, is moot and says so explicitly. The corpus scenario that demonstrated it (U6) is recorded in `examples/UNEXPRESSIBLE.md` under "Resolved by removal" rather than deleted. |
 
+Two entries are kept below the table because their original wording is the
+record of what was believed before the measurements, and both measurements
+changed a decision.
+
+| # | Original wording | |
+|---|---|---|
 | F1-orig | **Filtered ANN versus the predicate.** A2 wants an index join; KGS A2 and leak channel #8 want the predicate *inside* the ANN search with recall ≥ 0.90 at 0.1% selectivity. pgvector's workable shape is to pre-restrict the candidate set, which needs the accessible set expressible as an indexable key on consumer rows — which looks like the per-principal materialization A2 forbids. The household graph at 0.1% selectivity is exactly where a correct-looking system returns nothing. | **Blocking. Moves to phase 1** as a proof, not phase 3. `Predicate`'s contract may have to be "a fragment *plus* a key the consumer indexes and partitions by", with a maintenance path owned here. Recall ownership must be assigned to one document. |
-| F2 | **Quantified, and worse than suspected — it is the actual cause of A2's latency failure.** The F1 spike measured the tier-1 closure join at **0.006 ms per candidate row, index-served**: the closures are not the problem. The **tier-2 classification anti-join is**, walking 200,394 `fact_classification` rows and turning a 0.46 ms keyset page into **296 ms**. So A2's "the authorization join adds < 20 ms" is falsified, by the half nobody was watching. The containment key happens to fix it (3 ms) for reasons unrelated to ANN, which is a reprieve rather than a resolution. | **Still blocking the fixture.** A2 must distinguish label *definitions* from *assignments*, and the fixture must carry the real shape — tens of millions of assignment rows, not 500 — before any benchmark number means anything. The spike also establishes that the gate's cost is a function of assignment cardinality, so §8.3's "classifications are small and change rarely" is false and the sentence must go. |
-
 | F2-orig | **Classification assignment cardinality.** A2 budgets "500 classifications"; if that means *assignments*, it is wrong by orders of magnitude — KGS propagates an episode's markings to every derived fact, observation and vector, which is tens of millions of rows. "Small and changes rarely" is then false and the gate is not a small-table join. | **Blocking for the fixture.** A2 must distinguish label *definitions* from *assignments* and the fixture must carry the real shape before any benchmark means anything. |
-| F3 | **Containment is a DAG, not a tree.** §9.2's ancestry closure and §8.2's "only on the direct path" both assume one path, but a kgs fact has an episode *and* zero or more nestable, sometimes predicate-defined entity-sets. Many-to-many at fact cardinality, maintained on every write, and "the direct path" is undefined. | **Blocking for §9.2.** Either kgs's entity-sets stop being an authorization container, or the closure and `visible_below` are redefined for multiple paths. |
-| F4 | **Attribute-scoped classifications cannot be enforced by a row predicate.** A `WHERE` fragment hides rows, not columns. kgs is fine (facts are rows); CAS is not (document fields are columns). | **Open.** Either `Predicate` returns a permitted-attribute set the *consumer* applies — expanding the A3 trust boundary into consumer code — or this module becomes a query rewriter across three query builders. Two different modules; pick one before phase 1 fixes the API. |
-| F5 | **OpenFGA store topology.** One store per tenant (a changelog poller and model write per tenant, pressure on "no decision degrades with tenant count") or one global store with tenant-prefixed ids (one shared model in which all three consumers' types coexist, so any consumer's schema bump rewrites the model all three share). §8.4's per-consumer versioning and access-delta report may not be computable in the second shape. | **Open, decide in phase 1.** |
-| F6 | **Which `tenancy` connection the engine gets.** `tenancy`'s data-plane handles carry RLS session context and its control-plane path must not accept caller-supplied predicates; OpenFGA sets no tenant context, runs its own migrations (against the goose decision), and its queries inherit whatever RLS the pool's role carries. If it needs its own role, pool and `search_path`, the one-function-signature A1 argument that selected it is weaker than §10 states. | **Open.** Changes phase-1 wiring and `tenancy`'s public surface. |
-| F7 | **Two of kgs §9.3's rule dimensions fall outside §8.5's permitted subset** — ontology scope ("may read `Person` but not `salary`": attribute-conditioned and exclusionary) and predicate-defined entity-sets (authorization as a function of data). §8.5's answer is "use a classification", but a classification is mandatory and non-delegable, so a discretionary "don't show her salary facts" becomes an absolute no owner can lift. | **Open.** Either kgs loses those dimensions or tier 1 gains a form. Do not add a form casually; §8.5's restriction is what buys the projection. |
-| F8 | **What is the audit unit on the `Predicate` path?** A filtered read over 10M rows makes no per-row decision and produces no denials — absent rows are not refusals. KGS §8.6 requires denied access to be audited. | **Open.** Likely the compiled predicate plus parameters plus epoch, but §7.1's "auditable without being informative" needs a concrete answer for the surface carrying the traffic. |
-
-| F9 | **Nothing checks whether the actor on a mandatory act may classify.** §8.3 says creating and assigning classifications "is itself permissioned and audited, and is not a power that ownership confers" — but nothing enforces the actor's *authority*, because §16.2 is unanswered. The registry enforces the **witness** (a `MandatoryAct` carrying channel, actor, reason and instant, with unexported fields so the provisioning path cannot forge one) and not the **right**. So an ordinary principal can construct an act naming themselves, join a conflict screen's clearance group, and the gate opens. The `examples/` corpus does exactly that against the real registry, and the registry accepts it. | **Blocking on §16.2, and the most serious entry here.** Found by writing the corpus rather than by review, which is why it was absent from this register. A3's invariant remains literally true — no *discretionary* operation opens a gate — but the mandatory channel is itself unguarded, so the practical guarantee the design reads as making is absent, and every mandatory scenario asserts strictly less than it appears to. The fix is small and the same shape under all three candidate answers: `NewMandatoryAct` stops being free and requires a checked capability, and the A3 suite gains the mandatory channel as an attack surface it does not presently cover at all. |
 
 Verified by the check and already folded in above: `postgres.NewWithDB` is real
-(§10's A1 argument holds); `NewTxConnector` does **not** permit a caller's
-transaction (§10, and KGS §6.2 corrected); `DefaultChangelogHorizonOffset = 0`
-creates the dropped-revocation hazard (§9.3).
+(§10.4's A1 argument held as far as plumbing went, and F6 is why that was not
+enough); `NewTxConnector` does **not** permit a caller's transaction (§10.4,
+and KGS §6.2 corrected); `DefaultChangelogHorizonOffset = 0` creates the
+dropped-revocation hazard (§9.3, which now applies to our own write log).

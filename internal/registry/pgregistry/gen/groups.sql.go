@@ -68,7 +68,7 @@ type EnsureClaimGroupsParams struct {
 }
 
 // groups.sql holds every static statement this module runs against the
-// tier-1 tables: iam.groups, iam.group_members, and the one probe that
+// group tables: iam.groups, iam.group_members, and the one probe that
 // has to ask both namespaces at once.
 //
 // The claim reconciliation is the reason this file exists rather than the
@@ -112,6 +112,26 @@ type EnsureGroupParams struct {
 func (q *Queries) EnsureGroup(ctx context.Context, arg EnsureGroupParams) error {
 	_, err := q.db.Exec(ctx, ensureGroup, arg.ID, arg.TenantID, arg.Name)
 	return err
+}
+
+const groupByID = `-- name: GroupByID :one
+SELECT id, tenant_id, name, created_at FROM iam.groups WHERE id = $1
+`
+
+// The existence probe requireGroup needs. It replaced a two-namespace
+// UNION query that distinguished a group from a clearance group: with the
+// mandatory tier removed there is one namespace, so a row or no row is the
+// whole answer.
+func (q *Queries) GroupByID(ctx context.Context, id domain.GroupID) (IamGroup, error) {
+	row := q.db.QueryRow(ctx, groupByID, id)
+	var i IamGroup
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Name,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const groupByName = `-- name: GroupByName :one
@@ -246,34 +266,6 @@ func (q *Queries) GroupsOfPrincipal(ctx context.Context, principalID domain.Prin
 		return nil, err
 	}
 	return items, nil
-}
-
-const iDKind = `-- name: IDKind :one
-SELECT k FROM (
-    SELECT 'group' AS k FROM iam.groups WHERE id = $1::iam.ulid
-    UNION ALL
-    SELECT 'clearance' AS k FROM iam.clearance_groups WHERE id = $1::iam.ulid
-) kinds LIMIT 1
-`
-
-// Which namespace an id belongs to, or no row if it belongs to neither.
-//
-// One statement asks both tables, because the two namespaces are separate
-// by design and no single table knows the answer. It is what lets the
-// adapter tell "this id names a clearance group" (a tier confusion, which
-// an operator must be told about) from "this id names nothing" (a typo) —
-// merging the two would hide exactly the mistake design §8.3 is about.
-//
-// The parameter is cast to iam.ulid rather than left to be inferred,
-// because its type is the question: it is a syntactically valid id of
-// unknown kind, so it is deliberately neither a GroupID nor a clearance
-// group's id here. The cast is on the parameter, not on the column, so
-// both probes still land on their primary key.
-func (q *Queries) IDKind(ctx context.Context, id string) (string, error) {
-	row := q.db.QueryRow(ctx, iDKind, id)
-	var k string
-	err := row.Scan(&k)
-	return k, err
 }
 
 const pruneClaimGroupMemberships = `-- name: PruneClaimGroupMemberships :exec

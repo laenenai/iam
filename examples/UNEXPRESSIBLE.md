@@ -1,28 +1,78 @@
 # What this design cannot express
 
-Six use cases, each a real requirement from one of the three consumer
+Four use cases, each a real requirement from one of the three consumer
 designs, that `iam` as designed cannot express. They are listed here
 because a corpus whose value is that it all passes is worth much less than
 one that precisely locates what does not work.
 
 Each has a scenario in [unexpressible/](unexpressible/) that **demonstrates**
 its gap rather than asserting it — the schema lint refusing the relation,
-`DirectPath` refusing a DAG, `RowEnforceable` reporting that a column
+`DirectPath` refusing a DAG, `AttributeEnforceable` reporting that a column
 cannot be hidden by a `WHERE` clause, an ancestry closure moving under an
-ordinary data write, an unprivileged principal successfully clearing
-itself. The harness refuses an unexpressible scenario that carries no such
-claim. So if the design grows to cover one of these, the corresponding
-claim starts failing and says so, and the scenario leaves this file.
+ordinary data write. The harness refuses an unexpressible scenario that
+carries no such claim. So if the design grows to cover one of these, the
+corresponding claim starts failing and says so, and the scenario leaves
+this file.
 
-Before the list, the two sentences that explain why there is a list at all.
-Design §8.5 permits union, usersets and tuple-to-userset inheritance and
-nothing else, because that is exactly the subset that flattens into §9's
-closures, and the projection is what buys the entire A2 performance
-budget. Its own answer to a requirement outside the subset is "use a
-classification, and if it is neither — that is a design conversation, not
-a configuration change." Four of the six below are that conversation. Two
-are cases where "use a classification" is available and quietly changes
-what the requirement means.
+There were six. Two left this file on 2026-10-23 and neither was solved:
+see **Resolved by removal** at the bottom, which is where they are
+recorded rather than deleted.
+
+---
+
+## First: the one thing that is deliberately unexpressible
+
+This section is not a finding. It is the design, and it belongs at the top
+of this file because a reader arriving here is usually looking for exactly
+it.
+
+**An absolute enforced by policy cannot be expressed, and will not be.**
+"This principal may never see this, whatever anyone does later" has no
+mechanism in `iam`. There is no deny, no classification, no clearance, no
+exclusion operator, and no plan to add one. That is an anti-goal rather
+than a gap, and the design document states it as one.
+
+What replaces it, in two strengths that are honestly different:
+
+- **"She may not see this"** → do not grant it. Default-deny is the only
+  thing that refuses, so a resource nobody granted is a resource nobody
+  reaches. It is liftable by anyone who may share, which for a private
+  letter or a household invoice is the correct property and not a weakness.
+  [D6](discretionary/) and [H1](household/) are this.
+- **"Nobody may ever see this, whatever rule ever happens"** → `escrow`. A
+  key the deployment does not hold survives the administrator, the
+  operator, a subpoena, a stolen backup and every future policy change.
+  `iam` records one field, the marking's enforcement class; `keyring` holds
+  the wrapping and `escrow` holds the shares, the custodians, the ceremony
+  and the dead-man's switch. [H4](household/) is this.
+
+**The legal ethical wall is the case worth being explicit about**, because
+it is the one the design was loudest about. CAS §9.3 wanted a conflict
+screen "that no firm-wide grant may defeat", design §1 cited it as one of
+two requirements this module exists for, and the corpus's old M5 — the
+scenario the design called "the feature the whole module exists for" —
+asserted it with a classification, a clearance group and an adversarial
+suite.
+
+It now has no policy mechanism of its own. [D8](discretionary/) is the
+replacement: the firm-wide grant is written on the firm-wide container, the
+matter is not inside it, nothing names the screened associate on the
+matter, and nobody can navigate to a matter they are screened off. That is
+sufficient for the everyday case and it is weaker in exactly one way,
+stated plainly rather than buried: **it survives nobody.** Any principal
+who may share the matter can share it with the screened associate tomorrow,
+and no row in this module will object. A screen that must survive a future
+administrator is content under a key the deployment does not hold.
+
+The reason that is the right trade is that the old mechanism did not
+deliver what it appeared to either. A classification was administered by
+whoever held the classify permission, so it was only as absolute as that
+administration — the corpus's old U6 demonstrated, against the real
+registry, that *anybody* could perform the mandatory act. And routing
+ordinary privacy through the same mechanism turned every household
+preference into an absolute no owner could lift, which was the old U2. One
+honest weak mechanism plus one honest absolute beats one mechanism that
+read as absolute and was not.
 
 ---
 
@@ -42,76 +92,50 @@ way a consumer would want to declare it and the schema lint refuses the
 whole fixture, so every row in its table is unanswerable: not denied, not
 allowed, unreachable.
 
-**Finding.** §17 F7 (ontology scope). Marked open, with "either kgs loses
-those dimensions or tier 1 gains a form. Do not add a form casually; §8.5's
-restriction is what buys the projection."
+**This got strictly harder on 2026-10-23, and it is the only entry in this
+file that did.** It used to have two candidate resolutions, and the cheap
+one was the one §8.5 itself recommended: *express it as a classification
+scoped to the salary attribute — see U2 for what that changes.* That
+resolution no longer exists. The mechanism was deleted, not deprecated, so
+there is nothing left to be redirected to.
 
-**What supporting it would cost.** A tier-1 form conditioned on resource
+What remains is one option: `Predicate` returns a permitted-attribute or
+permitted-predicate set alongside its SQL fragment, and the **consumer**
+applies the second part. That moves part of the trust boundary into
+consumer code, where this module can neither enforce nor detect a consumer
+that forgets, and it makes the §9.4 differential audit responsible for
+consumer compliance and not only for projection divergence. The only
+alternative is that kgs drops the dimension.
+
+**Finding.** §17 F7 (ontology scope), now compounding F4. F7 used to read
+"either kgs loses those dimensions or tier 1 gains a form"; the third
+branch that existed in practice — use a classification — is gone, so the
+register now records the discretionary-restriction form as permanently
+refused and "kgs loses the dimension" as the definitive answer rather than
+one of two.
+
+**What supporting it would cost.** A form conditioned on resource
 attributes costs §9's projection, and therefore A2: union, usersets and
 inheritance precompute into a closure and a conditional expression does
-not. An exclusion operator costs that *and* the A3 invariant, because
-exclusion in a relationship model is local to the permission it is written
-in — to make a restriction absolute it must appear on every relation of
-every resource kind and be remembered for every kind added later, N
-permissions by M dimensions, growing with the schema, where one omission is
-a silent bypass rather than an error. Lakekeeper, the one production
-open-source ReBAC-over-a-hierarchy implementation, has no deny mechanism at
-all, which is the strongest available evidence that this is what the model
-is bad at.
+not. An exclusion operator costs that and more, and is now refused on a
+stronger ground than it used to be. The old argument was *locality* — in
+OpenFGA's `but not` and SpiceDB's `-`, exclusion applies only to the
+relation definition it is written in, so an absolute written there is
+absolute only where somebody remembered it. That argument is sound and it
+is narrower than it was made to carry: it is an objection to
+relation-scoped exclusion specifically, and it was being used as an
+argument for putting absolutes in another tier. There is no other tier.
+Exclusion is now refused because the design has no deny mechanism at all.
 
-The cheaper resolutions are both real and both have a price. kgs drops the
-ontology-scope dimension and expresses the requirement as a classification
-— see U2 for what that changes. Or `Predicate` grows a second return value,
-a permitted-predicate set the consumer applies, which moves part of the A3
-trust boundary into consumer code. That is the same choice F4 forces, and
-the two should be decided together.
-
----
-
-## U2 — "Use a classification" makes a preference into an absolute
-
-**The use case.** U1's, taking §8.5 at its word and expressing it as a
-classification. The first half works: the analyst is denied the salary, by
-the gate, and nobody wrote an exclusion. The second half is the HR
-director's entirely ordinary "actually, show her this one salary, she's
-running the review."
-
-**Why the design cannot express it.** A classification is mandatory. §8.3:
-it "cannot be granted away, delegated, transferred with ownership, or
-satisfied by any tier-1 relation", and "there is no API that grants a
-clearance as a side effect of sharing". So the lift has no operation behind
-it. The scenario writes the director's attempted lift as the most direct
-grant the model has — a tuple naming the analyst on the fact itself — and
-it changes nothing. What began as a discretionary preference about one
-field is now an absolute of the same kind as a legal ethical wall,
-administered by whoever holds the classify permission, and the resource's
-owner cannot lift it.
-
-This is worth stating plainly because it is the gap most likely to be
-adopted by accident: the workaround's schema is perfectly legal and no lint
-catches it. In scenario M5 the absence of a discretionary path is the
-feature the whole module exists for. Here it is the bill.
-
-**Finding.** §17 F7, second half: "a classification is mandatory and
-non-delegable, so a discretionary 'don't show her the salary' becomes an
-absolute no owner can lift."
-
-**What supporting it would cost.** Nothing to build, which is the problem.
-Supporting the requirement *as stated* needs one of three things. A third
-tier-1 form — a scoped, delegable restriction — costing the projection, as
-U1. Or a second rule shape in the mandatory layer: a named
-`(principal, resource)` block or a lift, which §16 question 1 explicitly
-assumes is not needed, and which would double the A3 adversarial suite
-since every absolute would then have two ways to be satisfied instead of
-one. Or accept the promotion and make it visible: a consumer-facing
-distinction between a classification meaning "legally absolute" and one
-meaning "hidden by preference", with different administration — which is
-two mandatory layers wearing one name.
-
-The honest short-term answer is to tell consumers that this requirement has
-no discretionary form, and to make the API say so, rather than letting them
-discover it after a classification is in place and a thousand resources
-carry it.
+One piece of the old supporting evidence should be discounted while
+reading this. The previous version of this section said that Lakekeeper
+having no deny mechanism "is the strongest available evidence that this is
+what the model is bad at". Lakekeeper governs data-catalog hierarchies for
+org-internal analytics: a domain with no per-resource owner asserting
+privacy against a peer, and therefore no demand for the thing it does not
+have. Its absence of deny is weak support for a conclusion about the
+household case, and the conclusion rests on the two structural arguments
+above instead.
 
 ---
 
@@ -136,6 +160,13 @@ passes. U3 is D7 plus one containment edge that KGS §9.3 requires, and
 `DirectPath` refuses. The decision itself is fine in both — F3 is not about
 whether the answer can be computed, it is about the closure that implements
 it and about navigation.
+
+This finding is **unaffected** by the removal of the deny mechanism, with
+one exception worth noting: navigational visibility now carries more weight
+than it did. D8's conflict screen rests partly on a `visible-set` claim —
+the screened associate must not learn that the matter exists — so "what
+does `visible_below` mean in a DAG" is no longer only a usability question
+about finding things. It is part of how a screen is asserted.
 
 **Finding.** §17 F3, marked **blocking for §9.2**: "either kgs's
 entity-sets stop being an authorization container, or the closure and
@@ -163,18 +194,28 @@ and means somebody has to designate it on every write.
 
 The corpus cannot choose for the owner. Until somebody does, "only on the
 direct path" should not appear in the design as though it were
-implementable — that is the one change to the design document this scenario
-asks for.
+implementable — and the design now says so in §8.2, which is the one
+change to the design document this scenario asked for.
 
 ---
 
-## U4 — An attribute-scoped classification cannot hide a column
+## U4 — An attribute-scoped restriction cannot hide a column
 
-**The use case.** Eva may read the payroll document and not its salary
-column. Design §8.3 offers exactly this: a classification "may be declared
-over a whole resource, or over a named attribute or field of it, which is
-how property-level and cell-level security compose without a second
-mechanism."
+**Redirected on 2026-10-23.** As this entry used to be written it is moot.
+It described design §8.3's offer of a classification "declared over a whole
+resource, or over a named attribute or field of it", and its subject was
+that the gate could answer "may she see `document:payroll.salary`"
+correctly while `Predicate` could not express the answer. There is no
+classification, so there is no attribute-scoped label to be unenforceable.
+
+**The problem underneath it did not move, which is why this is redirected
+and not deleted.** Design §9 compiles authorization into a `WHERE` fragment
+the consumer joins, and a `WHERE` fragment hides rows and not columns. That
+is a property of SQL and of the consumer's storage shape, and it was never
+a property of which tier the restriction was written in. The scenario now
+asks the same question with the label removed: given a resource whose
+attributes are columns of one row, can the compiled fragment express a
+restriction at attribute granularity?
 
 **Why the design cannot express it.** It depends on the consumer's storage
 shape, and the scenario carries both shapes side by side so the finding is
@@ -187,31 +228,30 @@ columns, Palantir's object-level + property-level = cell-level security
 falls out of the data model instead of needing a second mechanism." The
 scenario's row-shaped claim passes.
 
-For CAS it is not. A document's fields are columns of one row, and §9
-compiles authorization into a `WHERE` fragment the consumer joins into its
-own statement — and a `WHERE` fragment hides rows, not columns. So the
-decision procedure can answer "may she see `document:payroll.salary`"
-correctly while `Predicate`, which is the surface carrying the traffic,
-cannot express the answer at all. A consumer that falls back to calling
-`Decide` per cell has abandoned §9 and is post-filtering, which is KGS leak
-channel #6.
+For CAS it is not. A document's fields are columns of one row, so the
+fragment lets the row through and something else has to hide the column. A
+consumer that falls back to calling `Decide` per cell has abandoned §9 and
+is post-filtering, which is KGS leak channel #6.
 
 Nothing in the schema is wrong, so no lint catches this. It is caught by
-asking what the compiled predicate can express.
+asking what the compiled fragment can express, which is what
+`AttributeEnforceable` does.
 
-**Finding.** §17 F4, marked open with "two different modules; pick one
-before phase 1 fixes the API."
+**Finding.** §17 F4, open. Note that F4 and U1's F7 are now a single fork
+with a single option on it, rather than the same fork reached from two
+directions: the branch that used to distinguish them — express it as a
+classification — was available for F7 and is gone.
 
 **What supporting it would cost.** Two options, and they are not variations
 of each other.
 
 `Predicate` returns a fragment *plus* a permitted-attribute set, and the
 consumer applies the second part. Cheap to build, and it moves a piece of
-the A3 trust boundary into consumer code: the module could no longer claim
-that no sequence of operations opens a gate, because a consumer that
-forgets to apply the attribute set is a disclosure this module can neither
-prevent nor detect. If this is chosen, the §9.4 differential audit must
-cover consumer compliance and not only projection divergence, which is a
+the trust boundary into consumer code: the module could no longer claim
+that nothing but a grant permits anything, because a consumer that forgets
+to apply the attribute set is a disclosure this module can neither prevent
+nor detect. If this is chosen, the §9.4 differential audit must cover
+consumer compliance and not only projection divergence, which is a
 substantially larger audit than the one designed.
 
 Or this module becomes a query rewriter, parsing and rewriting SELECT lists
@@ -221,8 +261,11 @@ must not contain" list has to grow a line either way.
 
 There is a third, cheaper answer for CAS specifically: make sensitive
 document fields their own addressable resources, so the columnar case
-becomes a row case. It costs a schema migration in CAS and a cardinality
-increase in its tables, and it needs no new mechanism here.
+becomes a row case and an ordinary grant reaches it. It costs a schema
+migration in CAS and a cardinality increase in its tables, and it needs no
+new mechanism here. It is now the only resolution that keeps the trust
+boundary where it is and asks nothing of this module, which makes it more
+attractive than it was rather than less.
 
 ---
 
@@ -233,19 +276,25 @@ stays correct as suppliers arrive. KGS §9.3 allows an entity-set to be
 "definable either explicitly or by predicate."
 
 **Why the design cannot express it safely.** An ordinary data write, made
-by somebody holding no `grant`, `deny`, `policy.set` or `classify`
-permission, moves an authorization answer. In the scenario, Pascal asserts
-`country = BE` on a company in his own transaction and Eva can now read it.
-There is no authorization operation to audit under §8.6, nothing to bump
-the deny epoch, and — the part that matters most — the *restrictive*
-direction rides the same path. A supplier leaving the set is a permission
-being removed by a data write, and design §9.3's one rule is that "the
-restrictive change propagates on the fast path; the permissive change may
-lag, and lagging fails closed." Here both changes are the same event.
+by somebody holding no `grant` or `policy.set` permission, moves an
+authorization answer. In the scenario, Pascal asserts `country = BE` on a
+company in his own transaction and Eva can now read it. There is no
+authorization operation to audit under §8.6, nothing to bump the deny
+epoch, and — the part that matters most — the *restrictive* direction rides
+the same path. A supplier leaving the set is a permission being removed by
+a data write, and design §9.3's one rule is that "the restrictive change
+propagates on the fast path; the permissive change may lag, and lagging
+fails closed." Here both changes are the same event.
 
 KGS §9.3 already prices half of this: such a set is materialized with a
 declared staleness bound, and staleness fails closed. What is unpriced is
 the restrictive direction and the closure maintenance.
+
+This finding is **unaffected** by the removal of the deny mechanism, except
+that one of its sentences got shorter: the old version listed `deny` and
+`classify` among the permissions the data writer does not hold, and neither
+permission exists any more. The problem was always that the writer holds
+*no* authorization permission of any kind, and it still holds.
 
 **Finding.** §17 F7's second dimension ("predicate-defined entity-sets:
 authorization as a function of data"), compounding F3.
@@ -268,89 +317,98 @@ so in the design rather than discovering it per consumer.
 
 ---
 
-## U6 — Nothing checks whether the actor on a mandatory act may classify
+## Resolved by removal, 2026-10-23
 
-**The use case.** The one the whole module exists for: a conflict screen
-that no sequence of operations can open. Scenario M5 asserts the
-discretionary half at length — every grant, share, role assignment and
-ownership transfer available, applied in combination, and the gate stays
-shut. This scenario asks the other half.
+Two entries left this file when the deny mechanism was removed. Neither was
+solved. They are recorded here rather than deleted, because a gap that
+disappears because its mechanism disappeared is a different event from a
+gap that was closed, and the difference matters to anyone reading this file
+to decide what to build.
 
-**Why the design cannot express it.** Design §8.3 makes clearance-group
-membership move only "through the classify permission or an authoritative
-directory sync", and closes with "creating and assigning classifications is
-itself permissioned and audited, and is not a power that ownership
-confers". The registry enforces the *witness*: every clearance write
-demands an `iam.MandatoryAct` carrying a channel, an actor, a reason and an
-instant, and `MandatoryAct`'s fields are unexported so one cannot be
-forged or constructed by the provisioning path. What nothing enforces is
-the **actor's authority**, because §16 question 2 — deployment-level
-security admin, per-tenant security admin, or the resource owner at
-creation time — is unanswered.
+### U2 — "Use a classification" made a preference into an absolute
 
-So an ordinary associate can construct an act naming herself, add herself
-to a conflict screen's clearance group, and the gate opens. The scenario
-does exactly that, against the real registry, and the registry accepts it.
+**Resolved by removal.** U2's subject was that answering a *discretionary*
+requirement with a classification converted "don't show her the salary"
+into an absolute of the same kind as a legal ethical wall, administered by
+whoever held the classify permission, which the resource's owner could not
+lift. There is no classification to answer with, so the gap has nothing
+left to be a gap in.
 
-The type system's achievement here is real and narrower than it looks: it
-makes a clearance write impossible to perform *accidentally* or as a side
-effect of sharing, and it does not make one impossible to perform.
+It is worth recording that U2 is **why** the mechanism was removed rather
+than a casualty of it. The diagnosis in the design document's no-deny
+anti-goal is U2's observation generalized: the design anchored on "this
+principal may never see this" — a rare case — and made it the template for
+the common one, so every ordinary privacy preference arrived as an absolute
+nobody could undo. U2's cost section said the honest short-term answer was
+"to tell consumers that this requirement has no discretionary form". The
+answer taken instead was to remove the form that made it mandatory.
 
-**Finding.** §16 question 2. **This one is not in the §17 register and it
-should be** — it is the only gap found by writing this corpus rather than
-taken from the existing findings, and it is the gap that most undercuts the
-scenarios that pass.
+What the requirement now does is land in U1, with the cheap resolution U2
+was warning about no longer available. U1 is strictly harder for exactly
+this reason.
 
-**What supporting it would cost.** Small to build, and it needs the §16
-decision first, which is why it is here rather than on a task list. The
-three candidates have different costs. A deployment-level security admin is
-one role and breaks the household case, where the owner reasonably
-classifies their own invoice at creation. A per-tenant security admin fits
-the legal case and needs the role to exist before the first classification
-does. The resource owner at creation time with changes restricted
-afterwards fits the household and reintroduces, for the creation window,
-exactly the ownership-confers-classification power §8.3 forbids.
+### U6 — Nothing checked whether the actor on a mandatory act may classify
 
-Whichever is chosen, the mechanism is the same shape: `MandatoryAct`'s
-construction stops being free and starts requiring a checked capability,
-which means `iam.NewMandatoryAct` loses its current signature, and the A3
-adversarial suite gains the mandatory channel as an attack surface it does
-not presently cover at all.
+**Resolved by removal.** U6 showed, against the real registry, that an
+ordinary associate could construct an `iam.MandatoryAct` naming herself,
+add herself to a conflict screen's clearance group, and open the gate. The
+registry enforced the *witness* — a channel, an actor, a reason and an
+instant, with unexported fields so one could not be forged — and never the
+actor's **authority**, because §16 question 2 (deployment-level security
+admin, per-tenant security admin, or the resource owner at creation time)
+was unanswered.
 
-Until then, no scenario in this corpus may claim that a clearance cannot be
-obtained — only that it cannot be obtained *discretionarily*, which is a
-narrower and much weaker statement than the design reads as making.
+There are no mandatory acts, no clearance groups and no classify
+permission, so there is nothing left to check. §17's F9 is closed by
+deletion and §16 question 2 is moot, which the design document now says
+explicitly, because §16.2 was F9's blocking input and the owner should see
+it closed rather than wonder.
+
+What U6 contributed before it went is worth keeping in view. It was the
+only gap in this file found by writing the corpus rather than taken from
+the existing findings register, and its point — that the mandatory channel
+was administered by somebody, so an absolute administered through it was
+only as absolute as that administration — is one of the two observations
+the no-deny decision rests on. The other is U2's.
 
 ---
 
 ## What should change in the design document
 
-Recorded here rather than applied, per the instruction not to edit the
-design. In priority order:
+All five items from the previous version of this section have been applied
+or made moot. They are kept because the trail is the useful part.
 
 1. **§8.2's "and only on the direct path" should be marked as
-   unimplemented pending F3**, not stated as a property of the design. U3
-   shows there is no such path once entity-sets are containers, and the
-   three ways to redefine it have materially different leak profiles.
+   unimplemented pending F3.** *Applied.* §8.2 carries the caveat and says
+   not to build against the sentence until F3 is settled.
 
-2. **§17 should gain a finding for §16 question 2**, with the observation
-   that the mandatory channel is currently open to any principal who can
-   call the registry, and that the A3 adversarial suite does not cover it.
-   Right now the design's strongest claim rests on an unimplemented
-   permission.
+2. **§17 should gain a finding for §16 question 2.** *Applied, then
+   closed.* It became F9, and F9 is closed by deletion along with the
+   mandatory channel it was about.
 
-3. **§8.3's "scoped" bullet should name the storage-shape condition** —
-   attribute scoping is enforceable by §9's predicate where the attribute
-   is a row and not where it is a column. As written it reads as a
-   general capability, and F4 is a footnote rather than a caveat on the
-   feature itself.
+3. **§8.3's "scoped" bullet should name the storage-shape condition.**
+   *Moot.* §8.3 is gone with the classification. The storage-shape
+   condition it was about survives as F4 and as U4 above, which is where a
+   reader now finds it.
 
 4. **§8.5 should say what happens when the answer is "use a
-   classification" but the requirement was discretionary.** U2 is a
-   foreseeable, silent, one-way promotion of a preference into an
-   absolute, and the paragraph that recommends it does not mention it.
+   classification" but the requirement was discretionary.** *Resolved by
+   removal.* "Use a classification" is not an answer the design gives any
+   more, which is the strongest available form of saying what happens.
 
-5. **F4 and F7 should be decided together.** Both resolve to the same
-   fork — either `Predicate` returns a second, consumer-applied value, or
-   this module grows into a query rewriter — and deciding them separately
-   risks picking differently for columns and for predicates.
+5. **F4 and F7 should be decided together.** *Still true, and now
+   unavoidable.* They are one fork with one option on it. Deciding them
+   separately is no longer possible, since the branch that distinguished
+   them has been deleted.
+
+One new item, which this file asks for rather than applies:
+
+6. **The per-episode grant cost should be registered, or deliberately not
+   registered.** H1's fixture had to move its grant from the graph down to
+   the episode, because privacy inside a shared container is now expressed
+   by grant granularity rather than by a label. §9.2's closure budget is
+   untouched — a per-episode grant still reaches every fact inside it at
+   one tuple per hop — but the number of tuples a household carries is now
+   a function of how much it ingests rather than of how many people live in
+   it. That is a consequence of the no-deny decision rather than an
+   argument against it, and it is not currently in §17.

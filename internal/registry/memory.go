@@ -16,10 +16,10 @@ import (
 // in-memory adapters, because that component is what A3 is about").
 //
 // It is a real adapter and not a mock. It passes RunRegistrySuite
-// unchanged, which means it enforces the mandatory channel, the tier
-// separation, the staleness bound and immediate deprovisioning exactly as
-// the Postgres adapter does — so a test that passes here is a test of the
-// contract rather than of a stub's convenience.
+// unchanged, which means it enforces the staleness bound, claim
+// reconciliation and immediate deprovisioning exactly as the Postgres
+// adapter does — so a test that passes here is a test of the contract
+// rather than of a stub's convenience.
 //
 // It is safe for concurrent use. State lives only for the life of the
 // value, so it is not a deployment option; a deployment with no Postgres
@@ -40,12 +40,6 @@ type Memory struct {
 	// source is what makes claim reconciliation surgical: see
 	// domain.GroupSource.
 	members map[domain.GroupID]map[domain.PrincipalID]domain.GroupSource
-
-	clearanceGroups  map[domain.ClearanceGroupID]domain.ClearanceGroup
-	clearanceByName  map[nameKey]domain.ClearanceGroupID
-	clearanceMembers map[domain.ClearanceGroupID]map[domain.PrincipalID]struct{}
-	// changes is the append-only trail, in recorded order.
-	changes map[domain.ClearanceGroupID][]domain.ClearanceChange
 }
 
 // externalKey is the tenant-scoped external-subject lookup key. Tenant is
@@ -58,10 +52,7 @@ type externalKey struct {
 	subject string
 }
 
-// nameKey is the tenant-scoped name lookup key for groups and, in its own
-// separate map, for clearance groups. The two namespaces are deliberately
-// separate: a tenant may have a team and a compartment of the same name
-// without either being a handle on the other.
+// nameKey is the tenant-scoped name lookup key for groups.
 type nameKey struct {
 	tenant domain.TenantID
 	name   string
@@ -77,16 +68,12 @@ func NewMemory(cfg Config) (*Memory, error) {
 		return nil, err
 	}
 	return &Memory{
-		cfg:              normalized,
-		principals:       make(map[domain.PrincipalID]domain.Principal),
-		byExternal:       make(map[externalKey]domain.PrincipalID),
-		groups:           make(map[domain.GroupID]domain.Group),
-		groupByName:      make(map[nameKey]domain.GroupID),
-		members:          make(map[domain.GroupID]map[domain.PrincipalID]domain.GroupSource),
-		clearanceGroups:  make(map[domain.ClearanceGroupID]domain.ClearanceGroup),
-		clearanceByName:  make(map[nameKey]domain.ClearanceGroupID),
-		clearanceMembers: make(map[domain.ClearanceGroupID]map[domain.PrincipalID]struct{}),
-		changes:          make(map[domain.ClearanceGroupID][]domain.ClearanceChange),
+		cfg:         normalized,
+		principals:  make(map[domain.PrincipalID]domain.Principal),
+		byExternal:  make(map[externalKey]domain.PrincipalID),
+		groups:      make(map[domain.GroupID]domain.Group),
+		groupByName: make(map[nameKey]domain.GroupID),
+		members:     make(map[domain.GroupID]map[domain.PrincipalID]domain.GroupSource),
 	}, nil
 }
 
@@ -146,9 +133,7 @@ func (m *Memory) UpsertFromClaims(ctx context.Context, c Claims) (domain.Princip
 // It touches GroupSourceClaim rows only. A membership written through
 // AddGroupMember (GroupSourceLocal) survives a claim set that does not
 // name it, because the issuer is not the authority for it — see
-// domain.GroupSource. It never looks at clearance membership, and could
-// not change it if it did: that needs a domain.MandatoryAct, which no
-// value reachable from Claims can produce.
+// domain.GroupSource.
 func (m *Memory) reconcileClaimGroups(tenant domain.TenantID, p domain.PrincipalID, want []string, now time.Time) error {
 	wanted := make(map[domain.GroupID]struct{}, len(want))
 	for _, name := range want {
@@ -283,18 +268,13 @@ func (m *Memory) ensureGroupLocked(tenant domain.TenantID, name string, now time
 	return g, nil
 }
 
-// groupLocked resolves an ordinary group id, distinguishing "this id names
-// a clearance group" from "this id names nothing". The two refusals mean
-// different things to an operator, and conflating them would hide the tier
-// confusion that ErrGroupKindMismatch exists to report.
+// groupLocked resolves a group id, or reports ErrNotFound. It once
+// distinguished a clearance group from an id naming nothing, because a
+// tier confusion and a typo meant different things to an operator. With
+// one namespace left, existence is the whole question.
 func (m *Memory) groupLocked(id domain.GroupID) (domain.Group, error) {
 	if g, ok := m.groups[id]; ok {
 		return g, nil
-	}
-	if cg, err := domain.ParseClearanceGroupID(string(id)); err == nil {
-		if _, isClearance := m.clearanceGroups[cg]; isClearance {
-			return domain.Group{}, fmt.Errorf("%w: %s names a clearance group, which may never be referenced as a tier-1 group", domain.ErrGroupKindMismatch, id)
-		}
 	}
 	return domain.Group{}, fmt.Errorf("%w: group %s", domain.ErrNotFound, id)
 }
@@ -408,200 +388,6 @@ func (m *Memory) usableMembersLocked(ids []domain.PrincipalID, asOf time.Time) [
 	return out
 }
 
-// EnsureClearanceGroup implements Registry.
-func (m *Memory) EnsureClearanceGroup(ctx context.Context, act domain.MandatoryAct, tenant domain.TenantID, name string) (domain.ClearanceGroup, error) {
-	if err := ctx.Err(); err != nil {
-		return domain.ClearanceGroup{}, fmt.Errorf("%w: %w", domain.ErrUnavailable, err)
-	}
-	if err := RequireMandatoryAct(act); err != nil {
-		return domain.ClearanceGroup{}, err
-	}
-	if tenant == "" || name == "" {
-		return domain.ClearanceGroup{}, fmt.Errorf("%w: a clearance group needs a tenant and a non-empty name", domain.ErrConflict)
-	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	key := nameKey{tenant: tenant, name: name}
-	if id, ok := m.clearanceByName[key]; ok {
-		cg := m.clearanceGroups[id]
-		if cg.Channel != act.Channel() {
-			return domain.ClearanceGroup{}, ChannelMismatchError(cg, act)
-		}
-		return cg, nil
-	}
-
-	now := m.cfg.Clock.Now()
-	cg := domain.ClearanceGroup{
-		ID:        domain.NewClearanceGroupID(m.cfg.Clock),
-		TenantID:  tenant,
-		Name:      name,
-		Channel:   act.Channel(),
-		CreatedAt: now,
-	}
-	m.clearanceGroups[cg.ID] = cg
-	m.clearanceByName[key] = cg.ID
-	m.clearanceMembers[cg.ID] = make(map[domain.PrincipalID]struct{})
-	m.recordLocked(cg.ID, "", domain.ClearanceChangeCreated, act, now)
-	return cg, nil
-}
-
-// clearanceLocked resolves a clearance group id, distinguishing an
-// ordinary group's id (ErrGroupKindMismatch) from an id naming nothing
-// (ErrNotFound). The first is a tier confusion and the second is a typo,
-// and an operator needs to be told which.
-func (m *Memory) clearanceLocked(id domain.ClearanceGroupID) (domain.ClearanceGroup, error) {
-	if cg, ok := m.clearanceGroups[id]; ok {
-		return cg, nil
-	}
-	if _, isOrdinary := m.groups[domain.GroupID(id.String())]; isOrdinary {
-		return domain.ClearanceGroup{}, fmt.Errorf("%w: %s names an ordinary tier-1 group, which may never hold a clearance", domain.ErrGroupKindMismatch, id.String())
-	}
-	return domain.ClearanceGroup{}, fmt.Errorf("%w: clearance group %s", domain.ErrNotFound, id.String())
-}
-
-// AddClearanceGroupMember implements Registry.
-func (m *Memory) AddClearanceGroupMember(ctx context.Context, act domain.MandatoryAct, g domain.ClearanceGroupID, p domain.PrincipalID) error {
-	return m.changeClearanceMembership(ctx, act, g, p, domain.ClearanceChangeAdded)
-}
-
-// RemoveClearanceGroupMember implements Registry.
-func (m *Memory) RemoveClearanceGroupMember(ctx context.Context, act domain.MandatoryAct, g domain.ClearanceGroupID, p domain.PrincipalID) error {
-	return m.changeClearanceMembership(ctx, act, g, p, domain.ClearanceChangeRemoved)
-}
-
-// changeClearanceMembership is the one path into a clearance group's
-// membership, shared by the add and remove methods so neither can acquire
-// a weaker precondition than the other.
-//
-// The order of checks is the order of the refusals' severity: no witness,
-// then wrong channel, then wrong tier, then unknown group, then unknown or
-// deprovisioned principal. Nothing is recorded in the trail until every
-// check has passed, because a trail that mixed attempts with effects could
-// not be read as a list of who holds what.
-func (m *Memory) changeClearanceMembership(ctx context.Context, act domain.MandatoryAct, g domain.ClearanceGroupID, p domain.PrincipalID, kind domain.ClearanceChangeKind) error {
-	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("%w: %w", domain.ErrUnavailable, err)
-	}
-	if err := RequireMandatoryAct(act); err != nil {
-		return err
-	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	cg, err := m.clearanceLocked(g)
-	if err != nil {
-		return err
-	}
-	if cg.Channel != act.Channel() {
-		return ChannelMismatchError(cg, act)
-	}
-	principal, err := m.principalLocked(p)
-	if err != nil {
-		return err
-	}
-	if kind == domain.ClearanceChangeAdded && !principal.DeprovisionedAt.IsZero() {
-		return fmt.Errorf("%w: %s", domain.ErrPrincipalDeprovisioned, p)
-	}
-
-	if m.clearanceMembers[g] == nil {
-		m.clearanceMembers[g] = make(map[domain.PrincipalID]struct{})
-	}
-	switch kind {
-	case domain.ClearanceChangeAdded:
-		m.clearanceMembers[g][p] = struct{}{}
-	case domain.ClearanceChangeRemoved:
-		delete(m.clearanceMembers[g], p)
-	case domain.ClearanceChangeCreated:
-		return fmt.Errorf("%w: creation is recorded by EnsureClearanceGroup", domain.ErrConflict)
-	}
-	// Recorded even when the membership did not change: "someone
-	// re-asserted this clearance, and why" is itself the audit record,
-	// and so is a withdrawal of a clearance that was not held.
-	m.recordLocked(g, p, kind, act, m.cfg.Clock.Now())
-	return nil
-}
-
-// recordLocked appends one entry to a clearance group's trail. It must be
-// called with m.mu held. The trail is append-only; nothing in this package
-// deletes from it.
-func (m *Memory) recordLocked(g domain.ClearanceGroupID, p domain.PrincipalID, kind domain.ClearanceChangeKind, act domain.MandatoryAct, now time.Time) {
-	m.changes[g] = append(m.changes[g], domain.ClearanceChange{
-		ID:               domain.NewChangeID(m.cfg.Clock),
-		ClearanceGroupID: g,
-		PrincipalID:      p,
-		Kind:             kind,
-		Channel:          act.Channel(),
-		Actor:            act.Actor(),
-		Reason:           act.Reason(),
-		ActedAt:          act.At(),
-		RecordedAt:       now,
-	})
-}
-
-// ClearanceGroupsOf implements Registry.
-func (m *Memory) ClearanceGroupsOf(ctx context.Context, p domain.PrincipalID, asOf time.Time) ([]domain.ClearanceGroup, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("%w: %w", domain.ErrUnavailable, err)
-	}
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	if _, err := m.usableLocked(p, asOf); err != nil {
-		return nil, err
-	}
-	var out []domain.ClearanceGroup
-	for id, members := range m.clearanceMembers {
-		if _, ok := members[p]; ok {
-			out = append(out, m.clearanceGroups[id])
-		}
-	}
-	slices.SortFunc(out, func(a, b domain.ClearanceGroup) int {
-		if a.Name != b.Name {
-			if a.Name < b.Name {
-				return -1
-			}
-			return 1
-		}
-		return compareStrings(a.ID.String(), b.ID.String())
-	})
-	return out, nil
-}
-
-// ClearanceGroupMembers implements Registry.
-func (m *Memory) ClearanceGroupMembers(ctx context.Context, g domain.ClearanceGroupID, asOf time.Time) ([]domain.PrincipalID, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("%w: %w", domain.ErrUnavailable, err)
-	}
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	if _, err := m.clearanceLocked(g); err != nil {
-		return nil, err
-	}
-	ids := make([]domain.PrincipalID, 0, len(m.clearanceMembers[g]))
-	for id := range m.clearanceMembers[g] {
-		ids = append(ids, id)
-	}
-	return m.usableMembersLocked(ids, asOf), nil
-}
-
-// ClearanceGroupChanges implements Registry.
-func (m *Memory) ClearanceGroupChanges(ctx context.Context, g domain.ClearanceGroupID) ([]domain.ClearanceChange, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("%w: %w", domain.ErrUnavailable, err)
-	}
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	if _, err := m.clearanceLocked(g); err != nil {
-		return nil, err
-	}
-	return slices.Clone(m.changes[g]), nil
-}
-
 // DelegateAgentRun implements Registry.
 func (m *Memory) DelegateAgentRun(ctx context.Context, parent domain.PrincipalID, spec AgentRunSpec) (domain.Principal, error) {
 	if err := ctx.Err(); err != nil {
@@ -628,8 +414,8 @@ func (m *Memory) DelegateAgentRun(ctx context.Context, parent domain.PrincipalID
 	}
 
 	// The run inherits its parent's tenant and nothing else: no group
-	// membership and no clearance. Delegation is a discretionary act, and
-	// a discretionary act that conferred a clearance would breach A3.
+	// membership at all: a delegation grants what it names, never what
+	// its parent happens to hold.
 	run := domain.Principal{
 		ID:          domain.NewPrincipalID(m.cfg.Clock),
 		TenantID:    p.TenantID,
@@ -663,13 +449,6 @@ func (m *Memory) CollectExpiredAgentRuns(ctx context.Context, asOf time.Time) (i
 		delete(m.principals, id)
 		delete(m.byExternal, externalKey{tenant: p.TenantID, issuer: p.External.Issuer, subject: p.External.Subject})
 		for _, members := range m.members {
-			delete(members, id)
-		}
-		// Clearance *membership* rows go with the principal, since the
-		// principal no longer exists. The trail does not: it is
-		// append-only, and the record of who was cleared and why
-		// outlives the row it described.
-		for _, members := range m.clearanceMembers {
 			delete(members, id)
 		}
 		collected++

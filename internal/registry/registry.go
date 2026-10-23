@@ -1,6 +1,6 @@
 // Package registry is the identity half of `iam`: who exists, which groups
-// they are in, which clearance groups they are in, and whether they are
-// fresh enough to be used in a decision at all. Registry is the port; the
+// they are in, and whether they are fresh enough to be used in a decision
+// at all. Registry is the port; the
 // in-memory adapter in memory.go and the pgx adapter in pgregistry both
 // implement it, and both must pass RunRegistrySuite in suite.go unchanged.
 // That suite, not this file, is the authoritative description of the
@@ -46,17 +46,17 @@
 // claim-sourced rows only (domain.GroupSource), because an issuer is not
 // the authority for a membership an operator wrote by hand.
 //
-// # Fail-closed, three times
+// # Fail-closed, twice
 //
-//   - **A newly provisioned principal holds no clearances.** JIT grants
-//     identity, never clearance (design §8.3). This is structural, not
-//     remembered: every clearance write demands a domain.MandatoryAct,
-//     Claims carries neither an actor nor a channel, and MandatoryAct's
-//     fields are unexported — so the provisioning path cannot construct
-//     the witness it would need.
-//   - **A stale principal cannot have its memberships read.** GroupsOf and
-//     ClearanceGroupsOf return the principal's condition error rather than
-//     a membership list, so "staler than the bound forces a re-sync before
+//   - **A newly provisioned principal holds nothing.** JIT grants identity
+//     and never access: a principal exists, belongs to whatever groups its
+//     claims name, and reaches no resource until something grants it one.
+//     Default-deny is the whole of it, which is why this list is shorter
+//     than it was — the third entry described a mandatory tier that no
+//     longer exists.
+//   - **A stale principal cannot have its memberships read.** GroupsOf
+//     returns the principal's condition error rather than a membership
+//     list, so "staler than the bound forces a re-sync before
 //     the request proceeds" (design §8.1) is enforced by the registry
 //     instead of trusted to each caller's remembering to ask first.
 //   - **Deprovisioning denies immediately.** It is not a staleness
@@ -82,10 +82,12 @@
 // procedure and Predicate are all absent on purpose (design §14: the
 // identity registry is the one workstream wholly independent of the F1/F3
 // API questions). internal/idp defines the provisioning and key-source
-// ports with a stubbed transport; no network client lives here. What a
-// clearance group *holds* — the classification labels it satisfies — is
-// tier-2 state owned by the classification store, so this registry stops
-// at membership.
+// ports with a stubbed transport; no network client lives here.
+//
+// There is no mandatory tier and no clearance group, and that is a
+// decision rather than a gap: see the design document's "no deny
+// mechanism" anti-goal. An absolute is a key the deployment does not hold,
+// which is `escrow`.
 package registry
 
 import (
@@ -105,9 +107,9 @@ import (
 // internal/idp maps one issuer's claim names onto this struct, which is
 // what keeps a second IdP configuration plus tests rather than a refactor.
 //
-// There is no field here through which a clearance could arrive, and that
-// absence is the design (§8.3): a clearance is a mandatory fact and an
-// issuer's token is a discretionary channel.
+// There is no field here through which access could arrive. An issuer
+// says who someone is and which groups they are in; what they may reach is
+// granted here, never asserted by a token.
 //
 // The caller must have verified the token's signature and confirmed that
 // Subject.Issuer is one its tenant accepts, *before* calling — design
@@ -179,7 +181,7 @@ type AgentRunSpec struct {
 // Registry is the port every identity-registry adapter implements. See the
 // package doc comment for the invariants, and suite.go for the full
 // contract including the pinned behaviour of claim reconciliation,
-// staleness, deprovisioning and the tier separation.
+// staleness and deprovisioning.
 type Registry interface {
 	// UpsertFromClaims provisions or refreshes the principal named by
 	// c.Subject and reconciles its claim-sourced group membership to
@@ -189,14 +191,13 @@ type Registry interface {
 	// the same claims returns the same PrincipalID and leaves membership
 	// unchanged. The id is minted on first sight and never recomputed, so
 	// re-issuing or renaming the external identity — a new display name,
-	// a new email, the same (issuer, subject) — keeps every grant,
-	// clearance and audit row pointing at the same principal.
+	// a new email, the same (issuer, subject) — keeps every grant and
+	// every audit row pointing at the same principal.
 	//
 	// Reconciliation touches claim-sourced memberships only: a membership
 	// written through AddGroupMember survives a claim set that does not
 	// name it, and a claim-sourced membership whose name is gone from the
-	// claim set is removed. It never touches clearance groups, and it
-	// cannot: see the package doc comment.
+	// claim set is removed.
 	//
 	// It refuses a deprovisioned principal with
 	// domain.ErrPrincipalDeprovisioned rather than reviving it — a fresh
@@ -244,10 +245,10 @@ type Registry interface {
 	// removes. Adding an existing membership is idempotent. It refuses a
 	// deprovisioned principal.
 	//
-	// It refuses a GroupID that names a clearance group with
-	// domain.ErrGroupKindMismatch — the runtime half of the tier
-	// separation, for an id that arrived as text rather than as a typed
-	// value.
+	// It refuses a GroupID that names no group with domain.ErrNotFound.
+	// There is one namespace of groups, so a row or no row is the whole
+	// answer; the two-namespace probe this used to need went with the
+	// mandatory tier.
 	AddGroupMember(ctx context.Context, g domain.GroupID, p domain.PrincipalID) error
 
 	// RemoveGroupMember removes a membership regardless of its source.
@@ -276,68 +277,15 @@ type Registry interface {
 	// lost.
 	GroupMembers(ctx context.Context, g domain.GroupID, asOf time.Time) ([]domain.PrincipalID, error)
 
-	// EnsureClearanceGroup returns the tenant's clearance group of this
-	// name, creating it if it does not exist, and records the act in the
-	// group's trail.
-	//
-	// The clearance group's authoritative channel is act's channel, fixed
-	// at creation. A later call naming the same group through the other
-	// channel is refused with domain.ErrChannelMismatch, so a
-	// directory-synced compartment cannot be quietly diverged from the
-	// directory that owns it.
-	EnsureClearanceGroup(ctx context.Context, act domain.MandatoryAct, tenant domain.TenantID, name string) (domain.ClearanceGroup, error)
-
-	// AddClearanceGroupMember adds a principal to a clearance group and
-	// appends the act to the group's trail. Adding an existing membership
-	// is idempotent but still recorded, because "someone re-asserted this
-	// clearance, and why" is itself the audit record.
-	//
-	// It refuses a zero or invalid act with
-	// domain.ErrMandatoryChannelRequired, an act whose channel is not the
-	// group's with domain.ErrChannelMismatch, an id naming an ordinary
-	// group with domain.ErrGroupKindMismatch, and a deprovisioned
-	// principal with domain.ErrPrincipalDeprovisioned.
-	AddClearanceGroupMember(ctx context.Context, act domain.MandatoryAct, g domain.ClearanceGroupID, p domain.PrincipalID) error
-
-	// RemoveClearanceGroupMember removes a principal from a clearance
-	// group and appends the act to the group's trail. Removing an absent
-	// membership is not an error and is still recorded: an attempt to
-	// withdraw a clearance is as interesting as a successful one.
-	RemoveClearanceGroupMember(ctx context.Context, act domain.MandatoryAct, g domain.ClearanceGroupID, p domain.PrincipalID) error
-
-	// ClearanceGroupsOf returns the clearance groups this principal is a
-	// member of, as of asOf, ordered by name. Like GroupsOf it returns
-	// the principal's condition error when the principal is not usable.
-	//
-	// For a principal that has only ever been JIT-provisioned this is
-	// always empty, and that is design §8.3's fail-closed rule: identity
-	// is not clearance.
-	ClearanceGroupsOf(ctx context.Context, p domain.PrincipalID, asOf time.Time) ([]domain.ClearanceGroup, error)
-
-	// ClearanceGroupMembers returns the principals that are members of g
-	// and usable at asOf, ordered by principal id.
-	ClearanceGroupMembers(ctx context.Context, g domain.ClearanceGroupID, asOf time.Time) ([]domain.PrincipalID, error)
-
-	// ClearanceGroupChanges returns g's append-only membership trail in
-	// recorded order: every creation, addition and removal with the
-	// channel, actor, reason and instant that witnessed it.
-	//
-	// The trail is append-only. A removal appends an entry rather than
-	// deleting the addition, because a mandatory control whose history can
-	// be edited is not evidence of anything. The `audit` module owns audit
-	// storage; this is the registry's authoritative record of its own
-	// writes, which such a sink mirrors rather than replaces.
-	ClearanceGroupChanges(ctx context.Context, g domain.ClearanceGroupID) ([]domain.ClearanceChange, error)
-
 	// DelegateAgentRun creates an ephemeral agent-run principal with its
 	// own internal id, delegated from parent, expiring spec.TTL after the
 	// registry's clock reads now.
 	//
 	// The run is a first-class principal and not a flag on its parent, so
 	// audit and metering attribute per run (design §8.1, KGS §9.5). It
-	// inherits nothing: no group membership and — emphatically — no
-	// clearance. A delegation is a discretionary act, and a discretionary
-	// act that conferred a clearance would be anti-goal A3 breached.
+	// inherits nothing: no group membership at all. A delegation grants
+	// what it names and never what its parent happens to hold, so an agent
+	// run that should reach a resource is granted it explicitly.
 	//
 	// parent must be a usable user or service principal: an agent run
 	// cannot delegate a further agent run, because a chain of ephemeral
@@ -433,36 +381,4 @@ func NormalizeClaimGroups(groups []string) []string {
 	}
 	slices.Sort(out)
 	return out
-}
-
-// RequireMandatoryAct is the mandatory-channel gate every clearance write
-// passes through, in every adapter. A zero or invalid act is a refusal,
-// never a write that falls back to a discretionary path: design §8.3 gives
-// clearance membership no discretionary path at all.
-//
-// It lives here, exported, rather than being reimplemented per adapter,
-// because a security check written twice is a security check that can
-// differ in one place. domain.NewMandatoryAct already refuses to build an
-// invalid act; this re-checks the invariants at the boundary, since a
-// MandatoryAct can also arrive as the zero value from a caller that
-// ignored a constructor error.
-func RequireMandatoryAct(act domain.MandatoryAct) error {
-	if act.IsZero() {
-		return fmt.Errorf("%w: a clearance-group change needs a mandatory act witnessing its channel", domain.ErrMandatoryChannelRequired)
-	}
-	if !act.Channel().Valid() {
-		return fmt.Errorf("%w: unknown channel %q", domain.ErrMandatoryChannelRequired, act.Channel())
-	}
-	if act.Actor() == "" || act.Reason() == "" || act.At().IsZero() {
-		return fmt.Errorf("%w: the act must carry an actor, a reason and an instant", domain.ErrMandatoryChannelRequired)
-	}
-	return nil
-}
-
-// ChannelMismatchError is the refusal for an act arriving through a channel
-// that is not the clearance group's own. Shared for the same reason as
-// RequireMandatoryAct.
-func ChannelMismatchError(cg domain.ClearanceGroup, act domain.MandatoryAct) error {
-	return fmt.Errorf("%w: clearance group %q is administered through %q, not %q",
-		domain.ErrChannelMismatch, cg.Name, cg.Channel, act.Channel())
 }

@@ -66,7 +66,7 @@ func (k PrincipalKind) Valid() bool {
 // PrincipalID (design §8.1).
 //
 // Nothing downstream of the registry ever stores an ExternalSubject. A
-// grant, a clearance, an audit row and a metering record all reference the
+// grant, an audit row and a metering record all reference the
 // internal PrincipalID, so re-issuing a subject, renaming a user, or
 // moving them between issuers rewrites exactly one row here and no history
 // anywhere.
@@ -120,7 +120,7 @@ func validateExternalComponent(label, s string) error {
 	return nil
 }
 
-// Principal is one identity the registry holds. Grants, classifications,
+// Principal is one identity the registry holds. Grants,
 // audit chains and metering attribution reference ID and nothing else.
 type Principal struct {
 	// ID is the stable internal id. It is minted fresh and is never a

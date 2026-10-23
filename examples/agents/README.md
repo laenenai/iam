@@ -18,12 +18,17 @@ Two consequences, and **A1 is the one scenario in this whole corpus that
 runs entirely live** — every assertion in it is against the real registry
 today.
 
-**It inherits nothing.** No group membership and no clearance. A delegation
-is a discretionary act, and a discretionary act that conferred a clearance
-would be anti-goal A3 breached by construction. The scenario's parent holds
-`clearance:personal-pascal` and the run holds nothing. The registry also
-refuses a run delegating a further run, because a chain of ephemeral
+**It inherits nothing.** Not one group membership. A delegation grants
+nothing, so every grant that reaches a run has to be written for it, which
+is what makes per-run attribution true rather than nominal. The registry
+also refuses a run delegating a further run, because a chain of ephemeral
 principals has no attributable owner and `captoken` owns delegation depth.
+
+A1 used to carry two more claims: that the run inherited none of its
+parent's clearances, and that no discretionary operation could give it one.
+They went with the mandatory tier, and what they protected needs no
+protecting now — with grants the only mechanism, "it holds no group
+membership" carries the whole of "a delegation confers nothing".
 
 **Deprovisioning cascades, immediately.** The scenario deprovisions a user
 who has a live run, and asserts that *both* report deprovisioned and that
@@ -50,20 +55,25 @@ Its whole grant is one tuple:
 graph:world#writer@service:researcher
 ```
 
-A2's table has **two denials with deliberately different reasons**, and
-that is the content of the scenario:
+A2's table used to have **two denials with deliberately different
+reasons**, and that was the content of the scenario:
 
 ```
 service:researcher read fact:acme-invoice-total  → deny (classification: personal:pascal)
 service:researcher read fact:grocery-total       → deny (no-grant)
 ```
 
-The second is the one that matters. That fact is private but *unclassified*,
-so the mandatory gate has nothing to say about it, and the researcher is
-denied because no tuple reaches it. "No read permission on any private
-fact" is a property of the grants, not of the labels — a researcher whose
-denial depended on classification would read every household fact nobody
-thought to mark.
+The note on the second row said it was the one that mattered: that fact was
+private but *unclassified*, so the mandatory gate had nothing to say about
+it, and "no read permission on any private fact" is a property of the
+grants and not of the labels — a researcher whose denial depended on
+classification would read every household fact nobody thought to mark.
+
+That note is now the whole scenario. Both rows read `deny (no-grant)`, the
+contrast is gone, and nothing was weakened by losing it: the stronger of
+the two reasons was always the one that survived. **A2 is the scenario the
+no-deny decision improves**, and it is worth having one of those written
+down next to the ones it costs.
 
 The scenario's third denial is the household reading the world layer, which
 it has no grant on: a referent's `updated_at` reveals that somebody looked
@@ -84,19 +94,41 @@ MayReceive(fact:advice-content, allowlisted: [privileged])  → ok   (the pinned
 MayReceive(fact:filing-date,    allowlisted: [])            → ok   (carries no marking)
 ```
 
-The gate reads the **resolved** label set, not the content's own
+The gate reads the **resolved** marking set, not the content's own
 assignments, and that is leak channel #15: a consolidator that saw
 privileged evidence and emitted an observation must not have laundered the
 marking on the way out. So the derived observation is refused too, because
-its label set is the union over its derivation's inputs.
+its marking set is the union over its derivation's inputs.
 
-Note also that A3's fixture clears the extractor service through a
-*mandatory act* rather than a configuration flag. A pipeline that may see
-privileged content is a security decision, and the design gives that kind
-of decision exactly one channel.
+**This is the one place in the corpus a label still runs, and it is worth
+being precise about which work it does.** A marking is a *flow* label: it
+propagates through derivation as the union of its inputs, it gates egress
+at the provider port, and it decides nothing about any principal's access.
+That is the same answer `kgs` reached independently when it moved "what may
+a hosted model be shown?" out of authorization entirely and down to egress
+eligibility at its `LLMProvider` and `EmbeddingProvider` ports. It is why
+the allowlist survived the removal of the deny mechanism intact while the
+household's classifications did not: this was never a deny on a principal.
+
+**And it is the one place in the corpus where a leak channel got worse.**
+A3's fixture used to clear the extractor service through a *mandatory act*
+rather than a configuration flag, on the grounds that a pipeline which may
+see privileged content is a security decision. Sending content to a hosted
+model was therefore guarded twice: the allowlist decided what the provider
+could receive, and the mandatory gate decided what the pipeline principal
+could read in the first place, so a context assembled from facts the
+extractor could not read was impossible for two independent reasons.
+
+One of those is gone. The extractor is in the matter team because somebody
+shared the matter with it, which is an ordinary sharing decision, and the
+allowlist is now the only thing between privileged content and a
+third-party provider. A pipeline principal over-granted by a sharing
+mistake reaches content that only the allowlist then stops leaving. `kgs`
+recorded the same finding on its own side, and the scenario's last claim
+says so rather than leaving the arithmetic to a reader.
 
 ## Status
 
-**A1 is live.** A2 and A3 are pending on `Decide`; their tables are pinned
-against the corpus's reference procedure, and their provider-gate and
-label-set claims run today.
+**A1 is live.** A2 and A3 are pending on `Decide` and the tuple store;
+their tables are pinned against the corpus's reference procedure, and their
+provider-gate and marking-set claims run today.

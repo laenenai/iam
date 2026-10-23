@@ -36,11 +36,11 @@ func (s GroupSource) Valid() bool {
 	}
 }
 
-// Group is an ordinary, tier-1 group: a team, a workspace, or a
-// claim-derived role. Membership is discretionary — anyone who may share
-// may change it — which is exactly why a Group can never hold a clearance
-// (design §8.3) and why ClearanceGroup is a separate type over a separate
-// table.
+// Group is a group: a team, a workspace, or a claim-derived role.
+// Membership is discretionary — anyone who may share may change it. There
+// was once a second, mandatory kind of group whose membership no
+// discretionary operation could change; it went with the deny mechanism,
+// and this is the only kind of group left.
 //
 // Groups and their membership are rows rather than token claims, and that
 // is the whole reason identity lives in this module at all: design §9's

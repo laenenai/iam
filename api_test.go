@@ -40,7 +40,6 @@ var apiPackages = []string{
 	"examples",
 	"examples/scenario",
 	"examples/discretionary",
-	"examples/mandatory",
 	"examples/household",
 	"examples/agents",
 	"examples/unexpressible",

@@ -142,26 +142,31 @@ func WithLaterWrites(f Fixture) Fixture {
 	return out
 }
 
-// LabelsOf resolves one resource's classification set the way design §8.3
-// says the gate must: the labels assigned to the resource itself, plus
-// those on every ancestor in its ancestry closure — because "mark this
-// fileset privileged" must cover the documents inside it — plus the union
-// of the labels of every object it was derived from, transitively, because
-// a derived object carries the union of its inputs' classifications and
-// there is no read boundary at which that stops.
+// MarkingsOf resolves one resource's marking set: the markings assigned to
+// the resource itself, plus those on every ancestor in its ancestry
+// closure — because sealing an episode must cover the facts inside it —
+// plus the union of the markings of every object it was derived from,
+// transitively.
+//
+// Nothing here is an authorization input. A marking says what the content
+// *is*, not who may have it, and the decision procedure never calls this
+// function. What reads it is Readable, which answers "can anyone decrypt
+// this at all", and MayReceive, which is a consumer's egress gate.
 //
 // The derivation half is where this design departs from Foundry (§5a), and
-// it is why a pipeline cannot launder a classification by deriving.
-func LabelsOf(f Fixture, resource Ref) ([]string, error) {
-	labels, err := labelsOf(f, resource, 0)
+// it is why a pipeline cannot launder a marking by deriving: content
+// derived from sealed content is sealed, and a cipher does not care which
+// pipeline stage read it.
+func MarkingsOf(f Fixture, resource Ref) ([]string, error) {
+	markings, err := markingsOf(f, resource, 0)
 	if err != nil {
 		return nil, err
 	}
-	slices.Sort(labels)
-	return slices.Compact(labels), nil
+	slices.Sort(markings)
+	return slices.Compact(markings), nil
 }
 
-func labelsOf(f Fixture, resource Ref, depth int) ([]string, error) {
+func markingsOf(f Fixture, resource Ref, depth int) ([]string, error) {
 	if depth > maxDepth {
 		return nil, fmt.Errorf("derivation chain through %s exceeds depth %d", resource, maxDepth)
 	}
@@ -178,22 +183,8 @@ func labelsOf(f Fixture, resource Ref, depth int) ([]string, error) {
 		if !slices.Contains(scope, a.Resource.Object()) {
 			continue
 		}
-		c, ok := f.Classification(a.Label)
-		if !ok {
-			return nil, fmt.Errorf("resource %s carries undeclared label %q", a.Resource, a.Label)
-		}
-		// An attribute-scoped classification on an ancestor does not
-		// reach a descendant's unrelated attributes; it applies to the
-		// named attribute wherever the label lands.
-		if c.Attribute != "" && resource.Attribute != "" && c.Attribute != resource.Attribute {
-			continue
-		}
-		if c.Attribute != "" && resource.Attribute == "" {
-			// A whole-object decision is not gated by a classification
-			// scoped to one of its attributes. That is correct, and it is
-			// also precisely what makes finding F4 bite: the gate lets the
-			// row through and something else has to hide the column.
-			continue
+		if _, ok := f.Marking(a.Label); !ok {
+			return nil, fmt.Errorf("resource %s carries undeclared marking %q", a.Resource, a.Label)
 		}
 		out = append(out, a.Label)
 	}
@@ -203,7 +194,7 @@ func labelsOf(f Fixture, resource Ref, depth int) ([]string, error) {
 			continue
 		}
 		for _, in := range d.Inputs {
-			inherited, err := labelsOf(f, in, depth+1)
+			inherited, err := markingsOf(f, in, depth+1)
 			if err != nil {
 				return nil, err
 			}

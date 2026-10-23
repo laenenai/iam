@@ -120,7 +120,7 @@ func (c PrincipalCondition) Usable() bool { return c.State == PrincipalStateUsab
 //     membership may have changed since their token was issued, so past
 //     the bound the registry refuses until a fresh token re-syncs it. An
 //     agent run has no such state and no such token. It is delegated, not
-//     provisioned; it holds no groups and no clearances; and nothing
+//     provisioned; it holds no groups at all; and nothing
 //     could re-sync it, because there is no issuer to ask. Applying the
 //     bound to it would make every run longer than the bound fail halfway
 //     through with a refusal no caller could clear — a staleness check

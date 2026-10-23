@@ -19,10 +19,9 @@ WHERE kind = 'agent-run'
   AND expires_at <= $1::timestamptz
 `
 
-// Memberships go with the principal through ON DELETE CASCADE; the
-// clearance trail does not, because its principal_id is deliberately not a
-// foreign key — the record of what a run was cleared for must outlive the
-// run (see 00002_identity.sql).
+// Memberships go with the principal through ON DELETE CASCADE. Collection
+// is a sweep and never a precondition: an expired run is unusable from its
+// deadline, so a collector that never runs wastes rows and grants nothing.
 func (q *Queries) CollectExpiredAgentRuns(ctx context.Context, asOf time.Time) (int64, error) {
 	result, err := q.db.Exec(ctx, collectExpiredAgentRuns, asOf)
 	if err != nil {
@@ -57,8 +56,8 @@ type CreateAgentRunParams struct {
 }
 
 // The run inherits its parent's tenant and nothing else: no group
-// membership and no clearance. Delegation is a discretionary act, and a
-// discretionary act that conferred a clearance would breach anti-goal A3.
+// membership at all. Delegation is a discretionary act, and inheriting a
+// parent's grants through one would make audit attribution per run a lie.
 func (q *Queries) CreateAgentRun(ctx context.Context, arg CreateAgentRunParams) (IamPrincipal, error) {
 	row := q.db.QueryRow(ctx, createAgentRun,
 		arg.ID,

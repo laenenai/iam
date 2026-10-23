@@ -2,13 +2,31 @@
 // in, plus the harness that runs it.
 //
 // A scenario in this corpus is data, not a test function. It carries a
-// fixture — tenants, principals, ordinary groups, clearance groups,
-// containers and their containment edges, relation tuples, classifications
-// and their enforcement classes — and an expectation table of
-// (principal, action, resource) -> allow | deny in which every row names
-// the *reason*: which tuple granted it, which classification denied it. A
-// scenario that passes for the wrong reason is worse than one that fails,
-// so the harness matches the reason as well as the verdict.
+// fixture — tenants, principals, groups, containers and their containment
+// edges, relation tuples, and the markings that say a resource's content
+// is sealed rather than that some principal is refused it — plus an
+// expectation table of (principal, action, resource) -> allow | deny in
+// which every row names the *reason*: which tuple granted it, or that
+// nothing did. A scenario that passes for the wrong reason is worse than
+// one that fails, so the harness matches the reason as well as the
+// verdict.
+//
+// # There is no deny in this language, and the absence is the design
+//
+// An earlier version of this package had a second tier: classifications
+// on resources, clearances on principals, clearance groups administered
+// through a mandatory channel, and a ReasonClassification that a deny
+// could carry. All of it is gone. A deny administered by policy is only as
+// absolute as whoever administers the policy, so "this principal may never
+// see this" is expressed by never granting it, and an absolute that must
+// survive a future administrator is a key the deployment does not hold —
+// `escrow`, not a policy row. See the design document's "no deny
+// mechanism" anti-goal.
+//
+// One consequence belongs in the language rather than in a document.
+// Because the decision is now only the discretionary half, the whole
+// decision is a single SQL predicate: there is no live gate beside it that
+// a fragment would have to be conjoined with.
 //
 // # Why data and not tests
 //
@@ -23,14 +41,14 @@
 // # What runs today, and what is pending on what
 //
 // The identity half of every fixture is *materialized against a real
-// registry* — JIT provisioning, ordinary and clearance-group membership,
-// agent-run delegation, deprovisioning — so those assertions are live.
+// registry* — JIT provisioning, group membership, agent-run delegation,
+// deprovisioning — so those assertions are live.
 //
-// The tier-1 tuple store and the tier-2 classification store do not exist,
-// so expectation tables are evaluated by the reference decision procedure
-// in oracle.go. That oracle implements design §7.1's conjunction over
-// design §8.2's four permitted composition forms and nothing else: it
-// refuses, with ErrUnexpressible, anything outside §8.5's subset. It is a
+// The relation-tuple store does not exist, so expectation tables are
+// evaluated by the reference decision procedure in oracle.go. That oracle
+// implements design §8.2's four permitted composition forms and nothing
+// else: it refuses, with ErrUnexpressible, anything outside §8.5's subset.
+// It is a
 // test oracle and deliberately not an engine — its value is that it is the
 // restriction made executable, so a scenario the design cannot express
 // fails here rather than being argued about.
@@ -52,16 +70,17 @@ import (
 // Ref names one object in a fixture: a container, a resource, a role, a
 // group. The notation is the design's own — `document:x`, `folder:shared`,
 // `team:eng` — with an optional attribute suffix, `document:x.salary`, for
-// the attribute-scoped rules of design §8.3 and finding F4.
+// the attribute-granularity requirements of finding F4.
 type Ref struct {
 	// Kind is the registered resource kind, the part before the colon.
 	Kind string
 	// ID identifies the object within its kind.
 	ID string
 	// Attribute names a field of the object, or is empty for the whole
-	// object. An attribute-scoped reference is the finest granularity the
-	// design claims (§8.3's "over a named attribute or field of it") and
-	// the one finding F4 says a row predicate cannot enforce.
+	// object. It is the granularity finding F4 is about: a `WHERE`
+	// fragment hides rows, not columns, so whether an attribute-scoped
+	// restriction is enforceable at all is a property of the consumer's
+	// storage shape. See AttributeEnforceable.
 	Attribute string
 }
 
@@ -98,7 +117,7 @@ func (r Ref) String() string {
 }
 
 // Shape is how a resource kind's attributes are stored, which decides
-// whether an attribute-scoped classification can be enforced by a `WHERE`
+// whether an attribute-scoped restriction can be enforced by a `WHERE`
 // clause at all. This is finding F4 made a field.
 type Shape string
 
@@ -109,8 +128,8 @@ const (
 	// columns" (KGS §9.2).
 	ShapeRow Shape = "row"
 	// ShapeColumnar means the resource's attributes are columns of one
-	// row. An attribute-scoped classification over a columnar kind cannot
-	// be enforced by a row predicate — a `WHERE` clause hides rows, not
+	// row. An attribute-scoped restriction over a columnar kind cannot be
+	// enforced by a row predicate — a `WHERE` clause hides rows, not
 	// columns — which is finding F4. A CAS document is columnar.
 	ShapeColumnar Shape = "columnar"
 )
@@ -128,8 +147,8 @@ type Relation struct {
 	// Usersets permits form 2: the `kind#relation` shapes this relation
 	// accepts as a userset subject, such as `group#member` or
 	// `role#assignee`. A userset subject whose shape is not listed is a
-	// schema violation, which is how a clearance group is kept out of a
-	// tier-1 tuple by the lint as well as by the type system.
+	// schema violation, so a fixture cannot grant through a set the
+	// relation never said it would accept.
 	Usersets []string
 	// InheritFromParent permits form 3, tuple-to-userset inheritance
 	// (`viewer from parent`): the relation names on this object's parents
@@ -140,26 +159,32 @@ type Relation struct {
 	// confer this one.
 	Union []string
 
-	// Exclude is form 5, which does not exist. It is declarable only so
-	// that the corpus can hand the lint an exclusionary relation and
-	// assert the refusal, which is design §4/A3's "CI lints registered
-	// schemas and rejects any exclusion operator". No scenario outside
-	// examples/unexpressible may set it.
+	// Exclude is form 5, which does not exist and now never will. It is
+	// declarable only so that the corpus can hand the lint an
+	// exclusionary relation and assert the refusal, which is design
+	// §4/A3's "CI lints registered schemas and rejects any exclusion
+	// operator" — and which is no longer a restriction on where an
+	// absolute lives but the module's no-deny anti-goal itself. No
+	// scenario outside examples/unexpressible may set it.
 	Exclude []string
 	// AttributeCondition is a condition over resource attributes, which
 	// §8.5 also excludes. Declarable for the same reason as Exclude, and
-	// it is the shape finding F7's "may read Person but not salary"
-	// requirement arrives in.
+	// it is the shape findings F7 and F4 both arrive in: "may read Person
+	// but not salary".
 	AttributeCondition string
 }
 
 // ResourceKind is one registered object type: its relations, the actions
 // that map onto them, and the storage shape that decides whether an
-// attribute-scoped classification is enforceable.
+// attribute-scoped restriction is enforceable at all.
 type ResourceKind struct {
 	// Name is the kind, the part before the colon in a Ref.
 	Name string
 	// Shape is how the kind stores its attributes. See Shape.
+	//
+	// It is not an authorization input. It is what AttributeEnforceable
+	// reads, so finding F4 is a measured property of a fixture rather than
+	// a paragraph.
 	Shape Shape
 	// Relations are the kind's relation definitions.
 	Relations []Relation
@@ -270,46 +295,64 @@ func E(child, parent string) Edge {
 	return Edge{Child: R(child), Parent: R(parent), Kind: EdgeExplicit}
 }
 
-// EnforcementClass is design §7.3's one field: whether a classification is
-// enforced by policy, which an administrator administers, or by a key the
-// deployment does not hold.
+// EnforcementClass is how a marking is enforced. There are two values
+// because there are two tiers left: a key the deployment does not hold,
+// and nothing.
 type EnforcementClass string
 
 const (
-	// EnforcementPolicy means the classification is enforced by this
-	// module's decision procedure.
-	EnforcementPolicy EnforcementClass = "policy"
 	// EnforcementCrypto means the content is encrypted under a key the
 	// deployment does not hold (`keyring` + `escrow`). Decide may return
 	// allow for such a resource and the caller still cannot read it. The
 	// decision API and the enforcement tier are different things, which is
 	// what examples/household's will scenario exists to show.
 	EnforcementCrypto EnforcementClass = "crypto"
+	// EnforcementNone means the marking enforces nothing by itself. It is
+	// content metadata a consumer's own egress gate reads — KGS §9.5's
+	// model-provider allowlist is the only such gate in this corpus — and
+	// it is deliberately not an input to any decision.
+	//
+	// This is where the old `policy` class went, and the renaming is the
+	// whole no-deny decision expressed in one enum value: a label that
+	// refused a principal access was a deny administered by policy, which
+	// is the thing this design no longer has.
+	EnforcementNone EnforcementClass = "none"
 )
 
-// Classification is a label on resources; a principal satisfies it by
-// holding the matching clearance (design §8.3). It is mandatory: no tuple,
-// no owner and no sequence of discretionary operations can satisfy it.
-type Classification struct {
-	// Label is the classification's name, `personal:pascal`,
-	// `conflict:matter-1234`.
+// Marking is a label on a resource's *content*. Nothing in the decision
+// procedure reads one: Decide never consults a marking, and no marking can
+// refuse a principal something a grant gave them.
+//
+// Two things still need labels now that the mandatory tier is gone, and
+// they are the only two. Content sealed under a key the deployment does
+// not hold has to be distinguishable from content that is merely private,
+// so a consumer can tell a user *why* something is unreadable and so the
+// API can refuse a processing operation with a typed error rather than
+// failing obscurely later. And a consumer's egress gate needs to know what
+// content carries before it sends it to a model provider.
+//
+// There is no Attribute field, deliberately. An attribute-scoped *label*
+// was the shape of U4's old requirement — hide one column — and it is moot
+// now that labels do not decide anything. The underlying problem has not
+// moved: see AttributeEnforceable and finding F4.
+type Marking struct {
+	// Label is the marking's name, `will:pascal`, `privileged`.
 	Label string
 	// Enforcement is the enforcement class.
 	Enforcement EnforcementClass
-	// Attribute scopes the classification to one named attribute of the
-	// resources it is assigned to, or is empty for the whole resource.
-	Attribute string
 	// Why records the real-world rule the label encodes.
 	Why string
 }
 
-// Assignment attaches a classification to a resource. The gate resolves a
-// resource's label set over its ancestry closure and its derivation inputs
-// as well as its own assignments (design §8.3).
+// Assignment attaches a marking to a resource. A resource's marking set
+// resolves over its ancestry closure and its derivation inputs as well as
+// its own assignments: sealing an episode seals the facts inside it, and
+// content derived from sealed content is sealed, which for a cipher is a
+// fact rather than a policy.
 type Assignment struct {
-	// Resource is the object the label is attached to.
+	// Resource is the object the marking is attached to.
 	Resource Ref
-	// Label is the classification's label.
+	// Label is the marking's label.
 	Label string
 }
 
@@ -319,9 +362,10 @@ func AS(resource, label string) Assignment {
 }
 
 // Derivation declares that Output was derived from Inputs, so Output
-// carries the union of their classifications (design §8.3). A pipeline
-// cannot launder a classification by deriving, and unlike Foundry there is
-// no read boundary at which propagation stops.
+// carries the union of their markings. A pipeline cannot launder a marking
+// by deriving, and unlike Foundry there is no read boundary at which
+// propagation stops. For a crypto marking that is physics; for an egress
+// marking it is KGS leak channel #15.
 type Derivation struct {
 	// Output is the derived object.
 	Output Ref
@@ -347,9 +391,9 @@ type PrincipalSpec struct {
 	// part, which keeps fixture data terse.
 	Subject string
 	// ClaimGroups are the group names the issuer asserted. They are
-	// upserted into the registry on sight and are *ordinary* groups: a
-	// claim can never name a clearance group, and the mandatory scenarios
-	// prove it by trying.
+	// upserted into the registry on sight, because design §8.1's
+	// predicate has to join membership in SQL and a claim cannot be
+	// joined. A claim confers a group and never a grant.
 	ClaimGroups []string
 	// DelegatedBy names the parent principal for an agent run.
 	DelegatedBy string
@@ -362,8 +406,8 @@ type PrincipalSpec struct {
 	Role string
 }
 
-// GroupSpec is one ordinary, tier-1 group. Its membership is
-// discretionary: anybody who may share may change it.
+// GroupSpec is one group. Its membership is discretionary: anybody who may
+// share may change it, and there is no other kind of group.
 type GroupSpec struct {
 	// Name is the group object's name, `team:eng`.
 	Name string
@@ -372,37 +416,6 @@ type GroupSpec struct {
 	Members []string
 	// Note records what the group is.
 	Note string
-}
-
-// ClearanceGroupSpec is one clearance group: a mandatory object whose
-// membership moves only through a mandatory channel and which can never be
-// referenced in a tier-1 tuple (design §8.3).
-type ClearanceGroupSpec struct {
-	// Name is the clearance group's name. The corpus spells every one
-	// `clearance:...` so the lint can refuse a tuple naming one on sight.
-	Name string
-	// Channel is the mandatory channel that administers it, fixed at
-	// creation.
-	Channel iam.MandatoryChannel
-	// Members are the principal names the mandatory channel admitted.
-	Members []string
-	// Labels are the classification labels this group's members satisfy.
-	// This is tier-2 state that the identity registry deliberately does
-	// not hold — it belongs to the classification store, which does not
-	// exist yet — so in this corpus the membership is live and the label
-	// binding is fixture data.
-	Labels []string
-	// Reason is the mandatory act's reason, recorded in the group's trail.
-	Reason string
-}
-
-// DirectClearance is a clearance held by one principal rather than through
-// a clearance group. Design §8.3 permits both.
-type DirectClearance struct {
-	// Principal is the holder's fixture-local name.
-	Principal string
-	// Label is the classification satisfied.
-	Label string
 }
 
 // Fixture is the declarative world a scenario is decided against.
@@ -414,24 +427,23 @@ type Fixture struct {
 	Issuer string
 	// Kinds are the registered resource kinds and their relations.
 	Kinds []ResourceKind
-	// Principals, Groups and ClearanceGroups are the identity layer, and
-	// are materialized against a real registry.
-	Principals      []PrincipalSpec
-	Groups          []GroupSpec
-	ClearanceGroups []ClearanceGroupSpec
-	// DirectClearances are clearances held by a principal directly.
-	DirectClearances []DirectClearance
+	// Principals and Groups are the identity layer, and are materialized
+	// against a real registry.
+	Principals []PrincipalSpec
+	Groups     []GroupSpec
 	// Containment is the containment graph. Design §9.2 calls its
 	// transitive closure the ancestry closure.
 	Containment []Edge
-	// Tuples are the tier-1 grants.
+	// Tuples are the grants. They are the only thing that permits
+	// anything, and their absence is the only thing that refuses.
 	Tuples []Tuple
-	// Classifications are the tier-2 label definitions.
-	Classifications []Classification
-	// Assignments attach labels to resources.
+	// Markings are the content-label definitions. Nothing in the decision
+	// procedure reads them; see Marking.
+	Markings []Marking
+	// Assignments attach markings to resources.
 	Assignments []Assignment
-	// Derivations declare derived objects, whose label set is the union of
-	// their inputs'.
+	// Derivations declare derived objects, whose marking set is the union
+	// of their inputs'.
 	Derivations []Derivation
 	// Mentions record which facts reference which entities. KGS §7.3
 	// derives an entity's *existence* for a principal rather than giving
@@ -468,7 +480,7 @@ type LaterWrite struct {
 	// matters is a predicate-defined entity-set gaining a member because a
 	// fact was asserted.
 	AddEdges []Edge
-	// AddAssignments are classification assignments the write creates.
+	// AddAssignments are marking assignments the write creates.
 	AddAssignments []Assignment
 }
 
@@ -485,9 +497,10 @@ const (
 
 // ReasonKind names *why* a verdict came out the way it did. The harness
 // matches it, because a scenario that passes for the wrong reason is worse
-// than one that fails: a deny that should have come from a classification
-// and came instead from a missing grant would pass a verdict-only table
-// while the mandatory control was broken.
+// than one that fails: an allow that should have arrived by inheriting a
+// container and arrived instead through a union on the object itself would
+// pass a verdict-only table while the schema was wrong, and a consumer
+// debugging it would go looking for the wrong row.
 type ReasonKind string
 
 const (
@@ -503,17 +516,20 @@ const (
 	// ReasonUnion is form 4: another relation on the same object confers
 	// this one.
 	ReasonUnion ReasonKind = "union"
-	// ReasonNoGrant is a deny because no tuple reaches the principal. The
-	// everyday deny, and the default.
+	// ReasonNoGrant is a deny because no tuple reaches the principal. It
+	// is now the only deny the decision procedure can produce, and that
+	// is the no-deny anti-goal stated as an enumeration: nothing refuses
+	// except the absence of a grant.
 	ReasonNoGrant ReasonKind = "no-grant"
-	// ReasonClassification is a deny from the mandatory gate: the
-	// resource carries a classification the principal does not satisfy.
-	// No tuple can produce an allow against it.
-	ReasonClassification ReasonKind = "classification"
 	// ReasonPrincipalUnusable is a deny because the principal is
 	// deprovisioned, expired or staler than the deployment's bound. It is
-	// evaluated before either tier.
+	// evaluated before any grant is consulted, and it is a property of the
+	// principal rather than a rule about the resource.
 	ReasonPrincipalUnusable ReasonKind = "principal-unusable"
+
+	// There was a ReasonClassification here: a deny from the mandatory
+	// gate, which no tuple could produce an allow against. It went with
+	// the gate.
 )
 
 // Expectation is one row of the table: a principal, an action, a resource,
@@ -529,9 +545,9 @@ type Expectation struct {
 	Want Verdict
 	// Reason is the required reason kind.
 	Reason ReasonKind
-	// Because names the specific tuple or classification responsible, in
-	// the design's notation: `folder:shared#viewer@team:eng#member`, or
-	// `personal:pascal`. The harness compares it exactly, so a scenario
+	// Because names the specific tuple responsible, in the design's
+	// notation: `folder:shared#viewer@team:eng#member`. The harness
+	// compares it exactly, so a scenario
 	// cannot drift into passing through a different grant than the one it
 	// documents. Empty means "do not check which one", which is only
 	// acceptable for ReasonNoGrant.
@@ -601,9 +617,9 @@ type Scenario struct {
 	// Claims are the structural assertions that run today with no
 	// decision API: that a relation fits §8.5's subset or is rejected by
 	// the lint, that sharing a container costs one tuple per hop, that a
-	// resource has exactly one containment path or several, that a
-	// classification is enforceable by a row predicate, that an ancestry
-	// closure is stable under a later data write.
+	// resource has exactly one containment path or several, that an
+	// attribute-scoped restriction is enforceable by a row predicate, that
+	// an ancestry closure is stable under a later data write.
 	Claims []Claim
 }
 
@@ -655,8 +671,8 @@ func (s Scenario) Validate() error {
 		}
 		if !demonstrated {
 			return fmt.Errorf("scenario %s: an unexpressible scenario must carry a claim that demonstrates the gap "+
-				"(one of schema-rejected, no-direct-path, row-enforceable, stable-under-write); without one the "+
-				"claim that the design cannot do this is prose rather than a test", s.ID)
+				"(one of schema-rejected, no-direct-path, attribute-enforceable, stable-under-write); without one "+
+				"the claim that the design cannot do this is prose rather than a test", s.ID)
 		}
 	}
 	return s.Fixture.validateAgainst(s)
@@ -670,20 +686,13 @@ func (f Fixture) validateAgainst(s Scenario) error {
 		}
 		names[p.Name] = true
 	}
-	labels := make(map[string]bool, len(f.Classifications))
-	for _, c := range f.Classifications {
-		labels[c.Label] = true
+	markings := make(map[string]bool, len(f.Markings))
+	for _, m := range f.Markings {
+		markings[m.Label] = true
 	}
 	for _, a := range f.Assignments {
-		if !labels[a.Label] {
-			return fmt.Errorf("scenario %s: assignment of %q names no declared classification", s.ID, a.Label)
-		}
-	}
-	for _, cg := range f.ClearanceGroups {
-		for _, l := range cg.Labels {
-			if !labels[l] {
-				return fmt.Errorf("scenario %s: clearance group %s satisfies undeclared label %q", s.ID, cg.Name, l)
-			}
+		if !markings[a.Label] {
+			return fmt.Errorf("scenario %s: assignment of %q names no declared marking", s.ID, a.Label)
 		}
 	}
 	for i, e := range s.Expect {
@@ -697,7 +706,7 @@ func (f Fixture) validateAgainst(s Scenario) error {
 			return fmt.Errorf("scenario %s: expectation %d has verdict %q", s.ID, i, e.Want)
 		}
 		if e.Because == "" && e.Reason != ReasonNoGrant && e.Reason != ReasonPrincipalUnusable {
-			return fmt.Errorf("scenario %s: expectation %d must name the tuple or classification responsible", s.ID, i)
+			return fmt.Errorf("scenario %s: expectation %d must name the tuple responsible", s.ID, i)
 		}
 	}
 	return nil
@@ -708,12 +717,10 @@ func (f Fixture) validateAgainst(s Scenario) error {
 // carry at least one, so that what it says cannot be done is shown by code
 // that runs rather than asserted in a comment.
 var gapClaims = map[ClaimKind]bool{
-	ClaimSchemaRejected:      true,
-	ClaimNoDirectPath:        true,
-	ClaimRowEnforceable:      true,
-	ClaimStableUnderWrite:    true,
-	ClaimAbsoluteHasNoLift:   true,
-	ClaimAnyActorMayClassify: true,
+	ClaimSchemaRejected:       true,
+	ClaimNoDirectPath:         true,
+	ClaimAttributeEnforceable: true,
+	ClaimStableUnderWrite:     true,
 }
 
 // Unreachable returns the expectation rows the design cannot deliver.
@@ -751,14 +758,14 @@ func (f Fixture) Relation(kind, relation string) (Relation, bool) {
 	return Relation{}, false
 }
 
-// Classification returns the named label definition, or false.
-func (f Fixture) Classification(label string) (Classification, bool) {
-	for _, c := range f.Classifications {
-		if c.Label == label {
-			return c, true
+// Marking returns the named marking definition, or false.
+func (f Fixture) Marking(label string) (Marking, bool) {
+	for _, m := range f.Markings {
+		if m.Label == label {
+			return m, true
 		}
 	}
-	return Classification{}, false
+	return Marking{}, false
 }
 
 // Principal returns the named principal spec, or false.

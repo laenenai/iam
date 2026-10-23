@@ -2,15 +2,29 @@
 
 The everyday layer: the one people click. Somebody shares a folder, adds a
 colleague to a team, sends a link, hands a project over. Design §7 calls it
-tier 1 and the tier table says it "survives nothing in particular" — it is
-shareable and revocable, and that is the whole point of it. Everything here
-is governed by design §8.2, which permits exactly four composition forms,
-and §8.5, which explains why four.
+the discretionary tier and the tier table says it "survives nothing in
+particular" — it is shareable and revocable, and that is the whole point of
+it. Everything here is governed by design §8.2, which permits exactly four
+composition forms, and §8.5, which explains why four.
 
-Nothing in this directory can keep anybody out. If you are looking for
-"this person must never see this", you want [../mandatory](../mandatory) —
-and if you reach for an exclusion operator here, CI will reject your schema
-and tell you so.
+**It is also now the only policy layer there is.** This file used to say
+"nothing in this directory can keep anybody out — if you are looking for
+'this person must never see this', you want ../mandatory". That directory
+is deleted. There is no deny mechanism, so what keeps people out is
+default-deny: a resource nobody granted is a resource nobody reaches.
+
+Two consequences for a reader arriving with a requirement:
+
+- A restriction is a grant you do not write. That is liftable by anybody
+  who may share, which for a private letter is correct and for a legal
+  ethical wall is weaker than the design used to claim. **D8** is the wall,
+  it lives in this directory now, and it says so.
+- An absolute that must survive a future administrator is a key the
+  deployment does not hold — `escrow`, and [H4](../household/) is what it
+  looks like. Reaching for an exclusion operator here still gets your
+  schema rejected, and the refusal now names `escrow` rather than a
+  classification mechanism, because there is no classification mechanism to
+  name.
 
 ## The four forms, and what each is for
 
@@ -87,12 +101,17 @@ relationship and does not interpret caveats. Note where the tuple goes — on
 the document, not the folder — because the shape of the share is the shape
 of the tuple, and inheritance goes down.
 
-**An ownership transfer** (D6) is a tuple write, so it carries everything
-discretionary and nothing mandatory. The new owner of a classified folder
-is an owner who cannot read it. That is correct, initially surprising, and
-the live claim in the scenario is that becoming the owner gave her no
-clearance — because there is no API that grants one as a side effect of
-sharing.
+**An ownership transfer** (D6) is a tuple write, so it carries everything,
+because grants are all there is to carry. That used to be half the story:
+the folder also carried a classification, and the new owner of a classified
+folder was an owner who could not read it — correct, and initially
+surprising.
+
+The document the previous owner keeps is now kept by being outside the
+container he handed over, and the scenario asserts that with a
+`path-count` claim rather than describing it. One added containment edge
+from the transferred folder would move it, which is why the structural
+fact is a claim and not a comment.
 
 **Navigational visibility** (D7) is the one that is easy to get wrong. Eva
 may read one document four levels down; she has to be able to find it, and
@@ -105,11 +124,37 @@ reading the ancestor's other children.
 **Read D7 and then read [U3](../UNEXPRESSIBLE.md).** D7's claim passes
 because its containment is a tree. Add one kgs entity-set as a second
 container and `DirectPath` has nothing to return. "Only the direct path" is
-exact in a tree and undefined in a DAG, and kgs needs the DAG.
+exact in a tree and undefined in a DAG, and kgs needs the DAG. That
+question matters more than it did: D8 uses `visible-set` as part of how a
+screen is asserted, so what `visible_below` means in a DAG is no longer
+only about finding things.
+
+**The legal ethical wall** (D8) is the old M5, which the design called "the
+feature the whole module exists for". It is in this directory because it
+has no mechanism of its own any more:
+
+```
+folder:firm-wide#viewer@team:all-timekeepers#member   ← generous, and real
+folder:matter-1234#owner@team:matter-1234#member      ← the matter's own grant
+
+folder:matter-1234 is NOT contained by folder:firm-wide   ← half the screen
+nothing names user:eve on folder:matter-1234              ← the other half
+```
+
+Both halves are absences, and the scenario asserts both: a `path-count`
+claim on the matter document, so an added containment edge fails a test
+rather than opening a wall, and a `visible-set` claim on the screened
+associate, so she cannot even learn the matter exists.
+
+What it does not assert, and cannot, is that the screen stays shut. Any
+principal who may share the matter can share it tomorrow. A screen that
+must survive a future administrator, an operator or a subpoena is content
+under a key the deployment does not hold, and the scenario's prose says
+that rather than leaving a reader to infer it.
 
 ## Status
 
-All seven are **pending** on the decision API: their expectation tables are
+All eight are **pending** on the decision API: their expectation tables are
 evaluated by the corpus's reference procedure, which pins what `Decide`
-must answer without being evidence that it does. Their fixtures'
-identity layers and all their structural claims run live.
+must answer without being evidence that it does. Their fixtures' identity
+layers and all their structural claims run live.
