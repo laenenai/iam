@@ -14,30 +14,23 @@
 # api.txt tripwire in scenario/pending.go, which fails automatically, and
 # this file, which makes every change to the set a reviewed diff.
 
-ID  STATUS         WAITING ON                             SCENARIO
-A1  live           -                                      A user delegates to an agent run; the run is its own principal; deprovisioning cascades
-A2  pending        ClassificationStore+Decide+TupleStore  The researcher: world-layer write, and no read permission on any private fact
-A3  pending        ClassificationStore+Decide+Derivation  Marking-aware model access: a provider not allowlisted for `privileged` never receives it
-D1  pending        Decide+TupleStore                      Google-Drive-style folder share inherits down at one tuple per hop
-D2  pending        Decide+TupleStore                      Several levels of nested containers, still one tuple
-D3  pending        Decide+TupleStore                      A workspace with roles, where adding a resource type adds no roles
-D4  pending        Decide+TupleStore                      Grant to a team as a userset; a membership change takes effect with no re-grant
-D5  pending        Decide+TupleStore                      Link sharing: the subject is a capability token's bearer identity
-D6  pending        ClassificationStore+Decide+TupleStore  Ownership transfer carries the grants and not the clearances
-D7  pending        TupleStore+VisibleBelow                Bottom-up navigational visibility: the path to it, and only that path
-H1  pending        ClassificationStore+Decide+TupleStore  Pascal's personal invoice: she cannot see the invoice, the supplier, the total or the goods
-H2  pending        ClassificationStore+Decide+TupleStore  She uploads an invoice from the same supplier and learns nothing about his
-H3  pending        Decide+TupleStore                      The daughter's school document yields an entity both parents can read
-H4  pending        ClassificationStore+Decide             The will: Decide may return allow and the content is still unreadable
-M1  pending        ClassificationStore+Decide+TupleStore  The legal ethical wall: a firm-wide grant cannot defeat a conflict screen
-M2  pending        ClassificationStore+Decide+TupleStore  Need-to-know, the positive form: restrict a matter to a named team
-M3  pending        ClassificationStore+Decide+TupleStore  `Everyone except Bob`, as a clearance group that does not contain Bob
-M4  pending        ClassificationStore+Decide             A new joiner holds no clearances and sees nothing classified
-M5  pending        ClassificationStore+Decide+TupleStore  A project admin, an owner and a group admin each attempt the gate; all fail
-M6  pending        ClassificationStore+Decide+Derivation  A pipeline cannot launder a classification by deriving
-U1  unexpressible  F7 (ontology scope)                    `May read Person entities but not salary facts` cannot be written at all
-U2  unexpressible  F7 (classification workaround)         `Use a classification` turns `don't show her the salary` into an absolute nobody can lift
-U3  unexpressible  F3 (DAG containment)                   Containment is a DAG once entity-sets are involved, so `only the direct path` names nothing
-U4  unexpressible  F4 (attribute scope vs row predicate)  An attribute-scoped classification on a columnar resource cannot be enforced by a row predicate
-U5  unexpressible  F7 (predicate-defined sets) + F3       A predicate-defined entity-set makes authorization a function of data a later write changes
-U6  unexpressible  §16 Q2 (who may classify)              Nothing checks whether the actor on a mandatory act may classify at all
+ID  STATUS         WAITING ON                                   SCENARIO
+A1  live           -                                            A user delegates to an agent run; the run is its own principal; deprovisioning cascades
+A2  pending        Decide+TupleStore                            The researcher: world-layer write, and no read permission on any private fact
+A3  pending        Decide+TupleStore                            Marking-aware model access: a provider not allowlisted for `privileged` never receives it
+D1  pending        Decide+TupleStore                            Google-Drive-style folder share inherits down at one tuple per hop
+D2  pending        Decide+TupleStore                            Several levels of nested containers, still one tuple
+D3  pending        Decide+TupleStore                            A workspace with roles, where adding a resource type adds no roles
+D4  pending        Decide+TupleStore                            Grant to a team as a userset; a membership change takes effect with no re-grant
+D5  pending        Decide+TupleStore                            Link sharing: the subject is a capability token's bearer identity
+D6  pending        Decide+TupleStore                            Ownership transfer carries everything, because grants are all there is to carry
+D7  pending        TupleStore+VisibleBelow                      Bottom-up navigational visibility: the path to it, and only that path
+D8  pending        Decide+TupleStore+VisibleBelow               The legal ethical wall is a grant nobody wrote, and that is all it is now
+H1  pending        Decide+TupleStore                            Pascal's personal invoice stays his because nobody granted it to her
+H2  pending        Decide+TupleStore                            She uploads an invoice from the same supplier and learns nothing about his
+H3  pending        Decide+TupleStore                            The daughter's school document yields an entity both parents can read
+H4  pending        Decide+TupleStore                            The will: Decide returns allow and the content is still unreadable
+U1  unexpressible  F7 (ontology scope) + F4                     `May read Person entities but not salary facts` cannot be written at all
+U3  unexpressible  F3 (DAG containment)                         Containment is a DAG once entity-sets are involved, so `only the direct path` names nothing
+U4  unexpressible  F4 (attribute granularity vs row predicate)  An attribute-scoped restriction cannot be enforced by a row predicate, whatever tier it is written in
+U5  unexpressible  F7 (predicate-defined sets) + F3             A predicate-defined entity-set makes authorization a function of data a later write changes

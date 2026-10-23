@@ -11,6 +11,15 @@
 // this corpus that is evidence about `iam` rather than about the corpus's
 // own oracle.
 //
+// The third scenario is the one place in the corpus where a label still
+// does work, and it is worth being precise about which work. A marking
+// allowlist is an *egress* constraint a consumer's pipeline applies to a
+// provider: it decides what content may leave for a third party, and it
+// refuses no principal anything. That is why it survived the removal of
+// the deny mechanism unchanged while the household's classifications did
+// not — what was removed was a policy deny on a principal's access, which
+// this never was.
+//
 // See README.md in this directory.
 package agents
 
@@ -70,13 +79,6 @@ func agentKinds() []scenario.ResourceKind {
 	}
 }
 
-func securityService() scenario.PrincipalSpec {
-	return scenario.PrincipalSpec{
-		Name: "service:security", Kind: iam.PrincipalKindService,
-		Role: "performs the fixture's mandatory acts",
-	}
-}
-
 // Scenarios returns the agent use cases.
 func Scenarios() []scenario.Scenario {
 	return []scenario.Scenario{
@@ -96,11 +98,17 @@ func delegationAndCascade() scenario.Scenario {
 			parent, because audit and metering must attribute per run and KGS §9.5
 			depends on being able to ask "which agent run, acting for which user,
 			under which grant, read this privileged fact". Two consequences are
-			tested here. The run inherits nothing: no group membership and no
-			clearance, because a delegation is a discretionary act and a
-			discretionary act that conferred a clearance would be anti-goal A3
-			breached. And when the user is deprovisioned, the run dies with them
-			immediately, through the deny epoch rather than at the next refresh.
+			tested here. The run inherits nothing: not one group membership, so
+			every grant that reaches it has to be written for it, which is what
+			makes per-run attribution true rather than nominal. And when the user
+			is deprovisioned, the run dies with them immediately, through the deny
+			epoch rather than at the next refresh.
+
+			There were two more claims on this scenario, asserting that the run
+			inherited none of its parent's clearances and that no discretionary
+			operation could give it one. They went with the mandatory tier, and
+			what they protected needs no protecting now: a principal holds exactly
+			what has been granted to it, and a delegation grants nothing.
 
 			This scenario is entirely live. It carries no expectation table because
 			everything it asserts runs against the real registry today.`,
@@ -133,41 +141,25 @@ func delegationAndCascade() scenario.Scenario {
 					DelegatedBy: "user:quentin",
 					Role:        "his run, which must stop being usable the instant he is deprovisioned",
 				},
-				securityService(),
 			},
 			Groups: []scenario.GroupSpec{
 				{Name: "group:household", Members: []string{"user:pascal", "user:quentin"}},
-			},
-			ClearanceGroups: []scenario.ClearanceGroupSpec{
-				{
-					Name: "clearance:personal-pascal", Channel: iam.MandatoryChannelClassify,
-					Members: []string{"user:pascal"}, Labels: []string{"personal:pascal"},
-					Reason: "his own records",
-				},
-			},
-			Classifications: []scenario.Classification{
-				{Label: "personal:pascal", Enforcement: scenario.EnforcementPolicy, Why: "his own records"},
 			},
 		},
 		Claims: []scenario.Claim{
 			scenario.C(scenario.ClaimLiveGroups, "agent-run:ingest-7f3a", "",
 				"the run inherits none of its parent's group membership. It is a principal, not a "+
-					"view of one, so a grant to the household does not reach the run"),
-			scenario.C(scenario.ClaimLiveClearances, "agent-run:ingest-7f3a", "",
-				"and none of its parent's clearances, which is the A3-critical half: the parent holds "+
-					"personal:pascal and the run, created by a discretionary act, holds nothing"),
-			scenario.C(scenario.ClaimLiveClearances, "user:pascal", "clearance:personal-pascal",
-				"while the parent's own clearance is unaffected by having delegated"),
+					"view of one, so a grant to the household does not reach the run — and with "+
+					"grants the only mechanism there is, that one fact now carries the whole of "+
+					"`a delegation confers nothing`"),
+			scenario.C(scenario.ClaimLiveGroups, "user:pascal", "group:household",
+				"while the parent's own membership is unaffected by having delegated"),
 			scenario.C(scenario.ClaimPrincipalUnusable, "user:quentin", "deprovisioned",
 				"deprovisioning denies immediately and unconditionally: not at the next sync, not when "+
 					"the token expires, and no re-sync clears it"),
 			scenario.C(scenario.ClaimPrincipalUnusable, "agent-run:ingest-9c21", "deprovisioned",
 				"the cascade. His run reports deprovisioned too, in the same write, so there is no "+
 					"window in which an orphaned run outlives the identity that authorized it"),
-			scenario.C(scenario.ClaimNoClearanceFromDiscretion, "agent-run:ingest-7f3a", "",
-				"and no discretionary operation gives the run a clearance either — including delegating "+
-					"a further run from the cleared parent, which the registry refuses outright because "+
-					"a chain of ephemeral principals has no attributable owner"),
 		},
 	}
 }
@@ -183,14 +175,26 @@ func theResearcher() scenario.Scenario {
 			was a potential collision, then the researcher having run would itself
 			reveal a collision. KGS §10.5 states its permissions in one sentence:
 			"it holds no read permission on private facts; it receives a normalized
-			identifier and returns public data." This scenario is that sentence as a
-			table, and the two denials below have deliberately different reasons —
-			one classified fact denied by the gate, one ordinary private fact denied
-			because no tuple reaches it. A researcher that could read unclassified
-			private facts would satisfy the letter of the rule and break it.`,
+			identifier and returns public data." This scenario is that sentence as
+			a table.
+
+			It used to make its point through a contrast: two denials with
+			deliberately different reasons, one classified fact refused by the
+			mandatory gate and one ordinary private fact refused because no tuple
+			reached it, with a note saying that the second was the row that
+			mattered most — because "no read permission on any private fact" is a
+			property of the grants and not of the labels, and a researcher whose
+			denial depended on classification would read every household fact
+			nobody thought to mark.
+
+			That note is now the whole scenario. Both denials are no-grant, the
+			contrast is gone, and nothing was weakened by losing it: the stronger
+			of the two reasons was always the one that survived. This is the
+			scenario the no-deny decision improves rather than costs, and it is
+			worth having one of those written down.`,
 		Governs:   []string{"KGS §10.5", "KGS §11.4", "KGS §8.5 #10", "§8.1 service principals"},
 		Status:    scenario.StatusPending,
-		PendingOn: []scenario.Capability{scenario.CapDecide, scenario.CapTupleStore, scenario.CapClassificationStore},
+		PendingOn: []scenario.Capability{scenario.CapDecide, scenario.CapTupleStore},
 		Fixture: scenario.Fixture{
 			Tenant: "household",
 			Kinds:  agentKinds(),
@@ -204,17 +208,9 @@ func theResearcher() scenario.Scenario {
 					ClaimGroups: []string{"group:household"},
 					Role:        "owns the household graph",
 				},
-				securityService(),
 			},
 			Groups: []scenario.GroupSpec{
 				{Name: "group:household", Members: []string{"user:pascal"}},
-			},
-			ClearanceGroups: []scenario.ClearanceGroupSpec{
-				{
-					Name: "clearance:personal-pascal", Channel: iam.MandatoryChannelClassify,
-					Members: []string{"user:pascal"}, Labels: []string{"personal:pascal"},
-					Reason: "his own records",
-				},
 			},
 			Containment: []scenario.Edge{
 				scenario.E("referent:acme-bv", "graph:world"),
@@ -224,10 +220,6 @@ func theResearcher() scenario.Scenario {
 				scenario.E("episode:grocery-receipt", "graph:household"),
 				scenario.E("fact:grocery-total", "episode:grocery-receipt"),
 			},
-			Classifications: []scenario.Classification{
-				{Label: "personal:pascal", Enforcement: scenario.EnforcementPolicy, Why: "his own records"},
-			},
-			Assignments: []scenario.Assignment{scenario.AS("episode:invoice-acme", "personal:pascal")},
 			Tuples: []scenario.Tuple{
 				{
 					Object: scenario.R("graph:world"), Relation: "writer",
@@ -238,7 +230,9 @@ func theResearcher() scenario.Scenario {
 				{
 					Object: scenario.R("graph:household"), Relation: "viewer",
 					Subject: scenario.US("group:household", "member"),
-					Note:    "the household's own grant, which does not name the researcher",
+					Note: "the household's own grant, which does not name the researcher. Note that " +
+						"this one is still graph-wide: there is nothing private inside it in this " +
+						"fixture, so H1's per-episode shape is not needed here",
 				},
 			},
 		},
@@ -260,17 +254,17 @@ func theResearcher() scenario.Scenario {
 			},
 			{
 				Principal: "service:researcher", Action: "read", Resource: scenario.R("fact:acme-invoice-total"),
-				Want: scenario.Deny, Reason: scenario.ReasonClassification, Because: "personal:pascal",
-				Note: "the classified household fact. Denied by the gate before any grant is consulted",
+				Want: scenario.Deny, Reason: scenario.ReasonNoGrant,
+				Note: "the household fact that used to be classified. It is refused for the reason " +
+					"the next row was always refused for, which is the stronger of the two",
 			},
 			{
 				Principal: "service:researcher", Action: "read", Resource: scenario.R("fact:grocery-total"),
 				Want: scenario.Deny, Reason: scenario.ReasonNoGrant,
-				Note: "the row that matters most. This fact is private but *unclassified*, so the " +
-					"mandatory gate has nothing to say about it, and the researcher is denied because " +
-					"no tuple reaches it. `No read permission on any private fact` is a property of the " +
-					"grants, not of the labels — a researcher whose denial depended on classification " +
-					"would read every household fact nobody thought to mark",
+				Note: "and the fact nobody ever thought to mark is refused identically. That the two " +
+					"rows are now indistinguishable is the point: the researcher's isolation is a " +
+					"property of which grants exist, so there is no set of unmarked facts it can " +
+					"reach by somebody having forgotten something",
 			},
 			{
 				Principal: "user:pascal", Action: "read", Resource: scenario.R("referent:acme-bv"),
@@ -282,12 +276,13 @@ func theResearcher() scenario.Scenario {
 		},
 		Claims: []scenario.Claim{
 			scenario.C(scenario.ClaimSchemaAccepted, "referent", "", ""),
-			scenario.C(scenario.ClaimLiveClearances, "service:researcher", "",
-				"against the real registry: the researcher holds no clearance, so even a future "+
-					"classification cannot be satisfied by it"),
-			scenario.C(scenario.ClaimNoClearanceFromDiscretion, "service:researcher", "",
-				"and no discretionary operation gives it one. A service principal is not a privileged "+
-					"principal; it is a principal with a different kind"),
+			scenario.C(scenario.ClaimLiveGroups, "service:researcher", "",
+				"against the real registry: the researcher is in no group, so no grant written to a "+
+					"group reaches it. A service principal is not a privileged principal; it is a "+
+					"principal with a different kind"),
+			scenario.C(scenario.ClaimMarkingSet, "fact:acme-invoice-total", "",
+				"and nothing in this fixture is marked at all, which is the whole of what changed: "+
+					"the researcher's isolation never needed a label"),
 			scenario.C(scenario.ClaimTuplesPerHop, "2", "8",
 				"two tuples, two graphs, eight objects — and the researcher's reach is two of the eight"),
 		},
@@ -298,50 +293,65 @@ func markingAwareModelAccess() scenario.Scenario {
 	return scenario.Scenario{
 		ID:    "A3",
 		Title: "Marking-aware model access: a provider not allowlisted for `privileged` never receives it",
-		Models: `During ingest kgs sends content to a language model, and that model is a
-			principal whose provider is a trust boundary. KGS §9.5 takes Palantir's
-			AIP marking allowlists for this: a provider profile declares which
-			markings it may receive, a provider not allowlisted for privileged never
-			receives privileged content, and the pipeline fails closed with a typed
-			error rather than degrading. The second half is leak channel #15 and it
-			is why the gate reads the *resolved* label set rather than the content's
-			own assignments: a consolidator that saw privileged evidence and emitted
-			an observation must not have laundered the marking on the way out, and
-			design §8.3's derivation union is what stops it.`,
-		Governs:   []string{"KGS §9.5", "KGS §8.5 #15", "§7.3 typed refusal", "§8.3 derivation"},
+		Models: `During ingest kgs sends content to a language model, and that model's
+			provider is a trust boundary. KGS §9.5 takes Palantir's AIP marking
+			allowlists for this: a provider profile declares which markings it may
+			receive, a provider not allowlisted for privileged never receives
+			privileged content, and the pipeline fails closed with a typed error
+			rather than degrading. The second half is leak channel #15, and it is
+			why the gate reads the *resolved* marking set rather than the content's
+			own assignments: a consolidator that saw privileged evidence and
+			emitted an observation must not have laundered the marking on the way
+			out, which the union over a derivation's inputs is what stops.
+
+			This is the one scenario in the corpus a label still runs, and the
+			removal of the deny mechanism changed what kind of label it is rather
+			than whether it works. A marking is a *flow* label: it propagates
+			through derivation as the union of its inputs, it gates egress at the
+			provider port, and it decides nothing about any principal's access.
+			That is the same answer kgs reached independently, and it is why the
+			allowlist survived intact while the household's classifications did
+			not — this was never a deny on a principal.
+
+			The honest cost is in the last claim, and it is a real regression
+			rather than a neutral change. Sending content to a hosted model used to
+			be guarded twice: the marking allowlist decided what the provider could
+			receive, *and* the mandatory gate decided what the pipeline principal
+			could read in the first place, so a context assembled from facts the
+			extractor could not read was impossible for two independent reasons.
+			One of those is gone. The allowlist is now the only thing between
+			privileged content and a third-party provider, so a pipeline principal
+			over-granted by an ordinary sharing mistake reaches content that only
+			the allowlist then stops leaving. kgs recorded the same finding on its
+			own side: this leak channel is worse, not merely unchanged.`,
+		Governs:   []string{"KGS §9.5", "KGS §8.5 #15", "§7.2 typed refusal", "markings as flow labels"},
 		Status:    scenario.StatusPending,
-		PendingOn: []scenario.Capability{scenario.CapDecide, scenario.CapClassificationStore, scenario.CapDerivation},
+		PendingOn: []scenario.Capability{scenario.CapDecide, scenario.CapTupleStore},
 		Fixture: scenario.Fixture{
 			Tenant: "lawfirm",
 			Kinds:  agentKinds(),
 			Principals: []scenario.PrincipalSpec{
 				{
 					Name: "service:extractor", Kind: iam.PrincipalKindService,
-					ClaimGroups: []string{"group:pipeline"},
-					Role:        "the ingest pipeline. Authorized to read the matter it is processing",
+					ClaimGroups: []string{"group:matter-team"},
+					Role:        "the ingest pipeline. Granted the matter it is processing, and nothing else",
 				},
 				{
 					Name: "user:anne", Kind: iam.PrincipalKindUser,
-					ClaimGroups: []string{"group:pipeline"},
-					Role:        "the cleared associate",
+					ClaimGroups: []string{"group:matter-team"},
+					Role:        "the associate on the matter",
 				},
 				{
 					Name: "user:dave", Kind: iam.PrincipalKindUser,
-					Role: "not cleared, and not in the pipeline group",
+					Role: "a timekeeper who is not on the matter team",
 				},
-				securityService(),
 			},
 			Groups: []scenario.GroupSpec{
-				{Name: "group:pipeline", Members: []string{"service:extractor", "user:anne"}},
-			},
-			ClearanceGroups: []scenario.ClearanceGroupSpec{
 				{
-					Name: "clearance:privileged", Channel: iam.MandatoryChannelClassify,
-					Members: []string{"user:anne", "service:extractor"},
-					Labels:  []string{"privileged"},
-					Reason: "the matter team and the self-hosted pipeline the legal tenant pinned. " +
-						"A mandatory act, because a pipeline that may see privileged content is a " +
-						"security decision and not a configuration one",
+					Name: "group:matter-team", Members: []string{"service:extractor", "user:anne"},
+					Note: "the matter team, pipeline included. That the self-hosted pipeline is in it " +
+						"is a sharing decision now rather than a mandatory act, which is exactly the " +
+						"regression this scenario's last claim records",
 				},
 			},
 			Containment: []scenario.Edge{
@@ -351,11 +361,13 @@ func markingAwareModelAccess() scenario.Scenario {
 				scenario.E("fact:filing-date", "episode:public-filing"),
 				scenario.E("observation:billing-pattern", "graph:lawfirm"),
 			},
-			Classifications: []scenario.Classification{
+			Markings: []scenario.Marking{
 				{
-					Label: "privileged", Enforcement: scenario.EnforcementPolicy,
-					Why: "legal professional privilege. Policy-enforced, because the firm must still " +
-						"index and search it for the team that may see it",
+					Label: "privileged", Enforcement: scenario.EnforcementNone,
+					Why: "legal professional privilege, as a flow label. It enforces nothing by " +
+						"itself: it propagates through derivation and gates egress at the provider " +
+						"port, and it refuses no principal anything. It used to be a policy-enforced " +
+						"classification and therefore also a deny, which is the half that went",
 				},
 			},
 			Assignments: []scenario.Assignment{scenario.AS("episode:matter-advice", "privileged")},
@@ -369,8 +381,16 @@ func markingAwareModelAccess() scenario.Scenario {
 			},
 			Tuples: []scenario.Tuple{
 				{
-					Object: scenario.R("graph:lawfirm"), Relation: "viewer",
-					Subject: scenario.US("group:pipeline", "member"),
+					Object: scenario.R("episode:matter-advice"), Relation: "viewer",
+					Subject: scenario.US("group:matter-team", "member"),
+					Note:    "the matter's grant, written on the episode",
+				},
+				{
+					Object: scenario.R("observation:billing-pattern"), Relation: "viewer",
+					Subject: scenario.US("group:matter-team", "member"),
+					Note: "and the derived observation's own grant. The marking propagates by " +
+						"derivation; the grant does not, which is why a derived object needs one " +
+						"written for it",
 				},
 			},
 		},
@@ -378,19 +398,26 @@ func markingAwareModelAccess() scenario.Scenario {
 			{
 				Principal: "service:extractor", Action: "read", Resource: scenario.R("fact:advice-content"),
 				Want: scenario.Allow, Reason: scenario.ReasonInherited,
-				Because: "graph:lawfirm#viewer@group:pipeline#member",
-				Note: "the pipeline may read it, because a mandatory act cleared it. Whether it may " +
-					"*send* it to a given provider is the separate question the claims answer",
+				Because: "episode:matter-advice#viewer@group:matter-team#member",
+				Note: "the pipeline may read it, because somebody shared the matter with it. Whether " +
+					"it may *send* it to a given provider is the separate question the claims answer, " +
+					"and it is now the only question of the two",
 			},
 			{
 				Principal: "user:dave", Action: "read", Resource: scenario.R("observation:billing-pattern"),
-				Want: scenario.Deny, Reason: scenario.ReasonClassification, Because: "privileged",
-				Note: "the derived observation carries the union of its inputs' markings",
+				Want: scenario.Deny, Reason: scenario.ReasonNoGrant,
+				Note: "he is not on the matter team, so no grant reaches the derived observation. " +
+					"This row used to read `deny, classification, privileged` and to be true even " +
+					"if somebody had shared the observation with him by mistake",
 			},
 			{
 				Principal: "user:anne", Action: "read", Resource: scenario.R("observation:billing-pattern"),
-				Want: scenario.Allow, Reason: scenario.ReasonInherited,
-				Because: "graph:lawfirm#viewer@group:pipeline#member",
+				Want: scenario.Allow, Reason: scenario.ReasonUserset,
+				Because: "observation:billing-pattern#viewer@group:matter-team#member",
+				Note: "a userset and not an inheritance, because the grant is written on the " +
+					"observation itself. Worth pinning: the marking arrived by derivation and the " +
+					"grant did not, so the two propagate along different edges and a reader " +
+					"debugging one must not look for the other",
 			},
 		},
 		Claims: []scenario.Claim{
@@ -407,9 +434,12 @@ func markingAwareModelAccess() scenario.Scenario {
 					"receives it. The gate is an allowlist and not a prohibition on processing"),
 			scenario.C(scenario.ClaimProviderPermitted, "fact:filing-date", "",
 				"and the public filing goes to any provider, because it carries no marking at all"),
-			scenario.C(scenario.ClaimLabelSet, "observation:billing-pattern", "privileged",
-				"the resolved label set the provider gate reads, computed as the union over the "+
-					"derivation's inputs"),
+			scenario.C(scenario.ClaimMarkingSet, "observation:billing-pattern", "privileged",
+				"the resolved marking set the provider gate reads, computed as the union over the "+
+					"derivation's inputs. This is the claim that is now load-bearing on its own: the "+
+					"second mechanism that used to stand behind it — a mandatory gate refusing the "+
+					"read that assembled the context — no longer exists, so a sharing mistake that "+
+					"over-grants the pipeline is stopped here or not at all"),
 		},
 	}
 }

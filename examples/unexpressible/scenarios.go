@@ -2,22 +2,44 @@
 // express, each located at the exact relation, rule or closure that cannot
 // be written.
 //
-// It is the most valuable package in the corpus, and the reason is in
-// design §8.5's last paragraph: "where a real requirement cannot be
-// expressed in the subset, the answer is a classification, not a richer
-// language. If a requirement arrives that is neither — that is a design
-// conversation, not a configuration change." These are the requirements
-// that are neither, plus two where "use a classification" is technically
-// available and changes the requirement into a different one.
+// It is the most valuable package in the corpus. Design §8.5's last
+// paragraph used to read "where a real requirement cannot be expressed in
+// the subset, the answer is a classification, not a richer language. If a
+// requirement arrives that is neither — that is a design conversation, not
+// a configuration change." The first sentence went with the deny
+// mechanism, which makes the second one apply to everything in here.
+//
+// # What the removal of the deny mechanism did to this package
+//
+// It closed two scenarios and made one strictly worse, and the arithmetic
+// is worth stating because it is not a tidy win.
+//
+// Two are gone, resolved by deletion rather than by being solved. U2
+// showed that answering a discretionary requirement with a classification
+// converted a preference into an absolute no owner could lift; there is no
+// classification to answer with, so the gap has nothing left to be a gap
+// in. U6 showed that nothing checked whether the actor on a mandatory act
+// was allowed to classify at all; there are no mandatory acts.
+//
+// One is worse. U1 — "may read Person entities but not salary facts" —
+// had two candidate resolutions, and the cheaper one was "express it as a
+// classification, accepting what U2 says that costs". That resolution no
+// longer exists, so U1's only remaining option is the expensive one, which
+// moves part of the trust boundary into consumer code. See U1's Cost.
+//
+// One is redirected. U4 asked whether an attribute-scoped *classification*
+// could hide a column. As written it is moot. The problem underneath it is
+// not: a `WHERE` fragment still hides rows rather than columns, whatever
+// tier the restriction is written in, so U4 now asks the question without
+// the label and lands in the same place as U1.
 //
 // Every scenario here *demonstrates* its gap rather than asserting it. The
 // harness refuses an unexpressible scenario that does not carry a claim
 // which runs — the schema lint rejecting the relation, DirectPath refusing
-// a DAG, RowEnforceable reporting that a column cannot be hidden by a
-// `WHERE` clause, an ancestry closure moving under an ordinary data write,
-// or an unprivileged principal successfully clearing itself. So if the
-// design grows to cover one of these, the corresponding claim starts
-// failing and says so.
+// a DAG, AttributeEnforceable reporting that a column cannot be hidden by
+// a `WHERE` clause, or an ancestry closure moving under an ordinary data
+// write. So if the design grows to cover one of these, the corresponding
+// claim starts failing and says so.
 //
 // UNEXPRESSIBLE.md in the parent directory is the prose version: what each
 // use case is, why the design cannot express it, which §17 finding it maps
@@ -55,22 +77,18 @@ func person(name, role string) scenario.PrincipalSpec {
 	return scenario.PrincipalSpec{Name: name, Kind: iam.PrincipalKindUser, Role: role}
 }
 
-func securityService() scenario.PrincipalSpec {
-	return scenario.PrincipalSpec{
-		Name: "service:security", Kind: iam.PrincipalKindService,
-		Role: "performs the fixture's mandatory acts",
-	}
-}
-
 // Scenarios returns the use cases the design cannot express.
+//
+// There were six. U2 (the classification workaround promoting a
+// preference to an absolute) and U6 (nothing checking whether an actor may
+// classify) are resolved by deletion and are recorded as such in
+// ../UNEXPRESSIBLE.md rather than silently dropped.
 func Scenarios() []scenario.Scenario {
 	return []scenario.Scenario{
 		ontologyScopeExclusion(),
-		classificationIsNotADiscretionaryHide(),
 		dagContainment(),
 		attributeScopedOnColumns(),
 		predicateDefinedEntitySet(),
-		whoMayClassify(),
 	}
 }
 
@@ -90,21 +108,45 @@ func ontologyScopeExclusion() scenario.Scenario {
 			expresses it. The scenario writes the rule the requirement needs,
 			exactly as a consumer would want to declare it, and the schema lint
 			refuses the whole fixture. Every row in the table below is therefore
-			unreachable: not denied, not allowed, unanswerable.`,
-		Governs: []string{"§17 F7", "§8.5", "§5a exclusion operators", "KGS §9.3 ontology scope"},
+			unreachable: not denied, not allowed, unanswerable.
+
+			This scenario got strictly harder when the deny mechanism was removed,
+			and that is the most important thing on it. It used to have two
+			candidate resolutions, and the cheap one was "kgs drops the
+			ontology-scope dimension and expresses the requirement as a
+			classification scoped to the salary attribute". That option had a
+			price — the corpus's own U2 existed to show it, because the label
+			turned a preference into an absolute no owner could lift — but it
+			existed, and for a requirement that genuinely was absolute it was the
+			right answer. There is no classification now, so the only remaining
+			resolution is the expensive one: ` + "`Predicate`" + ` returns a
+			permitted-attribute or permitted-predicate set alongside its fragment
+			and the *consumer* applies it, which moves part of the trust boundary
+			into consumer code where this module can neither enforce nor detect a
+			consumer that forgets.
+
+			It is also now the same question as U4 rather than a cousin of it. The
+			design already said F4 and F7 resolve to the same fork; with the
+			classification route deleted they are one fork with one option on
+			it.`,
+		Governs: []string{"§17 F7", "§17 F4", "§8.5", "KGS §9.3 ontology scope"},
 		Status:  scenario.StatusUnexpressible,
-		Finding: "F7 (ontology scope)",
-		Cost: "Adding a tier-1 form conditioned on resource attributes costs §9's projection, which is " +
-			"what buys the entire A2 budget: union, usersets and inheritance precompute into a closure " +
-			"and a conditional expression does not. An exclusion operator additionally costs the A3 " +
-			"invariant, because exclusion in a relationship model is local to the permission it is " +
-			"written in, so it would have to be repeated on every relation of every resource kind and " +
-			"remembered for every kind added later — N permissions by M exclusion dimensions, growing " +
-			"with the schema, where one omission is a silent bypass rather than an error. The cheaper " +
-			"resolutions are: kgs drops the ontology-scope dimension and expresses the same requirement " +
-			"as a classification (which U2 shows changes what the requirement means), or `Predicate` " +
-			"grows a second return value — a permitted-predicate set the consumer applies — which moves " +
-			"part of the A3 trust boundary into consumer code (the same choice F4 forces).",
+		Finding: "F7 (ontology scope) + F4",
+		Cost: "Adding a form conditioned on resource attributes costs §9's projection, which is what " +
+			"buys the entire A2 budget: union, usersets and inheritance precompute into a closure and " +
+			"a conditional expression does not. An exclusion operator costs that and more, and is now " +
+			"refused on a stronger ground than locality — there is no deny mechanism at all, so an " +
+			"exclusion operator is not a badly-scoped absolute but a mechanism the design has ruled " +
+			"out. " +
+			"What changed is the alternative. Expressing the requirement as a classification scoped " +
+			"to the attribute was the cheap resolution and it no longer exists — the mechanism was " +
+			"deleted, not deprecated — so one option remains inside this module: `Predicate` grows a " +
+			"second return value, a permitted-predicate or permitted-attribute set the consumer " +
+			"applies. The price is worth stating precisely now that it is unavoidable rather than one " +
+			"of two: a consumer that forgets to apply the set is a disclosure this module can neither " +
+			"prevent nor detect, and if it is chosen the §9.4 differential audit must cover consumer " +
+			"compliance and not only projection divergence. The alternative is that kgs drops the " +
+			"dimension, which is now the only resolution that keeps the trust boundary where it is.",
 		Fixture: scenario.Fixture{
 			Tenant: "lawfirm",
 			Kinds: []scenario.ResourceKind{
@@ -130,7 +172,6 @@ func ontologyScopeExclusion() scenario.Scenario {
 			Principals: []scenario.PrincipalSpec{
 				person("user:hr-analyst", "may read the people and not their salaries"),
 				person("user:hr-director", "may read both"),
-				securityService(),
 			},
 			Groups: []scenario.GroupSpec{
 				{Name: "group:hr", Members: []string{"user:hr-analyst", "user:hr-director"}},
@@ -166,8 +207,9 @@ func ontologyScopeExclusion() scenario.Scenario {
 			{
 				Principal: "user:hr-analyst", Action: "read", Resource: scenario.R("fact:jonas-salary"),
 				Want: scenario.Deny, Reason: scenario.ReasonNoGrant,
-				Unreachable: "F7: the only mechanism that would produce this deny is a conditional or exclusionary " +
-					"relation, and §8.5 permits neither. There is no tier-1 rule to write",
+				Unreachable: "F7: the only mechanism that would produce this deny is a conditional or " +
+					"exclusionary relation, and §8.5 permits neither. There is no rule to write, and " +
+					"no second tier left to write it in either",
 				Note: "the row the requirement is about",
 			},
 			{
@@ -175,143 +217,23 @@ func ontologyScopeExclusion() scenario.Scenario {
 				Want: scenario.Allow, Reason: scenario.ReasonInherited,
 				Because:     "graph:hr#viewer@group:hr#member",
 				Unreachable: "F7: and the exemption for the director has nowhere to live either",
-				Note:        "the director's exemption is the half that makes a classification the wrong answer — see U2",
+				Note: "the director's exemption used to be the half that made a classification the " +
+					"wrong answer, which was U2's entire subject. It is now simply a second row with " +
+					"no mechanism behind it, like the one above",
 			},
 		},
 		Claims: []scenario.Claim{
-			scenario.C(scenario.ClaimSchemaRejected, "fact#viewer", "classification",
+			scenario.C(scenario.ClaimSchemaRejected, "fact#viewer", "F7",
 				"the demonstration: the schema lint refuses the fixture, and the refusal names the "+
-					"classification mechanism, because design §4/A3 requires the error to point the "+
-					"consumer at what it should use instead rather than merely saying no"),
-		},
-	}
-}
-
-func classificationIsNotADiscretionaryHide() scenario.Scenario {
-	return scenario.Scenario{
-		ID:    "U2",
-		Title: "`Use a classification` turns `don't show her the salary` into an absolute nobody can lift",
-		Models: `U1's requirement, taking design §8.5 at its word: express it as a
-			classification. It works, and it is the wrong answer, and this scenario
-			is what that costs rather than an argument about it. A classification is
-			mandatory: design §8.3 says it "cannot be granted away, delegated,
-			transferred with ownership, or satisfied by any tier-1 relation", and
-			"there is no API that grants a clearance as a side effect of sharing".
-			So the HR director's perfectly ordinary "actually, show her this one
-			salary, she's running the review" has no operation behind it. What
-			began as a discretionary preference about one field has become an
-			absolute of the same kind as a legal ethical wall, administered by
-			whoever holds the classify permission, and the resource's owner cannot
-			lift it. §17 F7 says exactly this in one sentence; the scenario is that
-			sentence with the attempted lift actually attempted.`,
-		Governs: []string{"§17 F7", "§8.3", "§8.5", "§16 Q2"},
-		Status:  scenario.StatusUnexpressible,
-		Finding: "F7 (classification workaround)",
-		Cost: "Nothing to build, and that is the problem: the workaround is free and it silently " +
-			"promotes a discretionary rule to a mandatory one. Supporting the requirement *as stated* " +
-			"needs one of three things. (a) A third tier-1 form — a scoped, delegable restriction — " +
-			"which costs the projection for the reason U1 gives. (b) A second rule shape in the " +
-			"mandatory layer: a `(principal, resource)` block or a lift, which design §16 question 1 " +
-			"explicitly assumes is not needed and which would double the A3 adversarial suite, since " +
-			"every absolute would then have two ways to be satisfied instead of one. (c) Accept the " +
-			"promotion and make it visible: a consumer-facing distinction between a classification " +
-			"meaning `legally absolute` and one meaning `hidden by preference`, with different " +
-			"administration, which is two mandatory layers wearing one name. The honest short-term " +
-			"answer is to tell consumers that this requirement has no discretionary form, and to make " +
-			"the API say so rather than letting them discover it after a classification is in place.",
-		Fixture: scenario.Fixture{
-			Tenant: "lawfirm",
-			Kinds: []scenario.ResourceKind{
-				group(),
-				rowKind("graph"),
-				rowKind("entity"),
-				rowKind("fact"),
-			},
-			Principals: []scenario.PrincipalSpec{
-				person("user:hr-analyst", "the analyst whose access the director wants to widen by one fact"),
-				person("user:hr-director", "the resource owner, and the person who cannot do it"),
-				securityService(),
-			},
-			Groups: []scenario.GroupSpec{
-				{Name: "group:hr", Members: []string{"user:hr-analyst", "user:hr-director"}},
-			},
-			ClearanceGroups: []scenario.ClearanceGroupSpec{
-				{
-					Name: "clearance:salary-readers", Channel: iam.MandatoryChannelClassify,
-					Members: []string{"user:hr-director"}, Labels: []string{"sensitive:salary"},
-					Reason: "the classification workaround: whoever may read salaries at all",
-				},
-			},
-			Containment: []scenario.Edge{
-				scenario.E("entity:person-jonas", "graph:hr"),
-				scenario.E("fact:jonas-job-title", "graph:hr"),
-				scenario.E("fact:jonas-salary", "graph:hr"),
-			},
-			Classifications: []scenario.Classification{
-				{
-					Label: "sensitive:salary", Enforcement: scenario.EnforcementPolicy,
-					Why: "the workaround §8.5 recommends. It is mandatory, which the requirement never " +
-						"asked for and cannot undo",
-				},
-			},
-			Assignments: []scenario.Assignment{scenario.AS("fact:jonas-salary", "sensitive:salary")},
-			Tuples: []scenario.Tuple{
-				{
-					Object: scenario.R("graph:hr"), Relation: "viewer",
-					Subject: scenario.US("group:hr", "member"),
-				},
-				{
-					Object: scenario.R("fact:jonas-salary"), Relation: "viewer",
-					Subject: scenario.P("user:hr-analyst"),
-					Note: "the director's attempted lift, written as the most direct grant there is: " +
-						"a tuple naming her on the fact itself. It is a correct, permitted tier-1 write " +
-						"and it changes nothing",
-				},
-			},
-		},
-		Expect: []scenario.Expectation{
-			{
-				Principal: "user:hr-analyst", Action: "read", Resource: scenario.R("fact:jonas-job-title"),
-				Want: scenario.Allow, Reason: scenario.ReasonInherited,
-				Because: "graph:hr#viewer@group:hr#member",
-				Note:    "the ordinary facts still work, so the workaround is not simply broken",
-			},
-			{
-				Principal: "user:hr-analyst", Action: "read", Resource: scenario.R("fact:jonas-salary"),
-				Want: scenario.Deny, Reason: scenario.ReasonClassification, Because: "sensitive:salary",
-				Note: "the workaround does deliver the requirement's first half, and this row passes. " +
-					"The gate denies her the salary",
-			},
-			{
-				Principal: "user:hr-director", Action: "read", Resource: scenario.R("fact:jonas-salary"),
-				Want: scenario.Allow, Reason: scenario.ReasonInherited,
-				Because: "graph:hr#viewer@group:hr#member",
-				Note:    "and the director reads it, through the clearance group",
-			},
-			{
-				Principal: "user:hr-analyst", Action: "read", Resource: scenario.R("fact:jonas-salary"),
-				Want: scenario.Allow, Reason: scenario.ReasonDirect,
-				Because: "fact:jonas-salary#viewer@user:hr-analyst",
-				Unreachable: "F7: the requirement's second half. The director owns the fact, wrote the most " +
-					"direct grant the model has, and cannot lift the label. There is no discretionary " +
-					"operation that satisfies a classification — by design, and that design is right for " +
-					"an ethical wall and wrong for a preference about a column",
-				Note: "this is the row the whole scenario exists for",
-			},
-		},
-		Claims: []scenario.Claim{
-			scenario.C(scenario.ClaimSchemaAccepted, "fact", "",
-				"note that the workaround's schema is perfectly legal — the gap is not a lint failure, "+
-					"which is what makes it easy to adopt by accident"),
-			scenario.C(scenario.ClaimAbsoluteHasNoLift, "user:hr-analyst", "",
-				"the demonstration, run against the real registry: every discretionary operation the "+
-					"module exposes is applied on the analyst's behalf — added to every group, the issuer "+
-					"asserting the clearance group's own name, an agent run delegated from the cleared "+
-					"director, an ordinary group id presented as a clearance group id — and she still "+
-					"holds no clearance. In M5 that is the feature. Here it is the bill"),
-			scenario.C(scenario.ClaimLiveClearances, "user:hr-director", "clearance:salary-readers",
-				"and the only way in is the mandatory channel, which the resource's owner may not "+
-					"necessarily use — design §16 question 2, still open, decides whether she may at all"),
+					"open findings rather than an alternative mechanism. That changed with this "+
+					"refactor and the change is deliberate — the lint used to point the consumer at "+
+					"the classification mechanism, and a refusal naming a mechanism that no longer "+
+					"exists is worse than one admitting the requirement has no form"),
+			scenario.C(scenario.ClaimAttributeEnforceable, "fact:jonas-salary.predicate", "true",
+				"and the contrast that locates the gap precisely: a kgs fact is row-shaped, so a "+
+					"restriction at this granularity would be enforceable by the compiled fragment if "+
+					"there were any way to *express* it. U1's gap is the rule language; U4's is the "+
+					"fragment. They now share their only resolution"),
 		},
 	}
 }
@@ -435,36 +357,57 @@ func dagContainment() scenario.Scenario {
 func attributeScopedOnColumns() scenario.Scenario {
 	return scenario.Scenario{
 		ID:    "U4",
-		Title: "An attribute-scoped classification on a columnar resource cannot be enforced by a row predicate",
-		Models: `Design §8.3 says a classification "may be declared over a whole
-			resource, or over a named attribute or field of it, which is how
-			property-level and cell-level security compose without a second
-			mechanism". For kgs that is true and free: a fact carries one attribute,
-			so hiding the attribute is hiding the row. For CAS it is not, because a
-			document's fields are columns of one row, and design §9 compiles
-			authorization into a ` + "`WHERE`" + ` fragment the consumer joins — and a ` + "`WHERE`" + `
-			fragment hides rows, not columns. So the decision procedure can answer
-			"may she see document:payroll.salary" correctly while ` + "`Predicate`" + `, which
-			is the surface carrying the traffic, cannot express the answer at all.
-			This is §17 F4, and it is marked "pick one before phase 1 fixes the API"
-			for a reason: the two resolutions are two different modules.`,
-		Governs: []string{"§17 F4", "§8.3 scoped", "§9", "§9.1", "CAS §9.3"},
+		Title: "An attribute-scoped restriction cannot be enforced by a row predicate, whatever tier it is written in",
+		Models: `Eva may read the payroll document and not its salary column.
+
+			As this scenario used to be written, the requirement is moot. Design
+			§8.3 offered a classification "declared over a whole resource, or over
+			a named attribute or field of it, which is how property-level and
+			cell-level security compose without a second mechanism", and the
+			scenario's subject was that the gate could answer
+			"may she see document:payroll.salary" correctly while ` + "`Predicate`" + ` could
+			not express the answer at all. There is no classification, so there is
+			no attribute-scoped label to be unenforceable.
+
+			The problem underneath it did not move an inch, which is why this
+			scenario is redirected rather than deleted. Design §9 compiles
+			authorization into a ` + "`WHERE`" + ` fragment the consumer joins, and a ` + "`WHERE`" + `
+			fragment hides rows and not columns. That is a property of SQL and of
+			the consumer's storage shape, and it was never a property of which
+			tier the restriction was written in. So the scenario asks the same
+			question with the label taken out: given a resource whose attributes
+			are columns of one row, can the fragment express a restriction at
+			attribute granularity? It cannot, and the fixture carries the
+			row-shaped contrast beside it so the finding stays precise rather than
+			general — kgs is fine because a fact *is* an attribute, and CAS is not
+			because a document's fields are columns.
+
+			What changed is the remedy, not the finding. F4 used to have three
+			answers and one of them was "declare it as a classification scoped to
+			the attribute, accepting that it becomes mandatory". That is gone, so
+			F4 and F7 are now one fork with one option on it: ` + "`Predicate`" + ` returns a
+			permitted-attribute set the consumer applies. Read U1 next; it is the
+			same decision from the rule-language side.`,
+		Governs: []string{"§17 F4", "§17 F7", "§9", "§9.1", "CAS §9.3"},
 		Status:  scenario.StatusUnexpressible,
-		Finding: "F4 (attribute scope vs row predicate)",
-		Cost: "Two options and they are not variations of each other. (a) `Predicate` returns a " +
-			"fragment *plus* a permitted-attribute set, and the consumer applies the second part. That " +
-			"is cheap to build and it moves a piece of the A3 trust boundary into consumer code: the " +
-			"module would no longer be able to say that no sequence of operations opens a gate, because " +
-			"a consumer that forgets to apply the attribute set is a disclosure this module cannot " +
-			"prevent or detect. If it is chosen, the differential audit (§9.4) must cover consumer " +
-			"compliance and not only projection divergence, which is a larger audit than the one " +
-			"designed. (b) This module becomes a query rewriter, parsing and rewriting SELECT lists " +
-			"across three consumers' query builders. That keeps the trust boundary intact and is a " +
-			"different module with a different charter — and CHARTER.md's `it must not contain` list " +
-			"would have to grow a line either way. A third, cheaper answer exists for CAS " +
-			"specifically: make sensitive document fields their own addressable resources, so the " +
-			"columnar case becomes a row case, at the cost of a schema migration in CAS and a " +
-			"cardinality increase in its tables.",
+		Finding: "F4 (attribute granularity vs row predicate)",
+		Cost: "Two options, and they are not variations of each other. (a) `Predicate` returns a " +
+			"fragment *plus* a permitted-attribute set, and the consumer applies the second part. " +
+			"That is cheap to build and it moves a piece of the trust boundary into consumer code: " +
+			"the module would no longer be able to say that nothing but a grant permits anything, " +
+			"because a consumer that forgets to apply the attribute set is a disclosure this module " +
+			"can neither prevent nor detect. If it is chosen, the differential audit (§9.4) must " +
+			"cover consumer compliance and not only projection divergence, which is a larger audit " +
+			"than the one designed. (b) This module becomes a query rewriter, parsing and rewriting " +
+			"SELECT lists across three consumers' query builders. That keeps the trust boundary " +
+			"intact and is a different module with a different charter — and CHARTER.md's `it must " +
+			"not contain` list would have to grow a line either way. " +
+			"A third, cheaper answer exists for CAS specifically and is unaffected by any of this: " +
+			"make sensitive document fields their own addressable resources, so the columnar case " +
+			"becomes a row case and an ordinary grant reaches it. It costs a schema migration in CAS " +
+			"and a cardinality increase in its tables, and it needs no new mechanism here. With the " +
+			"classification route deleted, it is now the only resolution that needs nothing of this " +
+			"module at all, which makes it more attractive than it was rather than less.",
 		Fixture: scenario.Fixture{
 			Tenant: "acme",
 			Kinds: []scenario.ResourceKind{
@@ -492,45 +435,22 @@ func attributeScopedOnColumns() scenario.Scenario {
 			Principals: []scenario.PrincipalSpec{
 				person("user:eva", "may read the payroll document and not its salary column"),
 				person("user:hr-director", "may read both"),
-				securityService(),
 			},
 			Groups: []scenario.GroupSpec{
 				{Name: "group:staff", Members: []string{"user:eva", "user:hr-director"}},
-			},
-			ClearanceGroups: []scenario.ClearanceGroupSpec{
-				{
-					Name: "clearance:salary-readers", Channel: iam.MandatoryChannelClassify,
-					Members: []string{"user:hr-director"},
-					Labels:  []string{"restricted:salary-column", "restricted:salary-fact"},
-					Reason:  "whoever may read salaries",
-				},
 			},
 			Containment: []scenario.Edge{
 				scenario.E("document:payroll", "fileset:hr"),
 				scenario.E("fact:jonas-salary", "fileset:hr"),
 			},
-			Classifications: []scenario.Classification{
-				{
-					Label: "restricted:salary-column", Enforcement: scenario.EnforcementPolicy,
-					Attribute: "salary",
-					Why: "scoped to one attribute of a columnar resource. §8.3 permits declaring it; " +
-						"§9's compiled predicate cannot enforce it",
-				},
-				{
-					Label: "restricted:salary-fact", Enforcement: scenario.EnforcementPolicy,
-					Attribute: "value",
-					Why: "the identical requirement over a row-shaped kgs fact, which *is* enforceable, " +
-						"because the attribute is the row",
-				},
-			},
-			Assignments: []scenario.Assignment{
-				scenario.AS("document:payroll", "restricted:salary-column"),
-				scenario.AS("fact:jonas-salary", "restricted:salary-fact"),
-			},
 			Tuples: []scenario.Tuple{
 				{
 					Object: scenario.R("fileset:hr"), Relation: "viewer",
 					Subject: scenario.US("group:staff", "member"),
+					Note: "the ordinary grant, and the only mechanism in the fixture. Note that it " +
+						"reaches both the columnar document and the row-shaped fact identically — " +
+						"the difference the finding is about appears only when something tries to " +
+						"restrict below the object",
 				},
 			},
 		},
@@ -539,44 +459,52 @@ func attributeScopedOnColumns() scenario.Scenario {
 				Principal: "user:eva", Action: "read", Resource: scenario.R("document:payroll"),
 				Want: scenario.Allow, Reason: scenario.ReasonInherited,
 				Because: "fileset:hr#viewer@group:staff#member",
-				Note: "she may read the document, and correctly so: a classification scoped to one " +
-					"attribute does not gate the whole resource. That is also precisely what makes the " +
-					"finding bite — the gate lets the row through and something else has to hide the column",
+				Note: "she may read the document, and correctly so: the grant is on the fileset and " +
+					"reaches it. That is also precisely what makes the finding bite — the fragment " +
+					"lets the row through and something else has to hide the column",
 			},
 			{
 				Principal: "user:eva", Action: "read", Resource: scenario.R("document:payroll.salary"),
-				Want: scenario.Deny, Reason: scenario.ReasonClassification, Because: "restricted:salary-column",
-				Unreachable: "F4: the decision procedure answers this correctly and `Predicate` cannot. " +
-					"A consumer that calls Decide per cell has abandoned §9 and post-filters, which is " +
-					"KGS leak channel #6; a consumer that calls Predicate receives a row filter that " +
-					"returns the row with the salary in it",
+				Want: scenario.Deny, Reason: scenario.ReasonNoGrant,
+				Unreachable: "F4: there is nothing that produces this deny. There is no rule language " +
+					"for it (U1) and there would be no way to compile it if there were, because a " +
+					"`WHERE` fragment hides rows and not columns. A consumer that calls Decide per " +
+					"cell has abandoned §9 and post-filters, which is KGS leak channel #6; a consumer " +
+					"that calls Predicate receives a row filter returning the row with the salary in " +
+					"it. This row used to be reachable by Decide and unreachable by Predicate, which " +
+					"was a narrower and more confusing gap",
 				Note: "the undeliverable row",
 			},
 			{
 				Principal: "user:eva", Action: "read", Resource: scenario.R("fact:jonas-salary.value"),
-				Want: scenario.Deny, Reason: scenario.ReasonClassification, Because: "restricted:salary-fact",
-				Note: "the same requirement over a row-shaped resource, and this one is deliverable: " +
-					"hiding the attribute is hiding the row, so the compiled fragment can do it",
+				Want: scenario.Deny, Reason: scenario.ReasonNoGrant,
+				Unreachable: "F7, not F4: over a row-shaped resource the *fragment* could express this " +
+					"restriction — hiding the attribute is hiding the row — and there is still no way " +
+					"to write the rule. The two halves of the problem separate cleanly here, which is " +
+					"what the two claims below assert",
+				Note: "the same requirement over a row-shaped resource. Enforceable and still " +
+					"unwritable",
 			},
 			{
-				Principal: "user:hr-director", Action: "read", Resource: scenario.R("fact:jonas-salary.value"),
+				Principal: "user:hr-director", Action: "read", Resource: scenario.R("fact:jonas-salary"),
 				Want: scenario.Allow, Reason: scenario.ReasonInherited,
 				Because: "fileset:hr#viewer@group:staff#member",
+				Note:    "and the whole-object grant works for both of them, which is all there is",
 			},
 		},
 		Claims: []scenario.Claim{
-			scenario.C(scenario.ClaimRowEnforceable, "restricted:salary-column", "false",
-				"the demonstration: the classification is declarable and not enforceable by the "+
-					"predicate design §9 compiles, because it is scoped to an attribute of a "+
-					"columnar resource"),
-			scenario.C(scenario.ClaimRowEnforceable, "restricted:salary-fact", "true",
+			scenario.C(scenario.ClaimAttributeEnforceable, "document:payroll.salary", "false",
+				"the demonstration, and it needs no label to make it: a restriction at this "+
+					"granularity cannot be enforced by the fragment design §9 compiles, because the "+
+					"attribute is a column of a columnar kind and a `WHERE` clause hides rows"),
+			scenario.C(scenario.ClaimAttributeEnforceable, "fact:jonas-salary.value", "true",
 				"and the contrast that makes the finding precise rather than general: the identical "+
-					"requirement over a row-shaped kind is enforceable. F4 is a property of the "+
-					"consumer's storage shape, not of attribute scoping as such — which is why kgs is "+
-					"fine and CAS is not"),
+					"granularity over a row-shaped kind is enforceable. F4 is a property of the "+
+					"consumer's storage shape, which is why kgs is fine and CAS is not — and why "+
+					"CAS's own cheapest resolution is to make the field a row"),
 			scenario.C(scenario.ClaimSchemaAccepted, "document", "",
 				"and nothing in the schema is wrong, so no lint catches this. It is caught by asking "+
-					"what the compiled predicate can express, which is what RowEnforceable does"),
+					"what the compiled fragment can express, which is what AttributeEnforceable does"),
 		},
 	}
 }
@@ -691,117 +619,6 @@ func predicateDefinedEntitySet() scenario.Scenario {
 			scenario.C(scenario.ClaimSchemaAccepted, "entity-set", "",
 				"and again the schema is legal. Nothing in §8.5's lint can see this, because the "+
 					"forbidden thing is not in the relation definitions — it is in the containment edges"),
-		},
-	}
-}
-
-func whoMayClassify() scenario.Scenario {
-	return scenario.Scenario{
-		ID:    "U6",
-		Title: "Nothing checks whether the actor on a mandatory act may classify at all",
-		Models: `Found while writing this corpus rather than taken from §17, and it is
-			the gap that most undercuts the scenarios that pass. Design §8.3 makes
-			clearance-group membership move only "through the classify permission or
-			an authoritative directory sync", and §8.3's closing line is that
-			"creating and assigning classifications is itself permissioned and
-			audited, and is not a power that ownership confers". The registry
-			enforces the *witness*: every clearance write demands an
-			iam.MandatoryAct carrying a channel, an actor, a reason and an instant,
-			and MandatoryAct's fields are unexported so one cannot be forged. What
-			nothing enforces is the actor's authority, because design §16 question 2
-			— deployment-level security admin, per-tenant security admin, or the
-			resource owner at creation time — is unanswered. So an ordinary user can
-			construct an act naming itself, add itself to a clearance group, and
-			satisfy a mandatory gate. M5 asserts that no discretionary operation
-			opens a gate, and that is true; this scenario shows that the mandatory
-			channel is open to everyone, which reaches the same place by a different
-			door.`,
-		Governs: []string{"§16 Q2", "§8.3", "A3", "§13 adversarial suite"},
-		Status:  scenario.StatusUnexpressible,
-		Finding: "§16 Q2 (who may classify)",
-		Cost: "Not in the §17 register, and it should be. Small to build and it needs a decision first, " +
-			"which is why it is here rather than in a task list. " +
-			"task list. The §16 candidates have different costs: a deployment-level security admin is " +
-			"one role and breaks the household case, where the owner reasonably classifies their own " +
-			"invoice at creation; a per-tenant security admin fits the legal case and needs the role to " +
-			"exist before the first classification does; the resource owner at creation time with " +
-			"changes restricted afterwards fits the household and reintroduces, for the creation " +
-			"window, exactly the ownership-confers-classification power §8.3 forbids. Whichever is " +
-			"chosen, the mechanism is the same shape: MandatoryAct's construction stops being free and " +
-			"starts requiring a checked capability, which means `iam.NewMandatoryAct` loses its " +
-			"current signature and the A3 adversarial suite gains the mandatory channel as an attack " +
-			"surface it does not currently cover. Until then, no scenario in this corpus may claim that " +
-			"a clearance cannot be obtained — only that it cannot be obtained *discretionarily*, which " +
-			"is a narrower and much weaker statement than the design reads as making.",
-		Fixture: scenario.Fixture{
-			Tenant: "lawfirm",
-			Kinds: []scenario.ResourceKind{
-				group(),
-				rowKind("matter"),
-				rowKind("document"),
-			},
-			Principals: []scenario.PrincipalSpec{
-				person("user:eve", "an ordinary associate, holding no classify permission and no clearance"),
-				person("user:anne", "on the matter team, admitted by the security function"),
-				securityService(),
-			},
-			Groups: []scenario.GroupSpec{
-				{Name: "group:all-timekeepers", Members: []string{"user:eve", "user:anne"}},
-			},
-			ClearanceGroups: []scenario.ClearanceGroupSpec{
-				{
-					Name: "clearance:matter-9999-team", Channel: iam.MandatoryChannelClassify,
-					Members: []string{"user:anne"}, Labels: []string{"conflict:matter-9999"},
-					Reason: "the matter team. Eve is deliberately not in it",
-				},
-			},
-			Containment: []scenario.Edge{
-				scenario.E("document:witness-statement", "matter:9999"),
-			},
-			Classifications: []scenario.Classification{
-				{Label: "conflict:matter-9999", Enforcement: scenario.EnforcementPolicy, Why: "an ethical wall"},
-			},
-			Assignments: []scenario.Assignment{scenario.AS("matter:9999", "conflict:matter-9999")},
-			Tuples: []scenario.Tuple{
-				{
-					Object: scenario.R("matter:9999"), Relation: "viewer",
-					Subject: scenario.US("group:all-timekeepers", "member"),
-				},
-			},
-		},
-		Expect: []scenario.Expectation{
-			{
-				Principal: "user:anne", Action: "read", Resource: scenario.R("document:witness-statement"),
-				Want: scenario.Allow, Reason: scenario.ReasonInherited,
-				Because: "matter:9999#viewer@group:all-timekeepers#member",
-				Note:    "the matter team reads the matter, as in M1",
-			},
-			{
-				Principal: "user:eve", Action: "read", Resource: scenario.R("document:witness-statement"),
-				Want: scenario.Deny, Reason: scenario.ReasonClassification, Because: "conflict:matter-9999",
-				Note: "and the screen holds against every discretionary operation, as M5 asserts at length",
-			},
-			{
-				Principal: "user:eve", Action: "read", Resource: scenario.R("document:witness-statement"),
-				Want: scenario.Deny, Reason: scenario.ReasonClassification, Because: "conflict:matter-9999",
-				Unreachable: "§16 Q2: this deny must survive Eve performing a mandatory act on her own behalf, " +
-					"and today it does not. The claim below adds her to the clearance group with a " +
-					"self-issued act that the registry accepts, after which the gate opens for her and " +
-					"the ethical wall is gone. The corpus cannot express `the mandatory channel is " +
-					"closed to her`, because there is no permission to express it with",
-				Note: "the row the design reads as promising and does not yet deliver",
-			},
-		},
-		Claims: []scenario.Claim{
-			scenario.C(scenario.ClaimAnyActorMayClassify, "user:eve", "clearance:matter-9999-team",
-				"the demonstration, against the real registry: an ordinary associate constructs a "+
-					"MandatoryAct naming herself, the registry accepts it, and she is now in the "+
-					"conflict screen's clearance group. The claim passes today and is written to fail "+
-					"the moment a classify permission lands — at which point this scenario moves out "+
-					"of UNEXPRESSIBLE.md and the §17 register loses an entry"),
-			scenario.C(scenario.ClaimSchemaAccepted, "matter", "",
-				"nothing about the tier-1 schema is involved. The gap is in the mandatory channel, "+
-					"which is the one place the corpus's other scenarios take on trust"),
 		},
 	}
 }
