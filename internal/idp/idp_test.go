@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/laenen-ai/iam/internal/domain"
-	"github.com/laenen-ai/iam/internal/idp"
-	"github.com/laenen-ai/iam/internal/registry"
+	"github.com/laenenai/iam/internal/domain"
+	"github.com/laenenai/iam/internal/idp"
+	"github.com/laenenai/iam/internal/registry"
 )
 
 // recordingRegistry wraps a real registry and counts every call, so a test

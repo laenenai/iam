@@ -11,7 +11,7 @@
 // discretionary operation. That is anti-goal A3, breached by construction.
 package main
 
-import "github.com/laenen-ai/iam/internal/domain"
+import "github.com/laenenai/iam/internal/domain"
 
 // wantsClearanceGroup stands in for every Registry method that takes a
 // clearance group id.

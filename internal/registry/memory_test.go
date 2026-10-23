@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/laenen-ai/iam"
-	"github.com/laenen-ai/iam/iamtest"
-	"github.com/laenen-ai/iam/internal/domain"
-	"github.com/laenen-ai/iam/internal/registry"
+	"github.com/laenenai/iam"
+	"github.com/laenenai/iam/iamtest"
+	"github.com/laenenai/iam/internal/domain"
+	"github.com/laenenai/iam/internal/registry"
 )
 
 // suiteStalenessBound and suiteMaxAgentRunTTL are the deployment policy the

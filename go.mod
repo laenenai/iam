@@ -1,4 +1,4 @@
-module github.com/laenen-ai/iam
+module github.com/laenenai/iam
 
 go 1.25.6
 

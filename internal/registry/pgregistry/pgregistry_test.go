@@ -8,13 +8,13 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/laenen-ai/iam"
-	"github.com/laenen-ai/iam/iamtest"
-	"github.com/laenen-ai/iam/internal/domain"
-	"github.com/laenen-ai/iam/internal/migrate"
-	"github.com/laenen-ai/iam/internal/registry"
-	"github.com/laenen-ai/iam/internal/registry/pgregistry"
-	"github.com/laenen-ai/iam/internal/testdb"
+	"github.com/laenenai/iam"
+	"github.com/laenenai/iam/iamtest"
+	"github.com/laenenai/iam/internal/domain"
+	"github.com/laenenai/iam/internal/migrate"
+	"github.com/laenenai/iam/internal/registry"
+	"github.com/laenenai/iam/internal/registry/pgregistry"
+	"github.com/laenenai/iam/internal/testdb"
 )
 
 // The deployment policy this adapter is given for the conformance run.

@@ -15,8 +15,8 @@
 package agents
 
 import (
-	"github.com/laenen-ai/iam"
-	"github.com/laenen-ai/iam/examples/scenario"
+	"github.com/laenenai/iam"
+	"github.com/laenenai/iam/examples/scenario"
 )
 
 // agentKinds is a kgs-shaped schema plus the world layer: a shared

@@ -46,7 +46,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/laenen-ai/iam"
+	"github.com/laenenai/iam"
 )
 
 // Ref names one object in a fixture: a container, a resource, a role, a

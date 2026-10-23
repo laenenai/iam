@@ -34,8 +34,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/laenen-ai/iam/internal/domain"
-	"github.com/laenen-ai/iam/internal/registry"
+	"github.com/laenenai/iam/internal/domain"
+	"github.com/laenenai/iam/internal/registry"
 )
 
 // IssuerPolicy answers which OIDC issuers a tenant accepts. The set is

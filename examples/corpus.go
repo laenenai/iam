@@ -15,12 +15,12 @@
 package examples
 
 import (
-	"github.com/laenen-ai/iam/examples/agents"
-	"github.com/laenen-ai/iam/examples/discretionary"
-	"github.com/laenen-ai/iam/examples/household"
-	"github.com/laenen-ai/iam/examples/mandatory"
-	"github.com/laenen-ai/iam/examples/scenario"
-	"github.com/laenen-ai/iam/examples/unexpressible"
+	"github.com/laenenai/iam/examples/agents"
+	"github.com/laenenai/iam/examples/discretionary"
+	"github.com/laenenai/iam/examples/household"
+	"github.com/laenenai/iam/examples/mandatory"
+	"github.com/laenenai/iam/examples/scenario"
+	"github.com/laenenai/iam/examples/unexpressible"
 )
 
 // All returns every scenario in the corpus, in reading order: the

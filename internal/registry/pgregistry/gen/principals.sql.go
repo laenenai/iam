@@ -9,7 +9,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/laenen-ai/iam/internal/domain"
+	"github.com/laenenai/iam/internal/domain"
 )
 
 const collectExpiredAgentRuns = `-- name: CollectExpiredAgentRuns :execrows

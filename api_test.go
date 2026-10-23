@@ -49,7 +49,7 @@ var apiPackages = []string{
 	"internal/idp",
 }
 
-const apiHeader = `# Public API of github.com/laenen-ai/iam, as a golden file.
+const apiHeader = `# Public API of github.com/laenenai/iam, as a golden file.
 #
 # Regenerate with: go test . -run TestAPIGolden -update-api
 #

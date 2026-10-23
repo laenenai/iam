@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/laenen-ai/iam"
+	"github.com/laenenai/iam"
 )
 
 // APIGoldenPath is where the harness looks for the module's public surface

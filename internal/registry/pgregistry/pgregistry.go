@@ -90,9 +90,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/laenen-ai/iam/internal/domain"
-	"github.com/laenen-ai/iam/internal/registry"
-	"github.com/laenen-ai/iam/internal/registry/pgregistry/gen"
+	"github.com/laenenai/iam/internal/domain"
+	"github.com/laenenai/iam/internal/registry"
+	"github.com/laenenai/iam/internal/registry/pgregistry/gen"
 )
 
 // Registry is the Postgres-backed identity registry.

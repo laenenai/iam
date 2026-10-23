@@ -28,8 +28,8 @@
 package household
 
 import (
-	"github.com/laenen-ai/iam"
-	"github.com/laenen-ai/iam/examples/scenario"
+	"github.com/laenenai/iam"
+	"github.com/laenenai/iam/examples/scenario"
 )
 
 // graphKinds is the registered schema kgs declares (design §8.4, §12):

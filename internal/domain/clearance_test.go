@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/laenen-ai/iam/internal/domain"
+	"github.com/laenenai/iam/internal/domain"
 )
 
 // negativeCompileFile is the file that must not compile, relative to the

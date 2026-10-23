@@ -16,8 +16,8 @@
 package discretionary
 
 import (
-	"github.com/laenen-ai/iam"
-	"github.com/laenen-ai/iam/examples/scenario"
+	"github.com/laenenai/iam"
+	"github.com/laenenai/iam/examples/scenario"
 )
 
 // driveKinds is the registered schema a Drive-shaped consumer declares

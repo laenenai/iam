@@ -28,8 +28,8 @@ import (
 	"github.com/pressly/goose/v3"
 	"github.com/pressly/goose/v3/lock"
 
-	"github.com/laenen-ai/iam/db/migrations"
-	"github.com/laenen-ai/iam/internal/domain"
+	"github.com/laenenai/iam/db/migrations"
+	"github.com/laenenai/iam/internal/domain"
 )
 
 // lockKey is the Postgres session-level advisory lock key Up and Status
@@ -40,7 +40,7 @@ import (
 // unrelated advisory lock taken by something else sharing the same
 // Postgres cluster — computed once as:
 //
-//	crc32.ChecksumIEEE([]byte("github.com/laenen-ai/iam/internal/migrate"))
+//	crc32.ChecksumIEEE([]byte("github.com/laenenai/iam/internal/migrate"))
 //
 // It must never change: changing it would let an old and a new binary run
 // migrations concurrently against each other during a rolling deploy,

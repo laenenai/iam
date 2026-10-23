@@ -16,8 +16,8 @@
 package mandatory
 
 import (
-	"github.com/laenen-ai/iam"
-	"github.com/laenen-ai/iam/examples/scenario"
+	"github.com/laenenai/iam"
+	"github.com/laenenai/iam/examples/scenario"
 )
 
 // legalKinds is the registered schema a law firm's document store declares

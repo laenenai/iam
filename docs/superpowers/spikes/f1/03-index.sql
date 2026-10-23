@@ -34,33 +34,8 @@ select id, container_id, zone, embedding from facts_flat;
 create index facts_flat_zone on facts_flat (zone) include (container_id);
 create index facts_flat_container on facts_flat (container_id);
 
--- Global HNSW over all 2,000,000 rows: strategy (a)'s index.
-create index facts_flat_hnsw on facts_flat
-    using hnsw (embedding halfvec_cosine_ops) with (m = 16, ef_construction = 64);
-
--- Per-partition HNSW: creating it on the parent creates one graph per
--- partition. 1,000 graphs of 2,000 elements each.
-create index facts_part_container on facts_part (container_id);
-create index facts_part_hnsw on facts_part
-    using hnsw (embedding halfvec_cosine_ops) with (m = 16, ef_construction = 64);
-
-analyze facts_flat;
-analyze facts_part;
-analyze container;
-analyze container_ancestry;
-analyze membership_closure;
-analyze grant_tuple;
-analyze fact_classification;
-analyze principal_clearance;
-
 \timing off
 
-select
-    relname,
-    pg_size_pretty(pg_total_relation_size(c.oid)) as total,
-    pg_size_pretty(pg_relation_size(c.oid))       as heap,
-    pg_size_pretty(pg_indexes_size(c.oid))        as indexes
-from pg_class c
-join pg_namespace n on n.oid = c.relnamespace
-where n.nspname = 'f1' and relkind in ('r', 'p') and relname in ('facts_flat', 'facts_part')
-order by relname;
+-- The HNSW builds live in 03b-hnsw.sql: they need
+-- max_parallel_maintenance_workers = 0 in this container, and the reason is
+-- worth reading before anyone repeats this on a laptop.

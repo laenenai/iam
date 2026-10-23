@@ -22,9 +22,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/laenen-ai/iam"
-	"github.com/laenen-ai/iam/internal/domain"
-	"github.com/laenen-ai/iam/internal/registry"
+	"github.com/laenenai/iam"
+	"github.com/laenenai/iam/internal/domain"
+	"github.com/laenenai/iam/internal/registry"
 )
 
 // suiteAgentRunTTL is the TTL the suite asks for when delegating an agent

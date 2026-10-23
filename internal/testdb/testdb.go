@@ -26,7 +26,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 
-	"github.com/laenen-ai/iam/internal/migrate"
+	"github.com/laenenai/iam/internal/migrate"
 )
 
 // postgresImage is the image used when TEST_DATABASE_URL is not set. It is

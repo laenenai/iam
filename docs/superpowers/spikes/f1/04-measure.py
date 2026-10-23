@@ -6,6 +6,20 @@ For each probe principal (whose accessible set is 50% / 10% / 1% / 0.1% /
 reports recall@20 against exact search over the same filtered set, plus
 p50/p95 latency and the number of rows actually returned.
 
+Two query distributions are measured, because filtered-ANN recall is not a
+property of the filter's selectivity alone -- it is a property of how much of
+the region of the vector space NEAR THE QUERY is accessible:
+
+  inset   the query is drawn from the probe's own accessible rows plus noise.
+          A user searching inside their own data. Local selectivity near the
+          query is high even when global selectivity is 0.1%.
+  global  the query is drawn from the whole table's distribution, ignoring the
+          probe. The accessible rows are then NOT concentrated near the query,
+          so local selectivity collapses towards (or below) global selectivity.
+
+Reporting only one of these would answer a different question than the one
+asked, and they do not give the same answer.
+
 "Rows returned" is reported because it is the finding, not a diagnostic: an
 HNSW scan with iterative scan off does not return a short list by accident,
 it returns a short list silently, which is kgs leak channel #6 arriving as a
@@ -58,15 +72,24 @@ TIER2_ANTIJOIN = """not exists (
         )"""
 
 
-def build_sql(table, *, use_key, use_tier1, limit=TOPK):
+def build_sql(table, *, use_key, use_tier1, limit=TOPK, zone_literal=None):
     """Compose the query for one strategy.
 
-    use_key   -- add `zone = any(%(zones)s)`, the materialized (b) key
-    use_tier1 -- keep the §9.2 tier-1 fragment as a residual predicate
+    use_key      -- add the materialized (b) key to the predicate
+    use_tier1    -- keep the §9.2 tier-1 fragment as a residual predicate
+    zone_literal -- inline the key set as a literal IN-list instead of a
+                    parameter. With 1,000 partitions a parameterised
+                    `= any($1)` can only be pruned at EXECUTION time, so the
+                    planner still plans all 1,000 children; a literal list is
+                    pruned at PLAN time. The difference is measured, not
+                    assumed.
     """
     preds = []
     if use_key:
-        preds.append("f.zone = any(%(zones)s)")
+        if zone_literal is not None:
+            preds.append("f.zone in (" + ",".join(str(z) for z in zone_literal) + ")")
+        else:
+            preds.append("f.zone = any(%(zones)s)")
     if use_tier1:
         preds.append(TIER1_EXISTS)
     preds.append(TIER2_ANTIJOIN)
@@ -189,6 +212,17 @@ def strategies(sfx):
             ],
             group="b",
         ),
+        # same as b-part, but the key set is inlined so pruning happens at
+        # plan time rather than execution time.
+        dict(
+            name="b-part-literal",
+            table=part,
+            use_key=True,
+            use_tier1=True,
+            zone_literal=True,
+            setup=[off, "set hnsw.ef_search = 40"],
+            group="b",
+        ),
         # key only -- valid ONLY when no grant is finer than the zone.
         dict(
             name="b-part-keyonly",
@@ -273,11 +307,29 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--explain-out", default=None)
     ap.add_argument("--probes", default="p50,p10,p1,p01,psub")
+    ap.add_argument("--query-modes", default="inset,global")
     args = ap.parse_args()
 
     rng = np.random.default_rng(SEED)
-    conn = psycopg.connect(args.dsn, autocommit=True)
+    # prepare_threshold=None: never auto-prepare. Without this, psycopg
+    # promotes each strategy's SQL to a server-side prepared statement after 5
+    # executions, PostgreSQL then builds a GENERIC plan for it, and for the
+    # 1,000-partition table that plan (a) cannot prune at plan time, costing
+    # ~500 ms of executor setup per query, and (b) is built from whatever
+    # parameter the earlier probes supplied -- so a 500-zone array planned for
+    # `p50` is still the plan in force when `p01` passes a 1-zone array. That
+    # cross-probe contamination is measured separately in 11-plancache.py,
+    # where it is the subject; here it is noise and is switched off.
+    conn = psycopg.connect(args.dsn, autocommit=True, prepare_threshold=None)
     cur = conn.cursor()
+    cur.execute("set plan_cache_mode = force_custom_plan")
+
+    # pgvector registers hnsw.* as session GUCs in its _PG_init, which only
+    # runs on first use of the extension in that backend. Without this, the
+    # first `set hnsw.iterative_scan = ...` fails with "unrecognized
+    # configuration parameter".
+    cur.execute("select '[1,2]'::vector <=> '[1,2]'::vector")
+    cur.fetchall()
 
     # ---- environment ----------------------------------------------------
     cur.execute("select version()")
@@ -287,7 +339,7 @@ def main():
     cur.execute(
         "select name, setting, unit from pg_settings where name in "
         "('shared_buffers','work_mem','maintenance_work_mem','max_parallel_workers_per_gather',"
-        "'effective_cache_size','jit','random_page_cost') order by name"
+        "'effective_cache_size','jit','random_page_cost','plan_cache_mode') order by name"
     )
     settings = {r[0]: f"{r[1]}{r[2] or ''}" for r in cur.fetchall()}
 
@@ -339,9 +391,19 @@ def main():
         cur.execute("select count(*) from f1.membership_closure where principal_id = %s", (p,))
         n_usersets = cur.fetchone()[0]
 
-        # query vectors: drawn from the probe's OWN accessible rows plus
-        # noise. A user searches inside their own data; drawing queries from
-        # the global distribution instead would measure a different question.
+        # --- query vectors, two distributions (see module docstring) -----
+        def perturb(txt):
+            base = np.array(
+                [float(x) for x in txt.strip("[]").split(",")], dtype=np.float32
+            )
+            noise = rng.standard_normal(DIM).astype(np.float32) / math.sqrt(DIM)
+            v = base + QUERY_NOISE * noise
+            v /= np.linalg.norm(v)
+            return halfvec_literal(v)
+
+        qvecs = {}
+
+        # inset: drawn from the probe's own accessible rows
         cur.execute(
             f"""select f.embedding::text from f1.{flat} f
                 where f.zone = any(%(zones)s) and {TIER1_EXISTS} and {TIER2_ANTIJOIN}
@@ -350,15 +412,15 @@ def main():
         )
         pool = cur.fetchall()
         idx = rng.choice(len(pool), size=min(args.queries, len(pool)), replace=False)
-        qvecs = []
-        for i in idx:
-            base = np.array(
-                [float(x) for x in pool[int(i)][0].strip("[]").split(",")], dtype=np.float32
-            )
-            noise = rng.standard_normal(DIM).astype(np.float32) / math.sqrt(DIM)
-            v = base + QUERY_NOISE * noise
-            v /= np.linalg.norm(v)
-            qvecs.append(halfvec_literal(v))
+        qvecs["inset"] = [perturb(pool[int(i)][0]) for i in idx]
+
+        # global: drawn from the whole table, ignoring the probe
+        gids = (rng.choice(total_rows, size=args.queries, replace=False) + 1).tolist()
+        cur.execute(
+            f"select f.embedding::text from f1.{flat} f where f.id = any(%(ids)s)",
+            dict(ids=gids),
+        )
+        qvecs["global"] = [perturb(r[0]) for r in cur.fetchall()][: args.queries]
 
         probes[name] = dict(
             principal=p,
@@ -385,40 +447,49 @@ def main():
     results = []
     truth = {}
 
-    for name in wanted:
+    modes = [m for m in args.query_modes.split(",") if m]
+    for mode in modes:
+      for name in wanted:
         pr = probes[name]
         for s in strat:
-            sql = build_sql(s["table"], use_key=s["use_key"], use_tier1=s["use_tier1"])
+            sql = build_sql(
+                s["table"],
+                use_key=s["use_key"],
+                use_tier1=s["use_tier1"],
+                zone_literal=pr["zones"] if s.get("zone_literal") else None,
+            )
             for st in RESET + s["setup"]:
                 cur.execute(st)
             params_base = dict(p=pr["principal"], zones=pr["zones"])
+            qs = pr["qvecs"][mode]
 
             # warm up (one query, not timed) so page cache state is comparable
             try:
-                cur.execute(sql, dict(params_base, q=pr["qvecs"][0]))
+                cur.execute(sql, dict(params_base, q=qs[0]))
                 cur.fetchall()
             except Exception as e:  # pragma: no cover
-                log(f"  {name}/{s['name']}: FAILED {e}")
+                log(f"  {mode}/{name}/{s['name']}: FAILED {e}")
                 continue
 
             lats, recalls, returned = [], [], []
             t_start = time.perf_counter()
-            for qi, q in enumerate(pr["qvecs"]):
+            for qi, q in enumerate(qs):
                 t = time.perf_counter()
                 cur.execute(sql, dict(params_base, q=q))
                 ids = [r[0] for r in cur.fetchall()]
                 lats.append((time.perf_counter() - t) * 1000)
                 returned.append(len(ids))
                 if s["group"] == "truth":
-                    truth[(name, qi)] = set(ids)
+                    truth[(mode, name, qi)] = set(ids)
                 else:
-                    gt = truth.get((name, qi))
+                    gt = truth.get((mode, name, qi))
                     if gt:
                         recalls.append(len(set(ids) & gt) / len(gt))
             elapsed = time.perf_counter() - t_start
 
             row = dict(
                 probe=name,
+                query_mode=mode,
                 strategy=s["name"],
                 group=s["group"],
                 table=s["table"],
@@ -426,7 +497,7 @@ def main():
                 use_tier1=s["use_tier1"],
                 settings=s["setup"],
                 selectivity=pr["selectivity"],
-                n_queries=len(pr["qvecs"]),
+                n_queries=len(qs),
                 p50_ms=pct(lats, 0.50),
                 p95_ms=pct(lats, 0.95),
                 mean_ms=statistics.fmean(lats),
@@ -442,7 +513,7 @@ def main():
             results.append(row)
             rc = "  --  " if row["recall_mean"] is None else f"{row['recall_mean']:.4f}"
             log(
-                f"  {name:5s} {s['name']:16s} recall={rc} "
+                f"  {mode:6s} {name:5s} {s['name']:16s} recall={rc} "
                 f"p50={row['p50_ms']:8.1f}ms p95={row['p95_ms']:8.1f}ms "
                 f"ret={row['returned_mean']:5.1f} short={row['short_results']}/{len(returned)}"
             )
@@ -478,11 +549,14 @@ def main():
                 pr = probes[name]
                 for s in strat:
                     sql = build_sql(
-                        s["table"], use_key=s["use_key"], use_tier1=s["use_tier1"]
+                        s["table"],
+                        use_key=s["use_key"],
+                        use_tier1=s["use_tier1"],
+                        zone_literal=pr["zones"] if s.get("zone_literal") else None,
                     )
                     for st in RESET + s["setup"]:
                         cur.execute(st)
-                    q = pr["qvecs"][0]
+                    q = pr["qvecs"]["inset"][0]
                     fh.write("=" * 78 + "\n")
                     fh.write(
                         f"probe={name} (grant at L{pr['depth']}, selectivity "

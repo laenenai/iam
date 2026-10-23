@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/laenen-ai/iam/examples/scenario"
+	"github.com/laenenai/iam/examples/scenario"
 )
 
 // The tests in this file are about the harness rather than about `iam`.

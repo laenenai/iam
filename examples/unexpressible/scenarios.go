@@ -25,8 +25,8 @@
 package unexpressible
 
 import (
-	"github.com/laenen-ai/iam"
-	"github.com/laenen-ai/iam/examples/scenario"
+	"github.com/laenenai/iam"
+	"github.com/laenenai/iam/examples/scenario"
 )
 
 func group() scenario.ResourceKind {

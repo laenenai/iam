@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/laenen-ai/iam/internal/domain"
+	"github.com/laenenai/iam/internal/domain"
 )
 
 // Memory is an in-memory Registry: the adapter the decision procedure's

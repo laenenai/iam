@@ -8,7 +8,7 @@ package gen
 import (
 	"context"
 
-	"github.com/laenen-ai/iam/internal/domain"
+	"github.com/laenenai/iam/internal/domain"
 )
 
 const addClaimGroupMemberships = `-- name: AddClaimGroupMemberships :exec

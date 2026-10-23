@@ -62,44 +62,44 @@ sql:
           # the same reason.
           - column: "iam.principals.id"
             go_type:
-              import: "github.com/laenen-ai/iam/internal/domain"
+              import: "github.com/laenenai/iam/internal/domain"
               type: "PrincipalID"
           - column: "iam.principals.tenant_id"
             go_type:
-              import: "github.com/laenen-ai/iam/internal/domain"
+              import: "github.com/laenenai/iam/internal/domain"
               type: "TenantID"
           - column: "iam.principals.kind"
             go_type:
-              import: "github.com/laenen-ai/iam/internal/domain"
+              import: "github.com/laenenai/iam/internal/domain"
               type: "PrincipalKind"
           # delegated_by is NULL for everything but an agent run, so it is
           # the typed id behind a pointer rather than the id itself.
           - column: "iam.principals.delegated_by"
             go_type:
-              import: "github.com/laenen-ai/iam/internal/domain"
+              import: "github.com/laenenai/iam/internal/domain"
               type: "PrincipalID"
               pointer: true
 
           - column: "iam.groups.id"
             go_type:
-              import: "github.com/laenen-ai/iam/internal/domain"
+              import: "github.com/laenenai/iam/internal/domain"
               type: "GroupID"
           - column: "iam.groups.tenant_id"
             go_type:
-              import: "github.com/laenen-ai/iam/internal/domain"
+              import: "github.com/laenenai/iam/internal/domain"
               type: "TenantID"
 
           - column: "iam.group_members.group_id"
             go_type:
-              import: "github.com/laenen-ai/iam/internal/domain"
+              import: "github.com/laenenai/iam/internal/domain"
               type: "GroupID"
           - column: "iam.group_members.principal_id"
             go_type:
-              import: "github.com/laenen-ai/iam/internal/domain"
+              import: "github.com/laenenai/iam/internal/domain"
               type: "PrincipalID"
           - column: "iam.group_members.source"
             go_type:
-              import: "github.com/laenen-ai/iam/internal/domain"
+              import: "github.com/laenenai/iam/internal/domain"
               type: "GroupSource"
 
           # ---------------------------------------------------------------
@@ -137,47 +137,47 @@ sql:
 
           - column: "iam.clearance_groups.tenant_id"
             go_type:
-              import: "github.com/laenen-ai/iam/internal/domain"
+              import: "github.com/laenenai/iam/internal/domain"
               type: "TenantID"
           - column: "iam.clearance_groups.channel"
             go_type:
-              import: "github.com/laenen-ai/iam/internal/domain"
+              import: "github.com/laenenai/iam/internal/domain"
               type: "MandatoryChannel"
 
           - column: "iam.clearance_group_members.principal_id"
             go_type:
-              import: "github.com/laenen-ai/iam/internal/domain"
+              import: "github.com/laenenai/iam/internal/domain"
               type: "PrincipalID"
           - column: "iam.clearance_group_members.channel"
             go_type:
-              import: "github.com/laenen-ai/iam/internal/domain"
+              import: "github.com/laenenai/iam/internal/domain"
               type: "MandatoryChannel"
           - column: "iam.clearance_group_members.actor_principal_id"
             go_type:
-              import: "github.com/laenen-ai/iam/internal/domain"
+              import: "github.com/laenenai/iam/internal/domain"
               type: "PrincipalID"
 
           - column: "iam.clearance_group_changes.id"
             go_type:
-              import: "github.com/laenen-ai/iam/internal/domain"
+              import: "github.com/laenenai/iam/internal/domain"
               type: "ChangeID"
           # NULL for a 'created' entry, which names no principal.
           - column: "iam.clearance_group_changes.principal_id"
             go_type:
-              import: "github.com/laenen-ai/iam/internal/domain"
+              import: "github.com/laenenai/iam/internal/domain"
               type: "PrincipalID"
               pointer: true
           - column: "iam.clearance_group_changes.kind"
             go_type:
-              import: "github.com/laenen-ai/iam/internal/domain"
+              import: "github.com/laenenai/iam/internal/domain"
               type: "ClearanceChangeKind"
           - column: "iam.clearance_group_changes.channel"
             go_type:
-              import: "github.com/laenen-ai/iam/internal/domain"
+              import: "github.com/laenenai/iam/internal/domain"
               type: "MandatoryChannel"
           - column: "iam.clearance_group_changes.actor_principal_id"
             go_type:
-              import: "github.com/laenen-ai/iam/internal/domain"
+              import: "github.com/laenenai/iam/internal/domain"
               type: "PrincipalID"
 
           # The two views are the artifact design §9's predicate joins, not
@@ -185,17 +185,17 @@ sql:
           # here anyway so models.go describes the schema uniformly.
           - column: "iam.live_group_members.principal_id"
             go_type:
-              import: "github.com/laenen-ai/iam/internal/domain"
+              import: "github.com/laenenai/iam/internal/domain"
               type: "PrincipalID"
           - column: "iam.live_group_members.group_id"
             go_type:
-              import: "github.com/laenen-ai/iam/internal/domain"
+              import: "github.com/laenenai/iam/internal/domain"
               type: "GroupID"
           - column: "iam.live_group_members.source"
             go_type:
-              import: "github.com/laenen-ai/iam/internal/domain"
+              import: "github.com/laenenai/iam/internal/domain"
               type: "GroupSource"
           - column: "iam.live_clearance_group_members.principal_id"
             go_type:
-              import: "github.com/laenen-ai/iam/internal/domain"
+              import: "github.com/laenenai/iam/internal/domain"
               type: "PrincipalID"

@@ -7,7 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/laenen-ai/iam/internal/domain"
+	"github.com/laenenai/iam/internal/domain"
 )
 
 // mapErr is the single place a Postgres/pgx-layer error becomes an error

@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/laenen-ai/iam"
-	"github.com/laenen-ai/iam/examples"
-	"github.com/laenen-ai/iam/examples/scenario"
+	"github.com/laenenai/iam"
+	"github.com/laenenai/iam/examples"
+	"github.com/laenenai/iam/examples/scenario"
 )
 
 // updateLedger rewrites examples/pending.txt instead of checking it:

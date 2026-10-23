@@ -7,7 +7,7 @@ package gen
 import (
 	"time"
 
-	"github.com/laenen-ai/iam/internal/domain"
+	"github.com/laenenai/iam/internal/domain"
 )
 
 type IamClearanceGroup struct {

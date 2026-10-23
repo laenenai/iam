@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/laenen-ai/iam/internal/domain"
+	"github.com/laenenai/iam/internal/domain"
 )
 
 func TestParseIDsRejectMalformedInput(t *testing.T) {

@@ -94,7 +94,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/laenen-ai/iam/internal/domain"
+	"github.com/laenenai/iam/internal/domain"
 )
 
 // Claims is the subset of a verified token the registry provisions from.

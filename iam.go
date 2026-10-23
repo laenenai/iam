@@ -35,11 +35,11 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/laenen-ai/iam/internal/domain"
-	"github.com/laenen-ai/iam/internal/idp"
-	"github.com/laenen-ai/iam/internal/migrate"
-	"github.com/laenen-ai/iam/internal/registry"
-	"github.com/laenen-ai/iam/internal/registry/pgregistry"
+	"github.com/laenenai/iam/internal/domain"
+	"github.com/laenenai/iam/internal/idp"
+	"github.com/laenenai/iam/internal/migrate"
+	"github.com/laenenai/iam/internal/registry"
+	"github.com/laenenai/iam/internal/registry/pgregistry"
 )
 
 // The identity registry port and the values it moves. RunRegistrySuite in

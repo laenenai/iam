@@ -6,7 +6,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/laenen-ai/iam"
+	"github.com/laenenai/iam"
 )
 
 // Env is a fixture's identity layer after it has been materialized against
