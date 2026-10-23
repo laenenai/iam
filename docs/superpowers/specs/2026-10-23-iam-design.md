@@ -395,6 +395,14 @@ direct path** — Lakekeeper's bi-directional inheritance, made an explicit
 `visible_below`-style relation that reads bare relations and recurses downward
 rather than being derived at read time.
 
+> **"Only on the direct path" is unimplemented and currently undefined, pending
+> F3.** It presumes containment is a tree. Once a kgs fact belongs to an episode
+> *and* to zero or more nestable entity-sets there are several paths, and the
+> phrase names nothing. The three repairs are not equivalent: a union of paths
+> reopens leak channel #1, an intersection is usually empty, and designating a
+> primary container per write pushes the decision onto every consumer write. Do
+> not build against this sentence until F3 is settled.
+
 This matters more here than in a catalog, because it is how a consumer answers
 "find the thing you may see" without revealing its siblings. KGS §7.3 derives
 entity existence from authorized assertions, which is correct but implicit;
@@ -432,6 +440,15 @@ Properties, each non-negotiable and each a test in §13:
 - **Scoped**: a classification may be declared over a whole resource, or over a
   named attribute or field of it, which is how property-level and cell-level
   security compose without a second mechanism (CAS §9.3, KGS §9.2).
+  **Conditional on storage shape — a caveat on the feature, not a footnote
+  (F4):** an attribute-scoped classification is enforceable by a row predicate
+  only where the attribute *is* a row. True for kgs, where facts are rows;
+  false for CAS, where a document's fields are columns and a `WHERE` clause
+  cannot hide one. Where it is false, either `Predicate` returns a
+  permitted-attribute set the consumer applies — moving part of A3's trust
+  boundary into consumer code — or the sensitive field becomes its own
+  resource. Declaring one over a column-shaped resource must fail loudly at
+  registration rather than appear to work.
 - **Creating and assigning classifications is itself permissioned and
   audited**, and is not a power that ownership confers.
 
@@ -498,6 +515,16 @@ against, which is how A3's "no exclusion operator" guard is possible at all.
 Where a real requirement cannot be expressed in the subset, the answer is a
 classification, not a richer language. If a requirement arrives that is neither
 — that is a design conversation, not a configuration change.
+
+**But "use a classification" is a one-way promotion, and saying so is part of
+the rule.** A classification is mandatory and non-delegable, so answering a
+*discretionary* requirement with one does not express it differently — it
+converts "don't show her the salary figures" into an absolute **no owner can
+lift**, and someone who wanted a default has been handed a prohibition. That is
+a change in meaning, not in syntax, and it must be refused at registration
+rather than absorbed. A requirement that is genuinely discretionary and
+genuinely outside the subset is F7 — and F7 and F4 resolve to the same fork, so
+decide them together.
 
 ## 9. The projection
 
@@ -867,9 +894,13 @@ enforcement class, and `escrow` ships on its own timeline.
    derivation, which a named `(principal, resource)` block would not. If a real
    requirement needs a named pair, the mandatory layer gains a second rule
    shape and the A3 suite doubles. The design assumes **no**.
-2. **Who may create and assign classifications?** They cannot be granted away
-   (§8.3), which means the power to classify is strictly more dangerous than
-   the power to grant. Candidates: a deployment-level security admin only; a
+2. **Who may create and assign classifications?** **No longer a design
+   preference — this is the blocking input to §17's F9, which the `examples/`
+   corpus demonstrated against the real registry: while it is unanswered, an
+   ordinary principal can construct a mandatory act naming themselves and walk
+   into a conflict screen's clearance group.** Classifications cannot be
+   granted away (§8.3), which means the power to classify is strictly more
+   dangerous than the power to grant. Candidates: a deployment-level security admin only; a
    per-tenant security admin; or the resource owner at creation time with
    changes restricted afterwards. The household case wants the third; the legal
    case wants the second. This decides whether the permission is one role or
@@ -920,6 +951,8 @@ lost and each has an owner. Items the check raised that *were* resolved are in
 | F6 | **Which `tenancy` connection the engine gets.** `tenancy`'s data-plane handles carry RLS session context and its control-plane path must not accept caller-supplied predicates; OpenFGA sets no tenant context, runs its own migrations (against the goose decision), and its queries inherit whatever RLS the pool's role carries. If it needs its own role, pool and `search_path`, the one-function-signature A1 argument that selected it is weaker than §10 states. | **Open.** Changes phase-1 wiring and `tenancy`'s public surface. |
 | F7 | **Two of kgs §9.3's rule dimensions fall outside §8.5's permitted subset** — ontology scope ("may read `Person` but not `salary`": attribute-conditioned and exclusionary) and predicate-defined entity-sets (authorization as a function of data). §8.5's answer is "use a classification", but a classification is mandatory and non-delegable, so a discretionary "don't show her salary facts" becomes an absolute no owner can lift. | **Open.** Either kgs loses those dimensions or tier 1 gains a form. Do not add a form casually; §8.5's restriction is what buys the projection. |
 | F8 | **What is the audit unit on the `Predicate` path?** A filtered read over 10M rows makes no per-row decision and produces no denials — absent rows are not refusals. KGS §8.6 requires denied access to be audited. | **Open.** Likely the compiled predicate plus parameters plus epoch, but §7.1's "auditable without being informative" needs a concrete answer for the surface carrying the traffic. |
+
+| F9 | **Nothing checks whether the actor on a mandatory act may classify.** §8.3 says creating and assigning classifications "is itself permissioned and audited, and is not a power that ownership confers" — but nothing enforces the actor's *authority*, because §16.2 is unanswered. The registry enforces the **witness** (a `MandatoryAct` carrying channel, actor, reason and instant, with unexported fields so the provisioning path cannot forge one) and not the **right**. So an ordinary principal can construct an act naming themselves, join a conflict screen's clearance group, and the gate opens. The `examples/` corpus does exactly that against the real registry, and the registry accepts it. | **Blocking on §16.2, and the most serious entry here.** Found by writing the corpus rather than by review, which is why it was absent from this register. A3's invariant remains literally true — no *discretionary* operation opens a gate — but the mandatory channel is itself unguarded, so the practical guarantee the design reads as making is absent, and every mandatory scenario asserts strictly less than it appears to. The fix is small and the same shape under all three candidate answers: `NewMandatoryAct` stops being free and requires a checked capability, and the A3 suite gains the mandatory channel as an attack surface it does not presently cover at all. |
 
 Verified by the check and already folded in above: `postgres.NewWithDB` is real
 (§10's A1 argument holds); `NewTxConnector` does **not** permit a caller's
