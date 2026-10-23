@@ -25,6 +25,24 @@ const (
 	suiteMaxAgentRunTTL = 24 * time.Hour
 )
 
+// predicate is design §9's authorization predicate, verbatim in the shape
+// a consumer embeds it, and the one place its text is written in this
+// package's tests.
+//
+// It is hand-composed and not generated, which is CONVENTIONS' single
+// exception to sqlc and the reason pgregistry's package doc names it: the
+// real predicate is a fragment the consumer pastes into its own statement,
+// so there is no fixed query for a generator to type-check. Keeping one
+// copy is what makes the test of its *answer*
+// (TestLiveGroupMembersViewIsTheJoinablePredicateArtifact) and the test of
+// its *plan* (TestPredicatePlanIsAnIndexProbe) tests of the same
+// statement.
+const predicate = `
+		SELECT EXISTS (
+			SELECT 1 FROM iam.live_group_members lgm
+			WHERE lgm.principal_id = $1 AND lgm.group_id = $2
+		)`
+
 // newPGRegistry is the per-subtest factory. testdb.Start gives each
 // subtest its own uniquely-named, freshly migrated database and registers
 // the teardown with that subtest's t.Cleanup, so every subtest in the
@@ -342,12 +360,6 @@ func TestLiveGroupMembersViewIsTheJoinablePredicateArtifact(t *testing.T) {
 		t.Fatalf("EnsureGroup: %v", err)
 	}
 
-	// The predicate, verbatim in the shape a consumer embeds it.
-	const predicate = `
-		SELECT EXISTS (
-			SELECT 1 FROM iam.live_group_members lgm
-			WHERE lgm.principal_id = $1 AND lgm.group_id = $2
-		)`
 	visible := func() bool {
 		t.Helper()
 		var ok bool
@@ -469,12 +481,9 @@ func TestPredicatePlanIsAnIndexProbe(t *testing.T) {
 		t.Fatalf("ANALYZE: %v", err)
 	}
 
-	const explain = `
-		EXPLAIN (FORMAT TEXT)
-		SELECT EXISTS (
-			SELECT 1 FROM iam.live_group_members lgm
-			WHERE lgm.principal_id = $1 AND lgm.group_id = $2
-		)`
+	// The predicate under EXPLAIN, from the same text the answer test
+	// runs, so the two cannot drift apart.
+	const explain = `EXPLAIN (FORMAT TEXT)` + predicate
 	rows, err := pool.Query(ctx, explain, string(probe), string(group.ID))
 	if err != nil {
 		t.Fatalf("EXPLAIN: %v", err)
