@@ -31,7 +31,11 @@ func TestTripwireFiresWhenACapabilityArrives(t *testing.T) {
 		{"Decide reaches the facade", "package iam // .\n\nfunc Decide(ctx context.Context) error\n", scenario.CapDecide},
 		{"Predicate reaches the facade", "package iam // .\n\ntype Predicate struct {\n\tSQL string\n}\n", scenario.CapPredicate},
 		{"the tuple store reaches the facade", "package iam // .\n\nfunc WriteTuple(ctx context.Context) error\n", scenario.CapTupleStore},
-		{"the classification store reaches the facade", "package iam // .\n\nfunc Classify(ctx context.Context) error\n", scenario.CapClassificationStore},
+		{
+			"an attribute-aware predicate reaches the facade",
+			"package iam // .\n\nfunc PermittedAttributes(ctx context.Context) ([]string, error)\n",
+			scenario.CapAttributePredicate,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -132,7 +136,8 @@ func TestUnexpressibleScenarioNeedsADemonstration(t *testing.T) {
 
 	withDemonstration := base
 	withDemonstration.Claims = []scenario.Claim{
-		scenario.C(scenario.ClaimRowEnforceable, "whatever", "false", "stands in for a real demonstration"),
+		scenario.C(scenario.ClaimAttributeEnforceable, "document:x.salary", "false",
+			"stands in for a real demonstration"),
 	}
 	if err := withDemonstration.Validate(); err != nil {
 		t.Fatalf("the same scenario with a gap claim should validate: %v", err)
@@ -179,17 +184,37 @@ func TestLiveScenarioCannotCarryATable(t *testing.T) {
 
 // TestSchemaLintRejectsExclusion is design §4/A3's third corollary as a
 // direct test rather than through a scenario: an exclusion operator must
-// be refused, and the refusal must name the classification mechanism, so
-// the error tells a consumer what to use instead of merely saying no.
+// be refused, and the refusal must tell the consumer what to do instead of
+// merely saying no.
+//
+// What "instead" means has changed, which is why each case now carries its
+// own expected text. The exclusion refusal used to name the
+// classification mechanism; there is no classification, so it names the
+// anti-goal and `escrow`. The attribute-condition refusal used to name the
+// classification mechanism too, and it now has nothing to point at: it
+// says so, and names the open findings, because a refusal that invents an
+// alternative is worse than one that admits there is none.
 func TestSchemaLintRejectsExclusion(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name string
-		rel  scenario.Relation
+		name         string
+		rel          scenario.Relation
+		mustMention  string
+		wantSentinel error
 	}{
-		{"exclusion", scenario.Relation{Name: "viewer", Direct: true, Exclude: []string{"blocked"}}},
-		{"attribute condition", scenario.Relation{Name: "viewer", Direct: true, AttributeCondition: "row.kind != 'salary'"}},
+		{
+			name:         "exclusion",
+			rel:          scenario.Relation{Name: "viewer", Direct: true, Exclude: []string{"blocked"}},
+			mustMention:  "escrow",
+			wantSentinel: scenario.ErrNoDenyMechanism,
+		},
+		{
+			name:         "attribute condition",
+			rel:          scenario.Relation{Name: "viewer", Direct: true, AttributeCondition: "row.kind != 'salary'"},
+			mustMention:  "F7",
+			wantSentinel: scenario.ErrUnexpressible,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -199,18 +224,31 @@ func TestSchemaLintRejectsExclusion(t *testing.T) {
 			if ok {
 				t.Fatalf("CanExpress accepted %s, which design §8.5 does not permit", tc.name)
 			}
-			if !strings.Contains(why, "classification") {
-				t.Fatalf("the refusal did not name the classification mechanism: %s", why)
+			if !strings.Contains(why, tc.mustMention) {
+				t.Fatalf("the refusal of %s did not mention %q, so it does not tell the consumer where to "+
+					"go next: %s", tc.name, tc.mustMention, why)
+			}
+
+			f := scenario.Fixture{Kinds: []scenario.ResourceKind{{
+				Name: kind.Name, Shape: kind.Shape,
+				Relations: []scenario.Relation{tc.rel}, Actions: kind.Actions,
+			}}}
+			if err := scenario.LintSchema(f); !errors.Is(err, tc.wantSentinel) {
+				t.Fatalf("LintSchema(%s) error = %v, want it to wrap %v — a lint that flattens its reasons "+
+					"into one string makes `which rule was broken` unanswerable in code", tc.name, err, tc.wantSentinel)
 			}
 		})
 	}
 }
 
-// TestSchemaLintRejectsAClearanceGroupInATier1Tuple is design §8.3's
-// absolute rule, checked textually. The type system already makes it
-// impossible to pass a GroupID where a ClearanceGroupID is wanted; this is
-// the half that matters when an id or a schema arrives as a string.
-func TestSchemaLintRejectsAClearanceGroupInATier1Tuple(t *testing.T) {
+// TestNoDenyMechanismIsTheRefusal pins the one sentence the lint exists to
+// say. There used to be a test here asserting that a tuple whose subject
+// was a clearance group was refused, on the grounds that a clearance
+// reachable through a discretionary operation would breach anti-goal A3 by
+// construction. The tier it protected is gone and the rule is simpler: no
+// relation may exclude anything, at all, because there is no deny
+// mechanism to express an exclusion in.
+func TestNoDenyMechanismIsTheRefusal(t *testing.T) {
 	t.Parallel()
 
 	f := scenario.Fixture{
@@ -219,23 +257,20 @@ func TestSchemaLintRejectsAClearanceGroupInATier1Tuple(t *testing.T) {
 			Name:  "document",
 			Shape: scenario.ShapeColumnar,
 			Relations: []scenario.Relation{
-				{Name: "viewer", Direct: true, Usersets: []string{"clearance#member"}},
+				{Name: "viewer", Direct: true, Exclude: []string{"screened"}},
 			},
 			Actions: map[string]string{"read": "viewer"},
 		}},
 		Principals: []scenario.PrincipalSpec{{Name: "user:a"}},
-		Tuples: []scenario.Tuple{
-			scenario.T("document:x", "viewer", scenario.US("clearance:matter-1234-team", "member")),
-		},
 	}
 	err := scenario.LintSchema(f)
-	if err == nil {
-		t.Fatal("the lint accepted a tier-1 tuple whose subject is a clearance group. If that were " +
-			"possible, anyone who may change a team's membership could open a mandatory gate through a " +
-			"discretionary operation, and anti-goal A3 would be breached by construction")
+	if !errors.Is(err, scenario.ErrNoDenyMechanism) {
+		t.Fatalf("LintSchema error = %v, want it to wrap ErrNoDenyMechanism. A `screened` relation is the "+
+			"shape a consumer reaches for when it wants an absolute, and the refusal is where it finds out "+
+			"that an absolute is a key the deployment does not hold rather than a policy row", err)
 	}
-	if !errors.Is(err, scenario.ErrClearanceInTier1) {
-		t.Fatalf("the lint refused it for the wrong reason: %v", err)
+	if !strings.Contains(err.Error(), "escrow") {
+		t.Fatalf("the refusal did not name escrow, so it says no without saying what to do: %v", err)
 	}
 }
 
