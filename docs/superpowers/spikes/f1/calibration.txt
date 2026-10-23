@@ -1,0 +1,13 @@
+--- 1. tie ceiling on exact-vs-exact, probe p01 (0.1%) ---
+  queries: 30
+  mean overlap@20 between two EXACT plans : 1.0000
+  min  overlap@20                         : 1.00
+  mean rows sharing the 20th distance     : 1.00
+  max  rows sharing the 20th distance     : 1
+
+--- 2. unfiltered recall@20 on facts_flat (2,000,000 rows), no predicate ---
+  ef_search=   40  recall@20 mean=0.5267 min=0.00
+  ef_search=  100  recall@20 mean=0.6900 min=0.00
+  ef_search=  200  recall@20 mean=0.7833 min=0.00
+  ef_search=  400  recall@20 mean=0.8583 min=0.00
+  ef_search= 1000  recall@20 mean=0.8917 min=0.00

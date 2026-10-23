@@ -1,0 +1,12 @@
+facts_part partitions: 1000
+probe p01: principal=2004, accessible zones=[614] (1 of 1000)
+
+Same query, same data, same results -- only plan caching differs:
+  parameterised key, prepared statements allowed exec1-5 mean      3.2 ms | exec6+ mean      9.4 ms | overall p50      1.9 ms
+  parameterised key, plan_cache_mode=force_custom_plan exec1-5 mean      3.0 ms | exec6+ mean      2.0 ms | overall p50      1.9 ms
+  parameterised key, auto-prepare disabled       exec1-5 mean      3.0 ms | exec6+ mean      2.0 ms | overall p50      2.0 ms
+  key inlined as a literal IN-list               exec1-5 mean      3.1 ms | exec6+ mean      1.9 ms | overall p50      1.9 ms
+
+Cross-probe contamination: a generic plan shaped by a 500-zone array,
+then reused for a 1-zone array on the same connection:
+  1-zone query on the 500-zone generic plan      p50      1.8 ms | min      1.5 ms
