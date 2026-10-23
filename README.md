@@ -11,11 +11,14 @@ the same statement as a vector search, not one row at a time.
 
 > **Status: pre-1.0, and incomplete in a way worth reading before you adopt
 > it.** The identity registry is implemented and tested against real Postgres.
-> **The decision API (`Decide`, `Predicate`) is not built yet**, and eight open
-> findings — two of which can still change the public API — are tracked in the
-> design document's §17. The `examples/` corpus marks which use cases work
-> today, which are pending, and which the design currently cannot express at
-> all.
+> **The decision API (`Decide`, `Predicate`) is not built yet.** Three open
+> findings are tracked in the design document's §17 — F3 (DAG containment), F4
+> (attribute granularity) and F8 (the audit unit on the predicate path) — and
+> two of them can still change the public API: F3, and F1's resolution which
+> depends on it. The count was eight; four closed by deletion and one resolved
+> when the deny mechanism and the third-party engine were removed on
+> 2026-10-23. The `examples/` corpus marks which use cases work today, which
+> are pending, and which the design currently cannot express at all.
 
 ## Install
 
@@ -50,39 +53,56 @@ if err != nil {
 groups, err := reg.GroupsOf(ctx, p.ID, time.Now())
 ```
 
-## Three enforcement tiers, deliberately not one
+## There is no deny mechanism
+
+This is the thing to know before adopting it, and it is a decision rather than
+a gap. `iam` has two tiers:
 
 | Tier | Mechanism | Survives |
 |---|---|---|
-| **Discretionary** | relation tuples, usersets, inheritance | the everyday shareable, revocable layer |
-| **Mandatory** | classifications on resources, clearances on principals | any grant, any owner, any admin, any future discretionary rule |
-| **Cryptographic** | a key the system does not hold | the administrator, the operator, a subpoena, every future policy change |
+| **Discretionary** | relation tuples, usersets, inheritance, default-deny | nothing in particular — it is the everyday shareable, revocable layer, and the only thing that decides |
+| **Cryptographic** | a key the deployment does not hold (`escrow`) | the administrator, the operator, a subpoena, a stolen backup, every future policy change |
 
-The decision is `mandatory_gate AND discretionary_allows`, so **deny-wins is
-structural** rather than a rule anyone has to remember to write in forty
-places. The third tier is not part of the decision at all: this module records
-that a classification is crypto-enforced, and something else holds the key.
+The decision is `discretionary_allows` and nothing else, which is what makes
+the whole decision a single SQL predicate: there is no live, unprojectable
+second term a compiled fragment would have to be conjoined with.
 
-**Why absolutes are not relation tuples.** In every Zanzibar-descended engine,
-exclusion is *local to the permission definition where it is written* — so an
-absolute would have to be repeated on every permission of every resource type
-and remembered for each new one, where a single omission is a silent bypass.
-Exclusion is also the one operator that cannot be precomputed into a closure,
-which would forfeit the predicate this module exists to produce. The one mature
-open-source ReBAC-over-a-hierarchy implementation has no deny mechanism at all.
+So there are exactly **two honest strengths of "no"**:
 
-## A security gap you should know about
+- **"She may not see this"** → do not grant it. The absence of a grant is the
+  only thing that refuses, and it is liftable by anyone who may share — which
+  for a private letter or a household invoice is the property the owner
+  actually asked for.
+- **"Nobody may ever see this, whatever rule ever happens"** → a key the
+  deployment does not hold. `iam` records one field, the marking's enforcement
+  class; `keyring` holds the wrapping and `escrow` holds the shares.
 
-Clearance-group membership is enforced to move only through a mandatory channel
-— the type system makes a clearance write impossible to perform *accidentally*
-or as a side effect of sharing. **What is not yet enforced is the actor's
-authority** on that channel, so an ordinary principal can construct a mandatory
-act naming themselves and join a clearance group. That is finding F9, it is
-blocked on an unanswered design question, and the `examples/` corpus
-demonstrates it against the real registry rather than describing it.
+There is nothing in between, and a middle option is not coming.
 
-Until it is closed, the mandatory scenarios assert only that no *discretionary*
-operation opens a gate, which is narrower than the design reads as claiming.
+**Why, briefly.** There used to be a mandatory tier — classifications on
+resources, clearances on principals, administered by a security function — and
+it was the tier the module existed for. Two things killed it. A classification
+*is* a deny, and a deny administered by policy is only as absolute as whoever
+administers the policy: the `examples/` corpus demonstrated against the real
+registry that any principal could perform the administering act, because "who
+may classify" was never decided. And routing ordinary privacy through it turned
+every preference into an absolute no owner could lift, while making
+classification *assignment* cardinality the system's actual performance problem
+— the measured gate turned a 0.46 ms query into 296 ms against a
+closure join of 0.006 ms per row.
+
+The general lesson, recorded in the design document: the design anchored on
+"this principal may never see this", a rare case, and made it the template for
+the common one.
+
+**What this costs, stated plainly.** A legal conflict screen has no policy
+mechanism: it is a matter outside the firm-wide container that nothing names
+the screened principal on, and it survives nobody — anyone who may share the
+matter can share it tomorrow. Privacy inside a shared container becomes grant
+granularity, so a household writes one grant per episode rather than one per
+graph. And one `kgs` leak channel is worse rather than unchanged: sending
+content to a hosted model had two independent guards and now has one. The
+`examples/` corpus carries each of these as a scenario that says so.
 
 ## What it does not do
 
@@ -93,7 +113,7 @@ policy-as-code engine.
 ## Documentation
 
 - `docs/superpowers/specs/` — the design, including §17's findings register
-- [`examples/`](examples) — 26 declarative use cases with READMEs, and `UNEXPRESSIBLE.md` for what the design cannot currently express and what each gap would cost
+- [`examples/`](examples) — 18 declarative use cases with READMEs, and `UNEXPRESSIBLE.md` for what the design cannot currently express and what each gap would cost
 - [`CHARTER.md`](CHARTER.md) · [`SECURITY.md`](SECURITY.md)
 - `api.txt` — the public surface as a golden file, diffed in CI
 

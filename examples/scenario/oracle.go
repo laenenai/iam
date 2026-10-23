@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// ErrCryptoEnforced is the typed refusal design §7.2 requires: the API
+// ErrCryptoEnforced is the typed refusal design §7.3 requires: the API
 // must refuse processing operations on crypto-enforced content with a
 // typed error rather than failing obscurely later. It is returned by
 // Readable, never by Decide — the whole point of the cryptographic tier is

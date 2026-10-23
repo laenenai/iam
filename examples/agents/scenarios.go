@@ -324,7 +324,7 @@ func markingAwareModelAccess() scenario.Scenario {
 			over-granted by an ordinary sharing mistake reaches content that only
 			the allowlist then stops leaving. kgs recorded the same finding on its
 			own side: this leak channel is worse, not merely unchanged.`,
-		Governs:   []string{"KGS §9.5", "KGS §8.5 #15", "§7.2 typed refusal", "markings as flow labels"},
+		Governs:   []string{"KGS §9.5", "KGS §8.5 #15", "§7.3 typed refusal", "markings as flow labels"},
 		Status:    scenario.StatusPending,
 		PendingOn: []scenario.Capability{scenario.CapDecide, scenario.CapTupleStore},
 		Fixture: scenario.Fixture{

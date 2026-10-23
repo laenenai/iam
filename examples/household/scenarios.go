@@ -498,7 +498,7 @@ func theWill() scenario.Scenario {
 			the classify permission, so it never survived "whatever rule ever
 			happens" either; it only read as though it did. The honest tier table
 			now has one entry that survives an administrator and it is this one.`,
-		Governs:   []string{"§7.2 cryptographic tier", "§7 tier table", "§5 decided constraints", "KGS §8.3"},
+		Governs:   []string{"§7.3 cryptographic tier", "§7 tier table", "§5 decided constraints", "KGS §8.3"},
 		Status:    scenario.StatusPending,
 		PendingOn: []scenario.Capability{scenario.CapDecide, scenario.CapTupleStore},
 		Fixture: scenario.Fixture{
