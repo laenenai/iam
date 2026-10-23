@@ -31,7 +31,10 @@ package idp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"log/slog"
 	"sync"
 
 	"github.com/laenenai/iam/internal/domain"
@@ -62,9 +65,56 @@ type KeySet struct {
 	KeyIDs []string
 	// Raw is the JWKS document exactly as fetched, for the verifier that
 	// does understand it to parse. It is never logged and never placed in
-	// an error.
+	// an error — a rule the four methods below are the mechanism for,
+	// rather than a comment hoping to be read.
 	Raw []byte
 }
+
+// String names the issuer and how many key ids it publishes, and redacts the
+// JWKS document.
+//
+// On substance a JWKS is an issuer's *public* verification keys, published at
+// a well-known URL, so this is not a confidentiality fix. It is here for two
+// other reasons. Raw's own doc comment states a rule — never logged, never in
+// an error — that nothing enforced; a type that declares an invariant it has
+// no mechanism for will eventually be wrong. And by category it is key
+// material, which CONVENTIONS.md's "Rendering a secret" puts on the list
+// without qualification, so that the next KeySource adapter — one caching a
+// key set fetched from a confidential endpoint, say — inherits the mechanism
+// instead of having to notice it is needed.
+//
+// The key id count rather than the key ids themselves: a kid is not a secret,
+// but a count is what a rotation-aware caller is diagnosing, and KeyIDs stays
+// available to anyone who wants it.
+func (ks KeySet) String() string {
+	return fmt.Sprintf("idp.KeySet{Issuer: %q, KeyIDs: %d, Raw: %s}", ks.Issuer, len(ks.KeyIDs), redacted)
+}
+
+// Format implements fmt.Formatter, the only interface fmt consults for every
+// verb. fmt routes %v, %s, %q, %x and %X through Stringer and nothing else,
+// so without this method %#v and %d would print the document byte by byte.
+func (ks KeySet) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, ks.String()) }
+
+// MarshalJSON renders the same summary as a JSON string. Raw is an exported
+// []byte, so encoding/json emitted the whole document as base64 — and slog's
+// JSONHandler, which is built on encoding/json, did the same.
+func (ks KeySet) MarshalJSON() ([]byte, error) { return json.Marshal(ks.String()) }
+
+// LogValue renders the key set as a slog group with the document redacted.
+// slog's TextHandler formats a non-LogValuer attribute with %+v, so this is
+// not redundant with String under one handler and is required under the other.
+func (ks KeySet) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("issuer", ks.Issuer),
+		slog.Int("key_ids", len(ks.KeyIDs)),
+		slog.String("raw", redacted),
+	)
+}
+
+// redacted is the placeholder every rendering of key material in this package
+// yields. It carries no part of the material and no length: length is a side
+// channel, and CONVENTIONS.md says so.
+const redacted = "[REDACTED]"
 
 // KeySource fetches and caches an issuer's verification keys. It is the
 // one network-shaped port in this module and the reason it is a port at
