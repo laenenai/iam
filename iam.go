@@ -105,8 +105,8 @@ type (
 	// ExternalSubject is an identity as an identity provider names it:
 	// the token's issuer paired with its subject claim.
 	ExternalSubject = domain.ExternalSubject
-	// Group is an ordinary, tier-1 group whose membership is
-	// discretionary.
+	// Group is a group — a team, a workspace, a claim-derived role —
+	// whose membership is discretionary.
 	Group = domain.Group
 	// GroupSource names whether a membership is owned by the issuer that
 	// asserted it or by a local write.

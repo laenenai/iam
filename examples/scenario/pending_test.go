@@ -109,7 +109,7 @@ func TestUnexpressibleScenarioNeedsADemonstration(t *testing.T) {
 		Governs: []string{"§8.5"},
 		Status:  scenario.StatusUnexpressible,
 		Finding: "F7",
-		Cost:    "a tier-1 form, costing the projection",
+		Cost:    "a conditional form, costing the projection",
 		Fixture: scenario.Fixture{
 			Tenant: "test",
 			Kinds: []scenario.ResourceKind{{

@@ -34,8 +34,8 @@ const (
 	CapDerivation Capability = "Derivation"
 	// CapVisibleBelow is design §8.2's bottom-up navigational visibility
 	// as an explicit relation. Untouched by the removal of the mandatory
-	// tier: it is a tier-1 relation, D7's table waits on it, and F3 still
-	// decides what it can even mean once containment is a DAG.
+	// tier: it is a grant-layer relation, D7's table waits on it, and F3
+	// still decides what it can even mean once containment is a DAG.
 	CapVisibleBelow Capability = "VisibleBelow"
 	// CapAttributePredicate is a `Predicate` that can express an
 	// attribute-scoped restriction over a columnar resource kind — a

@@ -1,5 +1,5 @@
 -- groups.sql holds every static statement this module runs against the
--- tier-1 tables: iam.groups, iam.group_members, and the one probe that
+-- group tables: iam.groups, iam.group_members, and the one probe that
 -- has to ask both namespaces at once.
 --
 -- The claim reconciliation is the reason this file exists rather than the
