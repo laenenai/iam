@@ -47,9 +47,9 @@ import (
 // edge-case behaviour; the interface below is only its shape.
 type (
 	// Registry is the identity registry port: JIT provisioning from
-	// verified claims, (issuer, subject) resolution, joinable group and
-	// clearance-group membership, agent-run delegation, deprovisioning,
-	// and the typed freshness condition.
+	// verified claims, (issuer, subject) resolution, joinable group
+	// membership, agent-run delegation, deprovisioning, and the typed
+	// freshness condition.
 	Registry = registry.Registry
 	// Claims is the subset of a verified token the registry provisions
 	// from. It is not a credential and nothing in this module verifies
@@ -114,21 +114,6 @@ type (
 	// Membership is one principal's membership of one ordinary group, as
 	// the joinable row the authorization predicate reads.
 	Membership = domain.Membership
-	// ClearanceGroup is a mandatory object whose membership moves only
-	// through a mandatory channel and which can never be referenced in a
-	// tier-1 tuple.
-	ClearanceGroup = domain.ClearanceGroup
-	// ClearanceChange is one entry in a clearance group's append-only
-	// membership trail.
-	ClearanceChange = domain.ClearanceChange
-	// ClearanceChangeKind names what a recorded membership change did.
-	ClearanceChangeKind = domain.ClearanceChangeKind
-	// MandatoryChannel names the only two ways a clearance group's
-	// membership may change.
-	MandatoryChannel = domain.MandatoryChannel
-	// MandatoryAct witnesses that a clearance-group membership change
-	// arrived through a mandatory channel.
-	MandatoryAct = domain.MandatoryAct
 	// PrincipalState is the registry's verdict on whether a principal may
 	// be used in a decision; it is an enumeration and not a boolean
 	// because its four answers demand four different caller responses.
@@ -147,16 +132,11 @@ type (
 type (
 	// TenantID identifies a tenant: the top-level unit of isolation.
 	TenantID = domain.TenantID
-	// PrincipalID is the stable internal id that grants,
-	// classifications, audit chains and metering attribution reference.
+	// PrincipalID is the stable internal id that grants, audit chains and
+	// metering attribution reference.
 	PrincipalID = domain.PrincipalID
-	// GroupID identifies an ordinary, tier-1 group.
+	// GroupID identifies a group.
 	GroupID = domain.GroupID
-	// ClearanceGroupID identifies a clearance group. It is deliberately
-	// not interconvertible with GroupID: see its own doc comment.
-	ClearanceGroupID = domain.ClearanceGroupID
-	// ChangeID identifies one entry in a clearance group's trail.
-	ChangeID = domain.ChangeID
 )
 
 // Principal kinds.
@@ -170,20 +150,6 @@ const (
 const (
 	GroupSourceClaim = domain.GroupSourceClaim
 	GroupSourceLocal = domain.GroupSourceLocal
-)
-
-// Mandatory channels. There is no third, and in particular none reachable
-// from a sharing operation.
-const (
-	MandatoryChannelClassify      = domain.MandatoryChannelClassify
-	MandatoryChannelDirectorySync = domain.MandatoryChannelDirectorySync
-)
-
-// Clearance-trail change kinds.
-const (
-	ClearanceChangeCreated = domain.ClearanceChangeCreated
-	ClearanceChangeAdded   = domain.ClearanceChangeAdded
-	ClearanceChangeRemoved = domain.ClearanceChangeRemoved
 )
 
 // Principal states. The zero value is PrincipalStateUnknown and it is not
@@ -225,18 +191,7 @@ var (
 	// ErrAgentRunExpired indicates the agent-run principal is past its
 	// policy TTL.
 	ErrAgentRunExpired = domain.ErrAgentRunExpired
-	// ErrGroupKindMismatch indicates an id was presented in the wrong
-	// tier — an ordinary group where a clearance group was required, or
-	// the reverse.
-	ErrGroupKindMismatch = domain.ErrGroupKindMismatch
-	// ErrMandatoryChannelRequired indicates a clearance-group write
-	// arrived without a valid MandatoryAct witnessing its channel.
-	ErrMandatoryChannelRequired = domain.ErrMandatoryChannelRequired
-	// ErrChannelMismatch indicates a clearance group declared for one
-	// mandatory channel was changed through the other.
-	ErrChannelMismatch = domain.ErrChannelMismatch
-	// ErrNotFound indicates a named group or clearance group does not
-	// exist.
+	// ErrNotFound indicates a named group does not exist.
 	ErrNotFound = domain.ErrNotFound
 	// ErrConflict indicates an operation conflicts with existing state.
 	ErrConflict = domain.ErrConflict
@@ -259,9 +214,9 @@ var (
 // internal/, so without them the module has no callable surface.
 
 // NewMemoryRegistry returns an in-memory Registry configured by cfg. It is
-// a real adapter rather than a mock — it enforces the mandatory channel,
-// the tier separation, the staleness bound and immediate deprovisioning
-// itself, and passes iamtest.RunRegistrySuite unchanged — so a consumer's
+// a real adapter rather than a mock — it enforces the staleness bound and
+// immediate deprovisioning itself, and passes iamtest.RunRegistrySuite
+// unchanged — so a consumer's
 // own tests of its authorization code can run against it with no database.
 // Its state lives only for the life of the value, so it is not a
 // deployment option.
@@ -329,19 +284,6 @@ func NewStaticIssuerPolicy(accepted map[TenantID][]string) *StaticIssuerPolicy {
 	return idp.NewStaticIssuerPolicy(accepted)
 }
 
-// NewMandatoryAct returns the witness a clearance-group change requires:
-// which mandatory channel it came through, which actor performed it, why,
-// and when. Every clearance write on the Registry port demands one, and
-// this is the only way to obtain one — which is how design §8.3's rule
-// that clearance membership has no discretionary path is enforced by the
-// type system rather than by convention.
-//
-// reason is required rather than optional: an unexplained change to a
-// mandatory control is indistinguishable, after the fact, from a mistake.
-func NewMandatoryAct(channel MandatoryChannel, actor PrincipalID, reason string, at time.Time) (MandatoryAct, error) {
-	return domain.NewMandatoryAct(channel, actor, reason, at)
-}
-
 // ParseExternalSubject validates an (issuer, subject) pair and returns it.
 // It performs no normalization beyond rejecting surrounding whitespace,
 // for the reason NewStaticIssuerPolicy's comment gives.
@@ -386,20 +328,3 @@ func NewGroupID(clock Clock) GroupID { return domain.NewGroupID(clock) }
 
 // ParseGroupID parses s as a GroupID, rejecting malformed input.
 func ParseGroupID(s string) (GroupID, error) { return domain.ParseGroupID(s) }
-
-// NewClearanceGroupID returns a fresh ClearanceGroupID minted from clock.
-func NewClearanceGroupID(clock Clock) ClearanceGroupID { return domain.NewClearanceGroupID(clock) }
-
-// ParseClearanceGroupID parses s as a ClearanceGroupID, rejecting
-// malformed input. It validates syntax only; whether the id names a
-// clearance group rather than an ordinary group is a question only a
-// Registry can answer, and it answers it with ErrGroupKindMismatch.
-func ParseClearanceGroupID(s string) (ClearanceGroupID, error) {
-	return domain.ParseClearanceGroupID(s)
-}
-
-// NewChangeID returns a fresh ChangeID minted from clock.
-func NewChangeID(clock Clock) ChangeID { return domain.NewChangeID(clock) }
-
-// ParseChangeID parses s as a ChangeID, rejecting malformed input.
-func ParseChangeID(s string) (ChangeID, error) { return domain.ParseChangeID(s) }

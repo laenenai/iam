@@ -62,7 +62,7 @@ var _ Clock = (*FixedClock)(nil)
 // comparison to remember Equal.
 //
 // It is applied where instants enter the system — the clocks above, and
-// domain.NewMandatoryAct's caller-supplied instant — rather than at each
+// a caller-supplied instant — rather than at each
 // comparison, so there is no path that forgets.
 func Canonical(t time.Time) time.Time {
 	if t.IsZero() {

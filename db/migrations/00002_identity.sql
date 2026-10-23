@@ -1,6 +1,5 @@
--- 00002_identity.sql is the identity registry: principals, ordinary
--- (tier-1) groups and their membership, clearance groups and their
--- membership, and the append-only trail every clearance change leaves.
+-- 00002_identity.sql is the identity registry: principals, groups and
+-- their membership.
 --
 -- ===========================================================================
 -- THE SHAPE OF THIS SCHEMA IS DICTATED BY ONE REQUIREMENT: MEMBERSHIP MUST
@@ -34,23 +33,22 @@
 --      its own comment.
 --
 -- ===========================================================================
--- CLEARANCE GROUPS ARE SEPARATE TABLES, NOT A FLAG
+-- THERE IS NO SECOND TIER IN THIS SCHEMA, AND THAT IS DELIBERATE
 -- ===========================================================================
 --
--- Design §8.3 requires that an ordinary tier-1 group can never hold a
--- clearance and that a clearance group can never be referenced in a tier-1
--- tuple. A `is_clearance boolean` column on iam.groups would have made
--- that a condition every future query must remember; separate tables with
--- separate foreign keys make it unrepresentable. A tier-1 membership row
--- cannot point at a clearance group because iam.group_members.group_id
--- references iam.groups, and the reverse likewise. Even a hand-written
--- statement in an incident cannot cross the tiers.
+-- An earlier version of this file carried clearance groups, their
+-- membership and an append-only trail of every clearance change: the
+-- storage for a mandatory tier that denied regardless of any grant. It was
+-- removed with the deny mechanism itself.
 --
--- This is the schema-level third of a three-layer enforcement; the other
--- two are internal/domain.ClearanceGroupID (unconvertible to or from
--- GroupID, so the confusion cannot be written in Go) and the Registry port
--- (every clearance write demands a mandatory act no discretionary path can
--- construct).
+-- The reason is in the design document's "no deny mechanism" anti-goal.
+-- Briefly: a classification is a deny, a deny administered by policy is
+-- only as absolute as whoever administers the policy, and routing ordinary
+-- privacy through it turned every preference into an absolute no owner
+-- could lift. Access here is default-deny with grants, so "she may never
+-- see this" is expressed by never granting it, and an absolute that must
+-- survive a future administrator is a key the deployment does not hold —
+-- which is `escrow`, not a row in this schema.
 
 -- +goose Up
 
@@ -59,7 +57,7 @@
 -- ---------------------------------------------------------------------------
 --
 -- id is minted (a fresh ULID) and is never a function of (issuer,
--- subject). Grants, classifications, audit chains and metering attribution
+-- subject). Grants, audit chains and metering attribution
 -- all reference it, so re-issuing or renaming an external identity rewrites
 -- exactly one row here and no history anywhere (design §8.1, CAS §9.1).
 -- (issuer, subject) is a unique *key* with id as its value, never the
@@ -137,7 +135,7 @@ CREATE INDEX principals_agent_run_expiry_idx
     WHERE kind = 'agent-run';
 
 -- ---------------------------------------------------------------------------
--- Ordinary (tier-1) groups and the joinable membership table
+-- Groups and the joinable membership table
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE iam.groups (
@@ -171,105 +169,6 @@ CREATE TABLE iam.group_members (
 -- The administrative direction: "who is in this group".
 CREATE INDEX group_members_group_idx
     ON iam.group_members (group_id, principal_id);
-
--- ---------------------------------------------------------------------------
--- Clearance groups: separate tables, separate foreign keys
--- ---------------------------------------------------------------------------
-
-CREATE TABLE iam.clearance_groups (
-    id          iam.ulid PRIMARY KEY,
-    tenant_id   iam.ulid NOT NULL,
-    name        text NOT NULL CHECK (name <> ''),
-    -- The authoritative channel for this group's membership, fixed at
-    -- creation. A change arriving through the other channel is refused, so
-    -- a directory-synced compartment cannot be quietly diverged from the
-    -- directory that owns it.
-    channel     text NOT NULL CHECK (channel IN ('classify-permission', 'directory-sync')),
-    created_at  timestamptz NOT NULL DEFAULT now(),
-    UNIQUE (tenant_id, name)
-);
-
--- The tenant-scoped names of a clearance group and an ordinary group may
--- coincide without either being a handle on the other: they are different
--- kinds of object in different namespaces. Conflating the namespaces would
--- make a tier-1 name a lever on a tier-2 object, which is precisely what
--- design §8.3 forbids.
-
-CREATE TABLE iam.clearance_group_members (
-    clearance_group_id  iam.ulid NOT NULL REFERENCES iam.clearance_groups (id) ON DELETE RESTRICT,
-    principal_id        iam.ulid NOT NULL REFERENCES iam.principals (id) ON DELETE CASCADE,
-
-    -- The witnessing mandatory act, recorded on the membership row itself
-    -- as well as in the trail, so "under what authority does this
-    -- principal hold this clearance" is answerable without a join to
-    -- history.
-    channel             text NOT NULL CHECK (channel IN ('classify-permission', 'directory-sync')),
-    actor_principal_id  iam.ulid NOT NULL,
-    reason              text NOT NULL CHECK (reason <> ''),
-    acted_at            timestamptz NOT NULL,
-
-    PRIMARY KEY (principal_id, clearance_group_id)
-);
-
-CREATE INDEX clearance_group_members_group_idx
-    ON iam.clearance_group_members (clearance_group_id, principal_id);
-
--- The append-only trail. Design §8.3 requires clearance membership to be
--- audited; the `audit` module owns audit storage, so this is the
--- registry's own authoritative record of its own writes, which such a sink
--- mirrors rather than replaces.
-CREATE TABLE iam.clearance_group_changes (
-    -- seq, not the ULID, is the order. Two ULIDs minted inside the same
-    -- millisecond do not sort by creation time (their low bits are random
-    -- entropy), so reading a trail "in recorded order" needs a monotonic
-    -- column of its own rather than an ordering the id almost provides.
-    seq                 bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    id                  iam.ulid NOT NULL UNIQUE,
-    clearance_group_id  iam.ulid NOT NULL REFERENCES iam.clearance_groups (id) ON DELETE RESTRICT,
-
-    -- Deliberately NOT a foreign key to iam.principals, and NULL for a
-    -- 'created' entry. The trail outlives the rows it describes: an
-    -- expired agent run is garbage-collected, and the record of what it
-    -- was cleared for must survive that collection. A foreign key here
-    -- would force the choice between cascading the history away and
-    -- refusing to collect.
-    principal_id        iam.ulid,
-
-    kind                text NOT NULL CHECK (kind IN ('created', 'added', 'removed')),
-    channel             text NOT NULL CHECK (channel IN ('classify-permission', 'directory-sync')),
-    actor_principal_id  iam.ulid NOT NULL,
-    reason              text NOT NULL CHECK (reason <> ''),
-    acted_at            timestamptz NOT NULL,
-    recorded_at         timestamptz NOT NULL DEFAULT now(),
-
-    CONSTRAINT clearance_group_changes_principal_for_membership CHECK (
-        (kind = 'created' AND principal_id IS NULL)
-        OR
-        (kind <> 'created' AND principal_id IS NOT NULL)
-    )
-);
-
-CREATE INDEX clearance_group_changes_group_idx
-    ON iam.clearance_group_changes (clearance_group_id, seq);
-
--- Append-only is enforced by the table, not by the application. A
--- mandatory control whose history can be edited is not evidence of
--- anything, and the application-layer guarantee (this module offers no
--- method that updates or deletes a trail entry) does not survive a future
--- task, a migration, or a hand-run statement during an incident.
--- +goose StatementBegin
-CREATE FUNCTION iam.clearance_group_changes_append_only() RETURNS trigger AS $$
-BEGIN
-    RAISE EXCEPTION 'iam.clearance_group_changes is append-only (attempted % on entry %)',
-        TG_OP, OLD.id;
-END;
-$$ LANGUAGE plpgsql;
--- +goose StatementEnd
-
-CREATE TRIGGER clearance_group_changes_append_only
-    BEFORE UPDATE OR DELETE ON iam.clearance_group_changes
-    FOR EACH ROW
-    EXECUTE FUNCTION iam.clearance_group_changes_append_only();
 
 -- ---------------------------------------------------------------------------
 -- The artifact the authorization predicate joins
@@ -323,33 +222,8 @@ JOIN iam.principals p ON p.id = m.principal_id
 WHERE p.deprovisioned_at IS NULL
   AND (p.expires_at IS NULL OR p.expires_at > now());
 
--- The tier-2 counterpart, for the mandatory gate. Kept as its own view
--- over its own tables so a query written against one tier cannot
--- accidentally resolve against the other, and narrowed for the same
--- reason as its tier-1 twin.
-CREATE VIEW iam.live_clearance_group_members AS
-SELECT
-    m.principal_id,
-    m.clearance_group_id
-FROM iam.clearance_group_members m
-JOIN iam.principals p ON p.id = m.principal_id
-WHERE p.deprovisioned_at IS NULL
-  AND (p.expires_at IS NULL OR p.expires_at > now());
-
 -- +goose Down
-DROP VIEW IF EXISTS iam.live_clearance_group_members;
-
 DROP VIEW IF EXISTS iam.live_group_members;
-
-DROP TRIGGER IF EXISTS clearance_group_changes_append_only ON iam.clearance_group_changes;
-
-DROP FUNCTION IF EXISTS iam.clearance_group_changes_append_only();
-
-DROP TABLE IF EXISTS iam.clearance_group_changes;
-
-DROP TABLE IF EXISTS iam.clearance_group_members;
-
-DROP TABLE IF EXISTS iam.clearance_groups;
 
 DROP TABLE IF EXISTS iam.group_members;
 

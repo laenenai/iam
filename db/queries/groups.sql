@@ -75,25 +75,12 @@ ON CONFLICT (tenant_id, name) DO NOTHING;
 SELECT * FROM iam.groups
 WHERE tenant_id = sqlc.arg(tenant_id) AND name = sqlc.arg(name);
 
--- name: IDKind :one
--- Which namespace an id belongs to, or no row if it belongs to neither.
---
--- One statement asks both tables, because the two namespaces are separate
--- by design and no single table knows the answer. It is what lets the
--- adapter tell "this id names a clearance group" (a tier confusion, which
--- an operator must be told about) from "this id names nothing" (a typo) —
--- merging the two would hide exactly the mistake design §8.3 is about.
---
--- The parameter is cast to iam.ulid rather than left to be inferred,
--- because its type is the question: it is a syntactically valid id of
--- unknown kind, so it is deliberately neither a GroupID nor a clearance
--- group's id here. The cast is on the parameter, not on the column, so
--- both probes still land on their primary key.
-SELECT k FROM (
-    SELECT 'group' AS k FROM iam.groups WHERE id = sqlc.arg(id)::iam.ulid
-    UNION ALL
-    SELECT 'clearance' AS k FROM iam.clearance_groups WHERE id = sqlc.arg(id)::iam.ulid
-) kinds LIMIT 1;
+-- name: GroupByID :one
+-- The existence probe requireGroup needs. It replaced a two-namespace
+-- UNION query that distinguished a group from a clearance group: with the
+-- mandatory tier removed there is one namespace, so a row or no row is the
+-- whole answer.
+SELECT * FROM iam.groups WHERE id = sqlc.arg(id);
 
 -- name: AddLocalGroupMember :exec
 -- DO UPDATE SET source = 'local' and not DO NOTHING: an explicit

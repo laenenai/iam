@@ -24,12 +24,6 @@ func TestParseIDsRejectMalformedInput(t *testing.T) {
 			if _, err := domain.ParseGroupID(s); !errors.Is(err, domain.ErrMalformedID) {
 				t.Errorf("ParseGroupID(%q) error = %v, want ErrMalformedID", s, err)
 			}
-			if _, err := domain.ParseChangeID(s); !errors.Is(err, domain.ErrMalformedID) {
-				t.Errorf("ParseChangeID(%q) error = %v, want ErrMalformedID", s, err)
-			}
-			if _, err := domain.ParseClearanceGroupID(s); !errors.Is(err, domain.ErrMalformedID) {
-				t.Errorf("ParseClearanceGroupID(%q) error = %v, want ErrMalformedID", s, err)
-			}
 		})
 	}
 }

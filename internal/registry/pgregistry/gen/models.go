@@ -10,36 +10,6 @@ import (
 	"github.com/laenenai/iam/internal/domain"
 )
 
-type IamClearanceGroup struct {
-	ID        string
-	TenantID  domain.TenantID
-	Name      string
-	Channel   domain.MandatoryChannel
-	CreatedAt time.Time
-}
-
-type IamClearanceGroupChange struct {
-	Seq              int64
-	ID               domain.ChangeID
-	ClearanceGroupID string
-	PrincipalID      *domain.PrincipalID
-	Kind             domain.ClearanceChangeKind
-	Channel          domain.MandatoryChannel
-	ActorPrincipalID domain.PrincipalID
-	Reason           string
-	ActedAt          time.Time
-	RecordedAt       time.Time
-}
-
-type IamClearanceGroupMember struct {
-	ClearanceGroupID string
-	PrincipalID      domain.PrincipalID
-	Channel          domain.MandatoryChannel
-	ActorPrincipalID domain.PrincipalID
-	Reason           string
-	ActedAt          time.Time
-}
-
 type IamGroup struct {
 	ID        domain.GroupID
 	TenantID  domain.TenantID
@@ -52,11 +22,6 @@ type IamGroupMember struct {
 	PrincipalID domain.PrincipalID
 	Source      domain.GroupSource
 	AddedAt     time.Time
-}
-
-type IamLiveClearanceGroupMember struct {
-	PrincipalID      domain.PrincipalID
-	ClearanceGroupID string
 }
 
 type IamLiveGroupMember struct {

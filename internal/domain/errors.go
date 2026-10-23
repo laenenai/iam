@@ -59,33 +59,14 @@ var ErrResyncRequired = errors.New("resync required")
 // expires, so a slow collector delays cleanup and never access.
 var ErrAgentRunExpired = errors.New("agent run expired")
 
-// ErrGroupKindMismatch indicates an id was presented in the wrong tier: an
-// ordinary tier-1 group's id where a clearance group was required, or a
-// clearance group's id where an ordinary group was required. The type
-// system makes the mistake unwriteable within one process (see
-// ClearanceGroupID); this sentinel covers the boundary the type system
-// cannot reach — an id that arrived as text, from a config file, an API
-// request or another service — where the only authority on an id's kind is
-// the registry itself. It is the runtime half of design §8.3's rule that a
-// tier-1 group may never hold a clearance.
-var ErrGroupKindMismatch = errors.New("group kind mismatch")
+// There were three more sentinels here, and they went with the mandatory
+// tier: ErrGroupKindMismatch (an id presented in the wrong tier),
+// ErrMandatoryChannelRequired and ErrChannelMismatch. With one namespace
+// of groups there is no tier to confuse, and with no deny mechanism there
+// is no mandatory channel to witness. See the design document's "no deny
+// mechanism" anti-goal.
 
-// ErrMandatoryChannelRequired indicates a clearance-group membership
-// change arrived without a valid MandatoryAct witnessing the mandatory
-// channel it came through. Clearance membership has no discretionary path
-// (design §8.3), so the absence of a witness is a refusal and never a
-// defaulted-to-ordinary write.
-var ErrMandatoryChannelRequired = errors.New("mandatory channel required")
-
-// ErrChannelMismatch indicates a clearance group declared for one
-// mandatory channel was changed through the other — a directory-synced
-// group edited by hand through the classify permission, or the reverse.
-// Each clearance group names its authoritative channel at creation and
-// keeps it, so a synced group cannot be quietly diverged from the
-// directory that is supposed to own it.
-var ErrChannelMismatch = errors.New("mandatory channel mismatch")
-
-// ErrNotFound indicates a named group or clearance group does not exist.
+// ErrNotFound indicates a named group does not exist.
 var ErrNotFound = errors.New("not found")
 
 // ErrConflict indicates an operation could not complete because it
