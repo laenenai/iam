@@ -1,6 +1,6 @@
 # What this design cannot express
 
-Four use cases, each a real requirement from one of the three consumer
+Three use cases, each a real requirement from one of the three consumer
 designs, that `iam` as designed cannot express. They are listed here
 because a corpus whose value is that it all passes is worth much less than
 one that precisely locates what does not work.
@@ -14,9 +14,25 @@ carries no such claim. So if the design grows to cover one of these, the
 corresponding claim starts failing and says so, and the scenario leaves
 this file.
 
-There were six. Two left this file on 2026-10-23 and neither was solved:
-see **Resolved by removal** at the bottom, which is where they are
-recorded rather than deleted.
+There were six, and the arithmetic is the record of three decisions, none of
+which was "we built it":
+
+- **Two left on 2026-10-23** with the deny mechanism, which was the
+  mechanism they were about.
+- **One left on 2026-10-24** — U3, the DAG — when the consumer whose data
+  model required it was respecified onto a containment tree. Its
+  requirement was withdrawn rather than met.
+
+All three are at the bottom under **Resolved without being solved**, where
+they are recorded rather than deleted, with the measurements that were in
+flight for U3 when it went.
+
+**There are still four scenarios in [unexpressible/](unexpressible/), and
+that is not a miscount.** U3's scenario stays, carrying claims that are
+still true of its own fixture, until a named follow-up rewrites
+`scenario.Visible`; U3's entry says why. The corpus and this file disagree
+about U3 on purpose and for a stated duration, which is better than one of
+them being quietly wrong.
 
 ---
 
@@ -139,63 +155,13 @@ above instead.
 
 ---
 
-## U3 — Containment is a DAG, so "only the direct path" names nothing
+## U3 — moved, 2026-10-24
 
-**The use case.** KGS §9.3's entity-sets: "a named, graph-scoped grouping
-of entities with their own rules, nestable — this is how 'my wife can see
-everything about the school and the daughter, nothing about my business' is
-expressed once rather than per fact." The household depends on this.
-
-**Why the design cannot express it.** A fact then has an episode *and* zero
-or more entity-sets as containers, and entity-sets nest, so a fact in two
-sets has three containment paths. Two consequences. §9.2's ancestry closure
-stops being a path and becomes a many-to-many relation at fact cardinality,
-maintained on every write. And §8.2's bottom-up navigational visibility,
-which grants list rights on an object's ancestors "**and only on the direct
-path**", is restricting itself to something that does not exist.
-
-Scenario D7 is the same situation with a tree: there the restriction is
-exact, the visible set is compared element by element, and the claim
-passes. U3 is D7 plus one containment edge that KGS §9.3 requires, and
-`DirectPath` refuses. The decision itself is fine in both — F3 is not about
-whether the answer can be computed, it is about the closure that implements
-it and about navigation.
-
-This finding is **unaffected** by the removal of the deny mechanism, with
-one exception worth noting: navigational visibility now carries more weight
-than it did. D8's conflict screen rests partly on a `visible-set` claim —
-the screened associate must not learn that the matter exists — so "what
-does `visible_below` mean in a DAG" is no longer only a usability question
-about finding things. It is part of how a screen is asserted.
-
-**Finding.** §17 F3, marked **blocking for §9.2**: "either kgs's
-entity-sets stop being an authorization container, or the closure and
-`visible_below` are redefined for multiple paths."
-
-**What supporting it would cost.** Three resolutions, and the choice
-changes the projection's shape rather than its tuning, which is why the
-finding is blocking.
-
-Entity-sets stop being an authorization container and become a query
-convenience — removing a kgs capability the household scenario is written
-around.
-
-Or the ancestry closure becomes explicitly many-to-many, maintained on
-every fact write at ten-million-row cardinality. That is the closure cost
-A2's budget is written to catch, and the one place where this design's
-load-bearing performance claim could quietly stop holding.
-
-Or `visible_below` is redefined for multiple paths, which needs a decision
-nobody has made. The union of every path means a principal granted one deep
-fact can enumerate every entity-set it belongs to — leak channel #1
-reopened from a new direction. The intersection is cheap and frequently
-empty. A single designated primary container per object is implementable
-and means somebody has to designate it on every write.
-
-The corpus cannot choose for the owner. Until somebody does, "only on the
-direct path" should not appear in the design as though it were
-implementable — and the design now says so in §8.2, which is the one
-change to the design document this scenario asked for.
+**The requirement was withdrawn, so U3 is no longer a gap.** Its entry is at
+the bottom of this file under "Resolved without being solved", with the
+schema that withdrew it and the measurements that were in flight when it
+happened. The scenario in [unexpressible/](unexpressible/) stays where it
+is, and the entry explains why.
 
 ---
 
@@ -299,6 +265,23 @@ permission exists any more. The problem was always that the writer holds
 **Finding.** §17 F7's second dimension ("predicate-defined entity-sets:
 authorization as a function of data"), compounding F3.
 
+**Updated 2026-10-24: the mechanism this was about is gone, and the hazard
+is not.** kgs's respecified containment
+(`kgs/docs/epistemic_quad_store_spec.md`) has no entity-set at all, so there
+is no predicate-defined entity-set and no specified consumer is currently
+asking for one. §17's F7 records that as its second half closing by
+withdrawal.
+
+This entry **stays in the main list anyway**, and the reason is the
+difference between U5 and U3. U3 was about a *closure shape* that only
+existed because of a mechanism that no longer exists — remove the mechanism
+and the finding has nothing to be about. U5 is about something more general:
+any construction in which an ordinary data write moves an authorization
+answer. "Eva can see all Belgian suppliers, as one rule that stays correct
+as suppliers arrive" is a natural want that will be asked for again under a
+different name, and the hazard will arrive with it unchanged. Retiring the
+entry would mean re-deriving it then.
+
 **What supporting it would cost.** Either every consumer fact write
 synchronously re-evaluates every predicate-defined set that could reference
 the row — which puts authorization maintenance on the hot write path at
@@ -307,23 +290,135 @@ cannot commit atomically in any deployment shape — or the restrictive
 direction lags and a removed supplier stays visible for the staleness
 window, which is a disclosure the design refuses to accept everywhere else.
 
-The containment half additionally lands in F3: a predicate-defined set is a
-container whose membership nobody wrote, so the ancestry closure it
-participates in cannot be maintained from an authorization event at all.
+~~The containment half additionally lands in F3~~ — it did, and F3 is closed,
+so that compounding is gone. What it said still describes the shape: a
+predicate-defined set is a container whose membership nobody wrote, so the
+ancestry closure it participates in cannot be maintained from an
+authorization event at all.
 
+**The standing answer, which is now a derivation rather than a suggestion.**
 The cheapest honest resolution is to permit predicate-defined sets only
-where the predicate is over immutable or append-only attributes, and to say
-so in the design rather than discovering it per consumer.
+where the predicate is over immutable or append-only attributes — and since
+the deny mechanism was removed, that is forced rather than preferred.
+With nothing to subtract, *adding* a containment edge can only ever add
+access and *removing* one can only ever take it away. So a set whose
+membership is append-only generates permissive changes exclusively, which
+design §9.3 already permits to lag and to fail closed; a set whose
+membership can shrink generates a revocation riding the permissive path,
+which §9.3's one rule forbids. That is a property of the predicate and
+nothing about the closure's shape repairs it, so it wants to be a lint on
+the registered schema rather than a paragraph a reader is trusted to
+remember.
+
+**And the floor cost, measured** before the F3 spike was abandoned
+(`spikes/2026-10-24-f3-dag-containment/predicate-sets.txt`; partial, like
+everything in that directory). Fifty predicate-defined sets over 2,000,000
+entities, each one a single equality on one indexed column — the cheapest
+predicate there is — produced **5,000,000 membership edges**, implied
+**84,625,000 rows** of fact-keyed ancestry closure, and took **23.3 s** for
+one membership refresh. Every one of those is a lower bound on the
+mechanism, not an estimate of it, because a real predicate is not one
+indexed equality.
 
 ---
 
-## Resolved by removal, 2026-10-23
+## Resolved without being solved
 
-Two entries left this file when the deny mechanism was removed. Neither was
-solved. They are recorded here rather than deleted, because a gap that
-disappears because its mechanism disappeared is a different event from a
-gap that was closed, and the difference matters to anyone reading this file
-to decide what to build.
+Three entries left this file's main list without anybody closing the gap.
+They are recorded here rather than deleted, because a gap that disappears
+because its *mechanism* disappeared, or because its *requirement* was
+withdrawn, is a different event from a gap that was closed — and the
+difference matters to anyone reading this file to decide what to build.
+
+Two of the three went on 2026-10-23 with the deny mechanism. The third went
+on 2026-10-24 and is a different event again, so it is labelled separately.
+
+### U3 — the requirement was withdrawn, 2026-10-24
+
+**Resolved by withdrawal, not by solution.** U3's subject was KGS §9.3's
+entity-sets: "a named, graph-scoped grouping of entities with their own
+rules, nestable — this is how 'my wife can see everything about the school
+and the daughter, nothing about my business' is expressed once rather than
+per fact." A fact then had an episode *and* zero or more entity-sets as
+containers, and entity-sets nested, so a fact in two sets had three
+containment paths. Two consequences: design §9.2's ancestry closure stopped
+being a path and became a many-to-many relation at fact cardinality, and
+§8.2's bottom-up navigational visibility, which grants list rights on an
+object's ancestors "**and only on the direct path**", was restricting itself
+to something that did not exist.
+
+kgs was respecified on 2026-10-24. Its implementation target is now
+`kgs/docs/epistemic_quad_store_spec.md`, and containment there is a strict
+four-tier tree — UNIVERSE → WORLD → SCOPE → TOPIC (§2.1) — with
+`named_graphs.parent_graph_id` holding one parent, `tenant_quads.graph_id`
+one graph per quad, and `tenant_entities.home_graph_id` one graph per
+entity (§4.2). Its own ancestry walk is `WITH RECURSIVE … UNION ALL` over
+that single parent pointer (§4.3), which is only correct for a tree. There
+is no entity-set table, explicit or predicate-defined; the words are absent
+from the document.
+
+So §17 F3 closed by its own **first** branch — "entity-sets stop being an
+authorization container" — chosen in the consumer's design rather than here,
+and this file's job was to say what that branch costs. It costs the use case
+in U3's first paragraph: expressing "everything about the school, nothing
+about my business" once rather than per fact. Under a tree it is expressed
+by putting the school in its own SCOPE graph and granting that, which is
+D1's shape rather than a new mechanism — and which means the grouping is now
+a **partition** rather than an overlay. A fact about the daughter *and* the
+business has to be filed in one of them.
+
+**The scenario stays in [unexpressible/](unexpressible/), with
+`StatusUnexpressible`, and that is deliberate.** It declares a DAG fixture
+and asserts that `DirectPath` refuses on it, and both halves are still true:
+the corpus is not wrong today, it is describing a shape no consumer
+currently asks for. Moving it needs the oracle's `Visible` to stop calling
+`DirectPath` and compute something else, which is implementation work with
+its own design question, and doing it half-way would leave the corpus
+asserting one thing and this file another. The follow-up is named rather than
+done: **rewrite `scenario.Visible` to the grant-anchored definition below,
+then move U3 to a live scenario.**
+
+**What was in flight when the requirement went**, kept because it is the
+part a future DAG consumer would otherwise have to rediscover. A spike was
+measuring the three resolutions at kgs A2's scale and got through six of its
+eight sections before it was abandoned
+(`docs/superpowers/spikes/2026-10-24-f3-dag-containment.md`; the numbers are
+partial and labelled as such). Two of the three resolutions were worse than
+this entry said:
+
+- The **union of every path** does reopen leak channel #1, and the size of
+  the reopening is **2,356 containers made list-visible to a principal
+  granted ten episodes — 1,000 facts of 10,000,000 — that it held no grant
+  on and none below**, 2,354 of them entity-sets. This entry called it "a
+  principal granted one deep fact can enumerate every entity-set it belongs
+  to", which understated it: it enumerates the sets of every fact it can
+  read, and their ancestors.
+- The **intersection** was called "cheap and frequently empty". Measured, it
+  was exactly `{tenant, graph}` — size 2, minimum 2, maximum 2 — for *every*
+  resource with more than one path. Not frequently empty: always empty below
+  the graph, so the reading names nothing at all rather than naming little.
+- A **designated primary container** stays implementable and still means
+  somebody designates it on every write. Used as a containment key it also
+  silently pruned **87%** of one probe's authorized rows, which is a worse
+  failure than the one this entry predicted.
+
+And a fourth resolution that nobody had written down, which is the one to
+start from if F3 reopens: **anchor the relation on the grant rather than on
+the object.** A container is navigable by a principal iff it lies on a
+containment path from one of that principal's own grants down to something
+it may read — `{ c | ∃ readable o, ∃ g ∈ grants(p) : g ⊒ c ⊒ o }`. That is
+well-defined for any number of paths, leaks nothing by construction because
+it is a subset of what the principal's own grants already imply, and reduces
+to "the direct path" when containment is a tree and the grant sits above the
+path. It is also what `scenario.Visible` would have to compute.
+
+**One thing not to take from this.** F3 is resolved for the consumers that
+have been specified. It is not a result about authorization containment in
+general. A future consumer whose resources belong to several containers
+reopens F3 and reopens F1's condition (iii) with it, and `acre` — which
+nobody has specified — is evidence in neither direction.
+
+### The two that went with the deny mechanism, 2026-10-23
 
 ### U2 — "Use a classification" made a preference into an absolute
 
@@ -379,8 +474,13 @@ All five items from the previous version of this section have been applied
 or made moot. They are kept because the trail is the useful part.
 
 1. **§8.2's "and only on the direct path" should be marked as
-   unimplemented pending F3.** *Applied.* §8.2 carries the caveat and says
-   not to build against the sentence until F3 is settled.
+   unimplemented pending F3.** *Applied, then superseded on 2026-10-24.*
+   §8.2 carried the caveat; F3 is now closed, so §8.2 says instead that the
+   phrase is implementable **because every specified consumer's containment
+   is a tree**, and carries that as a precondition rather than as a
+   reassurance. §9.2's "its containment path", singular, got the same
+   treatment. The asking and the answering are both recorded because the
+   answer did not come from where this file expected it to.
 
 2. **§17 should gain a finding for §16 question 2.** *Applied, then
    closed.* It became F9, and F9 is closed by deletion along with the
@@ -401,7 +501,7 @@ or made moot. They are kept because the trail is the useful part.
    separately is no longer possible, since the branch that distinguished
    them has been deleted.
 
-One new item, which this file asks for rather than applies:
+One item this file asks for rather than applies:
 
 6. **The per-episode grant cost should be registered, or deliberately not
    registered.** H1's fixture had to move its grant from the graph down to
@@ -412,3 +512,30 @@ One new item, which this file asks for rather than applies:
    a function of how much it ingests rather than of how many people live in
    it. That is a consequence of the no-deny decision rather than an
    argument against it, and it is not currently in §17.
+
+   **Note for whoever picks this up**, added 2026-10-24: "episode" is kgs's
+   old vocabulary. The respecified consumer has TOPIC graphs where it had
+   episodes, and the grant granularity question survives the rename
+   unchanged — the tuple count is still a function of how much a tenant
+   ingests. Only the noun moved.
+
+And two this file asks for because of U3's withdrawal:
+
+7. **The single-path assumption should be enforced where it is made, not
+   assumed where it is relied on.** *Asked, and §15 now carries it.* With F3
+   closed on the strength of "every specified consumer's containment is a
+   tree", nothing in §8.4's schema registration rejects a consumer that
+   declares otherwise — it would get an ancestry closure sized by resource
+   cardinality and no error. The corpus already owns the check
+   (`scenario.Paths`, `scenario.DirectPath`), so this is wiring.
+
+8. **`scenario.Visible` should stop being built on `DirectPath`.** *Asked,
+   not applied.* The oracle computes a principal's navigable set by taking
+   each readable object's single containment path, so it cannot run at all
+   on a multi-path fixture — which is exactly why U3's scenario stays an
+   `unexpressible` one. The replacement is in U3's entry: anchor the
+   relation on the grant rather than on the object. Doing it would let U3's
+   scenario become live and let this file's count and the corpus's agree
+   again, and it is implementation work with a design question in it rather
+   than a documentation change, so it is named here instead of being done
+   quietly.
