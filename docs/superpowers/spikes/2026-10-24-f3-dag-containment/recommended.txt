@@ -1,0 +1,222 @@
+F3 -- the recommended shape, measured as itself
+
+  C2 alone      the fragment with no key: what A2's 20 ms is measured against
+  K2 only       the key with no fragment -- unsafe, priced to show what it exposes
+  K2 + C2       the recommendation: array key pre-restricts, C2 fragment authorizes
+  K2 + C4       the same key over the fact_container fragment, for comparison
+
+p50 / p95 ms, up to 20 executions.
+
+=== keyset page, 50 rows (p50 / p95 ms) =====================================
+                          p_graph                 p_es1                 p_es2                 p_es3                 p_es4                 p_epi                 p_mix
+C2 alone          1.34      1.64        6.93      8.04       86.83     97.69      538.86    557.40     4259.05   4292.70     7021.64   7063.56      531.04    546.60
+K2 only                  skipped        5.01      5.37        6.01      6.38        7.46      8.32        1.36      1.90       94.59     96.96        8.78      9.08
+K2 + C2                  skipped        6.17      7.13        7.16      7.61      179.07    195.26       13.38     15.84        4.91      5.26      192.74    199.09
+K2 + C4                  skipped        5.64      6.05        6.69      7.11        8.51      9.10        7.95     10.42       96.72     98.61        9.65     10.70
+
+=== what the key alone exposes, on the recommended key ======================
+probe         candidates     authorized    unauth/50
+p_es1          1,056,020      1,056,020            0
+p_es2            103,090        103,090            0
+p_es3              9,745          9,745            0
+p_es4                675            675            0
+p_epi              1,000          1,000            0
+p_mix             11,263         11,263            0
+
+Zero unauthorized rows is NOT a licence to drop the fragment. It is a property
+of this fixture, in which no grant is finer than a container: kgs §9.3 keeps a
+per-fact rule as an escape hatch, and K3 -- the same key one level coarser --
+exposes rows in keys.txt. F1 condition (i) stands.
+
+=== plans ===================================================================
+
+=== K2 + C2 -- p_es1 ========================================================
+Limit  (cost=0.43..11355.32 rows=50 width=8) (actual time=0.161..4.283 rows=50.00 loops=1)
+  Buffers: shared hit=2154
+  ->  Index Scan using fact_key_pkey on fact_key fk  (cost=0.43..162069835.35 rows=713657 width=8) (actual time=0.161..4.280 rows=50.00 loops=1)
+        Index Cond: (id > '0'::bigint)
+        Filter: ((zones && '{1000,2000,2001,2002,2003,2004,2005,2006,2007,2008,2009,20000,20001,20002,20003,20004,20005,20006,20007,20008,20009,20010,20011,20012,20013,20014,20015,20016,20017,20018,20019,21040,20020,20021,20022,20023,20024,20025,20026,20027,20028,20029,20030,20031,20032,20033,20034,20035,20036,20037,20038,20039,21060,20040,20041,20042,20043,20044,20045,20046,20047,20048,20049,20050,20051,20052,20053,20054,20055,20056,20057,20058,20059,21080,20060,20061,20062,20063,20064,20065,20066,20067,20068,20069,20070,20071,20072,20073,20074,20075,20076,20077,20078,20079,21100,20080,20081,20082,20083,20084,20085,20086,20087,20088,20089,20090,20091,20092,20093,20094,20095,20096,20097,20098,20099,21120,200000,200001,200002,200003,200004,200005,200006,200007,200008,200009,200010,200011,200012,200013,200014,200015,200016,200017,200018,200019,200020,200021,200022,200023,200024,200025,200026,200027,200028,200029,200030,200031,200032,200033,200034,200035,200036,200037,200038,200039,200040,200041,200042,200043,200044,200045,200046,200047,200048,200049,200050,200051,200052,200053,200054,200055,200056,200057,200058,200059,200060,200061,200062,200063,200064,200065,200066,200067,200068,200069,200070,200071,200072,200073,200074,200075,200076,200077,200078,200079,200080,200081,200082,200083,200084,200085,200086,200087,200088,200089,200090,200091,200092,200093,200094,200095,200096,200097,200098,200099,200100,200101,200102,200103,200104,200105,200106,200107,200108,200109,200110,200111,200112,200113,200114,200115,200116,200117,200118,200119,200120,200121,200122,200123,200124,200125,200126,200127,200128,200129,200130,200131,200132,200133,200134,200135,200136,200137,200138,200139,200140,200141,200142,200143,200144,200145,200146,200147,200148,200149,200150,200151,200152,200153,200154,200155,200156,200157,200158,200159,200160,200161,200162,200163,200164,200165,200166,200167,200168,200169,200170,200171,200172,200173,200174,200175,200176,200177,200178,200179,200180,200181,200182,200183,200184,200185,200186,200187,200188,200189,200190,200191,200192,200193,200194,200195,200196,200197,200198,200199,210400,210401,210402,210403,210404,210405,210406,210407,210408,210409,200200,200201,200202,200203,200204,200205,200206,200207,200208,200209,200210,200211,200212,200213,200214,200215,200216,200217,200218,200219,200220,200221,200222,200223,200224,200225,200226,200227,200228,200229,200230,200231,200232,200233,200234,200235,200236,200237,200238,200239,200240,200241,200242,200243,200244,200245,200246,200247,200248,200249,200250,200251,200252,200253,200254,200255,200256,200257,200258,200259,200260,200261,200262,200263,200264,200265,200266,200267,200268,200269,200270,200271,200272,200273,200274,200275,200276,200277,200278,200279,200280,200281,200282,200283,200284,200285,200286,200287,200288,200289,200290,200291,200292,200293,200294,200295,200296,200297,200298,200299,200300,200301,200302,200303,200304,200305,200306,200307,200308,200309,200310,200311,200312,200313,200314,200315,200316,200317,200318,200319,200320,200321,200322,200323,200324,200325,200326,200327,200328,200329,200330,200331,200332,200333,200334,200335,200336,200337,200338,200339,200340,200341,200342,200343,200344,200345,200346,200347,200348,200349,200350,200351,200352,200353,200354,200355,200356,200357,200358,200359,200360,200361,200362,200363,200364,200365,200366,200367,200368,200369,200370,200371,200372,200373,200374,200375,200376,200377,200378,200379,200380,200381,200382,200383,200384,200385,200386,200387,200388,200389,200390,200391,200392,200393,200394,200395,200396,200397,200398,200399,210600,210601,210602,210603,210604,210605,210606,210607,210608,210609,200400,200401,200402,200403,200404,200405,200406,200407,200408,200409,200410,200411,200412,200413,200414,200415,200416,200417,200418,200419,200420,200421,200422,200423,200424,200425,200426,200427,200428,200429,200430,200431,200432,200433,200434,200435,200436,200437,200438,200439,200440,200441,200442,200443,200444,200445,200446,200447,200448,200449,200450,200451,200452,200453,200454,200455,200456,200457,200458,200459,200460,200461,200462,200463,200464,200465,200466,200467,200468,200469,200470,200471,200472,200473,200474,200475,200476,200477,200478,200479,200480,200481,200482,200483,200484,200485,200486,200487,200488,200489,200490,200491,200492,200493,200494,200495,200496,200497,200498,200499,200500,200501,200502,200503,200504,200505,200506,200507,200508,200509,200510,200511,200512,200513,200514,200515,200516,200517,200518,200519,200520,200521,200522,200523,200524,200525,200526,200527,200528,200529,200530,200531,200532,200533,200534,200535,200536,200537,200538,200539,200540,200541,200542,200543,200544,200545,200546,200547,200548,200549,200550,200551,200552,200553,200554,200555,200556,200557,200558,200559,200560,200561,200562,200563,200564,200565,200566,200567,200568,200569,200570,200571,200572,200573,200574,200575,200576,200577,200578,200579,200580,200581,200582,200583,200584,200585,200586,200587,200588,200589,200590,200591,200592,200593,200594,200595,200596,200597,200598,200599,210800,210801,210802,210803,210804,210805,210806,210807,210808,210809,200600,200601,200602,200603,200604,200605,200606,200607,200608,200609,200610,200611,200612,200613,200614,200615,200616,200617,200618,200619,200620,200621,200622,200623,200624,200625,200626,200627,200628,200629,200630,200631,200632,200633,200634,200635,200636,200637,200638,200639,200640,200641,200642,200643,200644,200645,200646,200647,200648,200649,200650,200651,200652,200653,200654,200655,200656,200657,200658,200659,200660,200661,200662,200663,200664,200665,200666,200667,200668,200669,200670,200671,200672,200673,200674,200675,200676,200677,200678,200679,200680,200681,200682,200683,200684,200685,200686,200687,200688,200689,200690,200691,200692,200693,200694,200695,200696,200697,200698,200699,200700,200701,200702,200703,200704,200705,200706,200707,200708,200709,200710,200711,200712,200713,200714,200715,200716,200717,200718,200719,200720,200721,200722,200723,200724,200725,200726,200727,200728,200729,200730,200731,200732,200733,200734,200735,200736,200737,200738,200739,200740,200741,200742,200743,200744,200745,200746,200747,200748,200749,200750,200751,200752,200753,200754,200755,200756,200757,200758,200759,200760,200761,200762,200763,200764,200765,200766,200767,200768,200769,200770,200771,200772,200773,200774,200775,200776,200777,200778,200779,200780,200781,200782,200783,200784,200785,200786,200787,200788,200789,200790,200791,200792,200793,200794,200795,200796,200797,200798,200799,211000,211001,211002,211003,211004,211005,211006,211007,211008,211009,200800,200801,200802,200803,200804,200805,200806,200807,200808,200809,200810,200811,200812,200813,200814,200815,200816,200817,200818,200819,200820,200821,200822,200823,200824,200825,200826,200827,200828,200829,200830,200831,200832,200833,200834,200835,200836,200837,200838,200839,200840,200841,200842,200843,200844,200845,200846,200847,200848,200849,200850,200851,200852,200853,200854,200855,200856,200857,200858,200859,200860,200861,200862,200863,200864,200865,200866,200867,200868,200869,200870,200871,200872,200873,200874,200875,200876,200877,200878,200879,200880,200881,200882,200883,200884,200885,200886,200887,200888,200889,200890,200891,200892,200893,200894,200895,200896,200897,200898,200899,200900,200901,200902,200903,200904,200905,200906,200907,200908,200909,200910,200911,200912,200913,200914,200915,200916,200917,200918,200919,200920,200921,200922,200923,200924,200925,200926,200927,200928,200929,200930,200931,200932,200933,200934,200935,200936,200937,200938,200939,200940,200941,200942,200943,200944,200945,200946,200947,200948,200949,200950,200951,200952,200953,200954,200955,200956,200957,200958,200959,200960,200961,200962,200963,200964,200965,200966,200967,200968,200969,200970,200971,200972,200973,200974,200975,200976,200977,200978,200979,200980,200981,200982,200983,200984,200985,200986,200987,200988,200989,200990,200991,200992,200993,200994,200995,200996,200997,200998,200999,211200,211201,211202,211203,211204,211205,211206,211207,211208,211209}'::integer[]) AND EXISTS(SubPlan 1))
+        Rows Removed by Filter: 371
+        Index Searches: 1
+        Buffers: shared hit=2154
+        SubPlan 1
+          ->  Hash Join  (cost=2.86..16.16 rows=1 width=0) (actual time=0.020..0.020 rows=1.00 loops=50)
+                Hash Cond: (g.userset_id = mc.userset_id)
+                Buffers: shared hit=2142
+                ->  Nested Loop  (cost=1.14..14.42 rows=10 width=4) (actual time=0.004..0.020 rows=8.42 loops=50)
+                      Buffers: shared hit=2139
+                      ->  Nested Loop  (cost=0.86..10.70 rows=12 width=4) (actual time=0.003..0.013 rows=11.20 loops=50)
+                            Buffers: shared hit=1018
+                            ->  Append  (cost=0.43..5.81 rows=3 width=4) (actual time=0.002..0.007 rows=2.98 loops=50)
+                                  Buffers: shared hit=570
+                                  ->  Index Scan using fact_pkey on fact f  (cost=0.43..2.65 rows=1 width=4) (actual time=0.002..0.002 rows=1.00 loops=50)
+                                        Index Cond: (id = fk.id)
+                                        Index Searches: 50
+                                        Buffers: shared hit=200
+                                  ->  Nested Loop  (cost=0.86..3.14 rows=2 width=4) (actual time=0.004..0.005 rows=1.98 loops=50)
+                                        Buffers: shared hit=370
+                                        ->  Index Only Scan using fact_entity_pkey on fact_entity fe  (cost=0.43..1.55 rows=1 width=8) (actual time=0.001..0.001 rows=1.22 loops=50)
+                                              Index Cond: (fact_id = fk.id)
+                                              Heap Fetches: 0
+                                              Index Searches: 50
+                                              Buffers: shared hit=186
+                                        ->  Index Only Scan using entity_set_member_pkey on entity_set_member esm  (cost=0.43..1.56 rows=2 width=12) (actual time=0.003..0.003 rows=1.62 loops=61)
+                                              Index Cond: (entity_id = fe.entity_id)
+                                              Heap Fetches: 0
+                                              Index Searches: 61
+                                              Buffers: shared hit=184
+                            ->  Index Only Scan using container_ancestry_pkey on container_ancestry ca  (cost=0.42..1.59 rows=4 width=8) (actual time=0.001..0.002 rows=3.76 loops=149)
+                                  Index Cond: (container_id = f.episode_id)
+                                  Heap Fetches: 0
+                                  Index Searches: 149
+                                  Buffers: shared hit=448
+                      ->  Index Only Scan using grant_tuple_container on grant_tuple g  (cost=0.28..0.30 rows=1 width=8) (actual time=0.000..0.000 rows=0.75 loops=560)
+                            Index Cond: (container_id = ca.ancestor_id)
+                            Heap Fetches: 0
+                            Index Searches: 560
+                            Buffers: shared hit=1121
+                ->  Hash  (cost=1.58..1.58 rows=11 width=4) (actual time=0.006..0.006 rows=11.00 loops=1)
+                      Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                      Buffers: shared hit=3
+                      ->  Index Only Scan using membership_closure_pkey on membership_closure mc  (cost=0.29..1.58 rows=11 width=4) (actual time=0.003..0.004 rows=11.00 loops=1)
+                            Index Cond: (principal_id = 2002)
+                            Heap Fetches: 0
+                            Index Searches: 1
+                            Buffers: shared hit=3
+Planning:
+  Buffers: shared hit=43
+Planning Time: 0.571 ms
+Execution Time: 4.310 ms
+
+
+=== K2 + C2 -- p_es3 ========================================================
+Limit  (cost=221163.20..221163.32 rows=50 width=8) (actual time=228.655..228.662 rows=50.00 loops=1)
+  Buffers: shared hit=478414
+  ->  Sort  (cost=221163.20..221179.23 rows=6414 width=8) (actual time=228.655..228.658 rows=50.00 loops=1)
+        Sort Key: fk.id
+        Sort Method: top-N heapsort  Memory: 25kB
+        Buffers: shared hit=478414
+        ->  Bitmap Heap Scan on fact_key fk  (cost=133.60..220950.13 rows=6414 width=8) (actual time=2.223..228.225 rows=9745.00 loops=1)
+              Recheck Cond: (zones && '{20000,200000,200001,200002,200003,200004,200005,200006,200007,200008,200009}'::integer[])
+              Filter: ((id > '0'::bigint) AND EXISTS(SubPlan 1))
+              Heap Blocks: exact=9426
+              Buffers: shared hit=478414
+              ->  Bitmap Index Scan on fact_key_zones  (cost=0.00..132.00 rows=12827 width=0) (actual time=1.308..1.308 rows=9745.00 loops=1)
+                    Index Cond: (zones && '{20000,200000,200001,200002,200003,200004,200005,200006,200007,200008,200009}'::integer[])
+                    Index Searches: 1
+                    Buffers: shared hit=36
+              SubPlan 1
+                ->  Hash Join  (cost=2.86..16.16 rows=1 width=0) (actual time=0.021..0.021 rows=1.00 loops=9745)
+                      Hash Cond: (g.userset_id = mc.userset_id)
+                      Buffers: shared hit=468952
+                      ->  Nested Loop  (cost=1.14..14.42 rows=10 width=4) (actual time=0.006..0.021 rows=9.79 loops=9745)
+                            Buffers: shared hit=468949
+                            ->  Nested Loop  (cost=0.86..10.70 rows=12 width=4) (actual time=0.005..0.013 rows=14.12 loops=9745)
+                                  Buffers: shared hit=193778
+                                  ->  Append  (cost=0.43..5.81 rows=3 width=4) (actual time=0.003..0.008 rows=2.79 loops=9745)
+                                        Buffers: shared hit=112312
+                                        ->  Index Scan using fact_pkey on fact f  (cost=0.43..2.65 rows=1 width=4) (actual time=0.003..0.003 rows=1.00 loops=9745)
+                                              Index Cond: (id = fk.id)
+                                              Index Searches: 9745
+                                              Buffers: shared hit=38980
+                                        ->  Nested Loop  (cost=0.86..3.14 rows=2 width=4) (actual time=0.004..0.004 rows=1.79 loops=9745)
+                                              Buffers: shared hit=73332
+                                              ->  Index Only Scan using fact_entity_pkey on fact_entity fe  (cost=0.43..1.55 rows=1 width=8) (actual time=0.002..0.002 rows=1.27 loops=9745)
+                                                    Index Cond: (fact_id = fk.id)
+                                                    Heap Fetches: 0
+                                                    Index Searches: 9745
+                                                    Buffers: shared hit=36161
+                                              ->  Index Only Scan using entity_set_member_pkey on entity_set_member esm  (cost=0.43..1.56 rows=2 width=12) (actual time=0.001..0.001 rows=1.41 loops=12390)
+                                                    Index Cond: (entity_id = fe.entity_id)
+                                                    Heap Fetches: 0
+                                                    Index Searches: 12390
+                                                    Buffers: shared hit=37171
+                                  ->  Index Only Scan using container_ancestry_pkey on container_ancestry ca  (cost=0.42..1.59 rows=4 width=8) (actual time=0.001..0.001 rows=5.07 loops=27155)
+                                        Index Cond: (container_id = f.episode_id)
+                                        Heap Fetches: 0
+                                        Index Searches: 27155
+                                        Buffers: shared hit=81466
+                            ->  Index Only Scan using grant_tuple_container on grant_tuple g  (cost=0.28..0.30 rows=1 width=8) (actual time=0.000..0.000 rows=0.69 loops=137585)
+                                  Index Cond: (container_id = ca.ancestor_id)
+                                  Heap Fetches: 0
+                                  Index Searches: 137585
+                                  Buffers: shared hit=275171
+                      ->  Hash  (cost=1.58..1.58 rows=11 width=4) (actual time=0.005..0.006 rows=11.00 loops=1)
+                            Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                            Buffers: shared hit=3
+                            ->  Index Only Scan using membership_closure_pkey on membership_closure mc  (cost=0.29..1.58 rows=11 width=4) (actual time=0.003..0.004 rows=11.00 loops=1)
+                                  Index Cond: (principal_id = 2004)
+                                  Heap Fetches: 0
+                                  Index Searches: 1
+                                  Buffers: shared hit=3
+Planning:
+  Buffers: shared hit=43
+Planning Time: 0.362 ms
+Execution Time: 228.694 ms
+
+
+=== K2 + C2 -- p_mix ========================================================
+Limit  (cost=395353.38..395353.51 rows=50 width=8) (actual time=252.369..252.376 rows=50.00 loops=1)
+  Buffers: shared hit=489420
+  ->  Sort  (cost=395353.38..395382.11 rows=11489 width=8) (actual time=252.368..252.371 rows=50.00 loops=1)
+        Sort Key: fk.id
+        Sort Method: top-N heapsort  Memory: 25kB
+        Buffers: shared hit=489420
+        ->  Bitmap Heap Scan on fact_key fk  (cost=218.59..394971.73 rows=11489 width=8) (actual time=3.243..251.868 rows=11263.00 loops=1)
+              Recheck Cond: (zones && '{20005,1000100,1000101,1000102,1000103,1000104,200050,200051,200052,200053,200054,200055,200056,200057,200058,200059}'::integer[])
+              Filter: ((id > '0'::bigint) AND EXISTS(SubPlan 1))
+              Heap Blocks: exact=10548
+              Buffers: shared hit=489420
+              ->  Bitmap Index Scan on fact_key_zones  (cost=0.00..215.72 rows=22979 width=0) (actual time=2.116..2.116 rows=11263.00 loops=1)
+                    Index Cond: (zones && '{20005,1000100,1000101,1000102,1000103,1000104,200050,200051,200052,200053,200054,200055,200056,200057,200058,200059}'::integer[])
+                    Index Searches: 1
+                    Buffers: shared hit=51
+              SubPlan 1
+                ->  Hash Join  (cost=2.86..16.16 rows=1 width=0) (actual time=0.020..0.020 rows=1.00 loops=11263)
+                      Hash Cond: (g.userset_id = mc.userset_id)
+                      Buffers: shared hit=478821
+                      ->  Nested Loop  (cost=1.14..14.42 rows=10 width=4) (actual time=0.007..0.020 rows=11.21 loops=11263)
+                            Buffers: shared hit=478818
+                            ->  Nested Loop  (cost=0.86..10.70 rows=12 width=4) (actual time=0.005..0.012 rows=11.63 loops=11263)
+                                  Buffers: shared hit=216899
+                                  ->  Append  (cost=0.43..5.81 rows=3 width=4) (actual time=0.003..0.008 rows=2.71 loops=11263)
+                                        Buffers: shared hit=125335
+                                        ->  Index Scan using fact_pkey on fact f  (cost=0.43..2.65 rows=1 width=4) (actual time=0.003..0.003 rows=1.00 loops=11263)
+                                              Index Cond: (id = fk.id)
+                                              Index Searches: 11263
+                                              Buffers: shared hit=45052
+                                        ->  Nested Loop  (cost=0.86..3.14 rows=2 width=4) (actual time=0.004..0.004 rows=1.79 loops=10763)
+                                              Buffers: shared hit=80283
+                                              ->  Index Only Scan using fact_entity_pkey on fact_entity fe  (cost=0.43..1.55 rows=1 width=8) (actual time=0.002..0.002 rows=1.25 loops=10763)
+                                                    Index Cond: (fact_id = fk.id)
+                                                    Heap Fetches: 0
+                                                    Index Searches: 10763
+                                                    Buffers: shared hit=40028
+                                              ->  Index Only Scan using entity_set_member_pkey on entity_set_member esm  (cost=0.43..1.56 rows=2 width=12) (actual time=0.001..0.001 rows=1.44 loops=13418)
+                                                    Index Cond: (entity_id = fe.entity_id)
+                                                    Heap Fetches: 0
+                                                    Index Searches: 13418
+                                                    Buffers: shared hit=40255
+                                  ->  Index Only Scan using container_ancestry_pkey on container_ancestry ca  (cost=0.42..1.59 rows=4 width=8) (actual time=0.001..0.001 rows=4.29 loops=30521)
+                                        Index Cond: (container_id = f.episode_id)
+                                        Heap Fetches: 0
+                                        Index Searches: 30521
+                                        Buffers: shared hit=91564
+                            ->  Index Only Scan using grant_tuple_container on grant_tuple g  (cost=0.28..0.30 rows=1 width=8) (actual time=0.000..0.000 rows=0.96 loops=130959)
+                                  Index Cond: (container_id = ca.ancestor_id)
+                                  Heap Fetches: 0
+                                  Index Searches: 130959
+                                  Buffers: shared hit=261919
+                      ->  Hash  (cost=1.58..1.58 rows=11 width=4) (actual time=0.008..0.008 rows=11.00 loops=1)
+                            Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                            Buffers: shared hit=3
+                            ->  Index Only Scan using membership_closure_pkey on membership_closure mc  (cost=0.29..1.58 rows=11 width=4) (actual time=0.005..0.006 rows=11.00 loops=1)
+                                  Index Cond: (principal_id = 2007)
+                                  Heap Fetches: 0
+                                  Index Searches: 1
+                                  Buffers: shared hit=3
+Planning:
+  Buffers: shared hit=43
+Planning Time: 0.481 ms
+Execution Time: 252.409 ms
+

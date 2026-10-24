@@ -1,0 +1,48 @@
+F3 -- read cost when containment is a DAG
+
+Every cell is p50 / p95 wall-clock ms over up to 20 executions -- a cell whose
+first execution exceeds 2 s drops to 5 and one past 20 s to 3; results.json
+carries the actual count per cell. Wall clock includes the
+Docker round trip measured at p50 0.97 / p95 1.58 ms. A cell reading
+`timeout` exceeded 2m0s.
+
+  C1  fact_ancestry        the DAG closure materialized at fact cardinality
+  C2  two EXISTS arms      nothing authorization-mutable at fact cardinality
+  C2u one semi-join        C2 folded into a UNION ALL of direct containers
+  C3  recursive at read    no closure materialized anywhere
+  C4  fact_container       direct containers stored, transitive part joined
+  C5  bound key set        accessible container set resolved once, bound as int4[]
+
+=== keyset page, 50 rows, from the start of the table (p50 / p95 ms) ========
+                     p_graph                 p_es1                 p_es2                 p_es3                 p_es4                 p_epi                 p_mix
+none         0.85      1.09
+C1           1.58      1.92        3.00      3.69       20.22     28.08      102.79    114.33      698.52    746.56     1110.58   1139.85      100.31    107.65
+C2          17.72     22.70     1599.27   2205.78      786.19    827.27      737.95    863.09      791.37    846.98      197.07    205.15      728.93    751.30
+C2u          1.42      1.86        7.23      8.17       86.52    105.53      536.95    584.94     4204.68   4261.03     7027.72   7397.44      529.69    546.77
+C3           1.92      2.31        8.56      9.77      105.94    113.66      668.09    678.26     5257.74   5289.64     8691.38   8700.65      655.77    681.79
+C4           2.26      2.50        5.07      5.83       46.37     49.52      228.89    246.80     1379.79   1455.89     2172.98   2227.31      224.97    239.98
+C5         287.56    301.06     1334.71   1406.56       53.40   2839.07        9.19     11.37       33.46     36.61       48.99     51.04        8.97     10.66
+
+=== rows returned of the 50 requested =======================================
+C1                       50                    50                    50                    50                    50                    50                    50
+C2                       50                    50                    50                    50                    50                    50                    50
+C2u                      50                    50                    50                    50                    50                    50                    50
+C3                       50                    50                    50                    50                    50                    50                    50
+C4                       50                    50                    50                    50                    50                    50                    50
+C5                       50                    50                    50                    50                    50                    50                    50
+
+=== point decision on one authorized fact (p50 / p95 ms, 100 reps) ==========
+                     p_graph                 p_es1                 p_es2                 p_es3                 p_es4                 p_epi                 p_mix
+C1           1.14      1.48        1.04      1.36        1.06      1.27        1.11      1.45        1.02      1.57        1.09      1.34        1.10      1.44
+C2           1.18      1.46        1.48      2.98        1.25      1.48        1.18      1.47        1.19      1.88        1.25      1.61        1.19      1.49
+C4           1.13      1.36        1.17      1.40        1.18      1.46        1.15      1.39        1.18      1.64        1.20      1.58        1.18      1.49
+
+=== key-set resolution: principal -> accessible container set ===============
+probe      containers      p95 ms note
+p_graph       122,221      113.51 grant on the graph
+p_es1           1,166        3.05 grant on one level-1 entity-set
+p_es2             111        1.78 grant on one level-2 entity-set
+p_es3              11        2.34 grant on one level-3 entity-set
+p_es4               1        3.77 grant on one level-4 entity-set
+p_epi              10        3.50 grant on ten episodes -- the tree-only principal
+p_mix              16        1.75 one level-3 set plus five episodes -- the household shape

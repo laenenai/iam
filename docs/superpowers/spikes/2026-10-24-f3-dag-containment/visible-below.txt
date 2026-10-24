@@ -1,0 +1,81 @@
+F3 question 3 -- what "only on the direct path" can mean when there are several
+
+Three readings, measured on the same fixture:
+
+  union      every container that is an ancestor of some fact the principal may read
+  anchored   that set, intersected with the principal's own accessible set
+  intersect  per fact, the containers on EVERY path upward from it
+
+`leak` counts containers the union reading makes list-visible that the principal
+holds no grant on and none below -- containers whose existence it learns from a
+grant somewhere else. kind 0 tenant, 1 graph, 2 episode, 3 entity-set.
+
+=== union versus anchored ===================================================
+probe            union     anchored       leak     leak % leak by kind
+p_graph                 -- skipped: 10,000,000 authorized facts, the union is the whole graph
+p_es1          122,132        1,166    120,966      99.0% kind 0: 1  kind 1: 1  kind 2: 100,000  kind 3: 20,964  
+p_es2           69,102          111     68,991      99.8% kind 0: 1  kind 1: 1  kind 2: 58,635  kind 3: 10,354  
+p_es3            8,980           11      8,969      99.9% kind 0: 1  kind 1: 1  kind 2: 6,740  kind 3: 2,227  
+p_es4              738            1        737      99.9% kind 0: 1  kind 1: 1  kind 2: 520  kind 3: 215  
+p_epi            2,366           10      2,356      99.6% kind 0: 1  kind 1: 1  kind 3: 2,354  
+p_mix           10,047           16     10,031      99.8% kind 0: 1  kind 1: 1  kind 2: 6,728  kind 3: 3,301  
+
+=== the intersection reading, per fact ======================================
+The tenant and the graph are on every path by construction, so an intersection
+of size 2 means the reading names nothing below the graph.
+
+p_es1 (grant on one level-1 entity-set):
+     paths      facts   mean inter    min    max
+         2        397         2.00      2      2
+         3        788         2.00      2      2
+         4      1,232         2.00      2      2
+         5        838         2.00      2      2
+         6      1,026         2.00      2      2
+         7        719         2.00      2      2
+
+p_es2 (grant on one level-2 entity-set):
+     paths      facts   mean inter    min    max
+         2        529         2.00      2      2
+         3      1,192         2.00      2      2
+         4      1,498         2.00      2      2
+         5        761         2.00      2      2
+         6        646         2.00      2      2
+         7        374         2.00      2      2
+
+p_es3 (grant on one level-3 entity-set):
+     paths      facts   mean inter    min    max
+         2        470         2.00      2      2
+         3      1,093         2.00      2      2
+         4      1,662         2.00      2      2
+         5        843         2.00      2      2
+         6        681         2.00      2      2
+         7        251         2.00      2      2
+
+p_es4 (grant on one level-4 entity-set):
+     paths      facts   mean inter    min    max
+         2         80         2.00      2      2
+         3        195         2.00      2      2
+         4        270         2.00      2      2
+         5         55         2.00      2      2
+         6         60         2.00      2      2
+         7         15         2.00      2      2
+
+p_epi (grant on ten episodes -- the tree-only principal):
+     paths      facts   mean inter    min    max
+         1        131         3.00      3      3
+         2        217         2.00      2      2
+         3        265         2.00      2      2
+         4        229         2.00      2      2
+         5         90         2.00      2      2
+         6         58         2.00      2      2
+         7         10         2.00      2      2
+
+p_mix (one level-3 set plus five episodes -- the household shape):
+     paths      facts   mean inter    min    max
+         1         21         3.00      3      3
+         2        568         2.00      2      2
+         3      1,218         2.00      2      2
+         4      1,539         2.00      2      2
+         5        743         2.00      2      2
+         6        632         2.00      2      2
+         7        279         2.00      2      2

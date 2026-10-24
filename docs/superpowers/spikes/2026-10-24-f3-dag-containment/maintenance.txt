@@ -1,0 +1,70 @@
+F3 question 1 -- maintenance when containment is a DAG
+
+A2: "Sharing a container of 100,000 objects with a 50-member team must write
+O(50) projection rows, not O(5,000,000)." The DAG adds three events A2 never
+names, and they are the ones that decide this finding:
+
+  E3  an entity is added to an entity-set   -- a containment edge, at ENTITY cardinality
+  E4  an entity-set is nested under another -- a containment edge, at CONTAINER cardinality
+  E6  an entity-set is re-parented          -- E4 plus a removal
+
+Rows are counted, not written, so the fixture stays valid for every later
+section; the two timed cases say so explicitly.
+
+=== E1/E2: the events A2 does budget, unchanged by the DAG ==================
++1 grant on a container          grant_tuple 1 row;  no fact rows, any strategy
++1 member to a 50-member group   group_member 1 + membership_closure 1 = 2 rows;
+                                 no fact rows, any strategy
+These are F1's measured numbers and the DAG does not touch them: a grant and a
+membership name no container, so no containment closure is a function of either.
+
+=== E5: +1 fact ingested (the consumer's own write) =========================
+strat               rows per fact written   at 10M facts
+C2          2.398  fact + fact_entity        23,979,999
+C4          5.495  + fact_container          54,949,774
+C1         13.048  + fact_ancestry          130,475,540
+
+=== E3: an entity is added to an entity-set =================================
+The event is one row of authorization state. What it costs depends entirely on
+whether the strategy stores containment at fact cardinality.
+
+entity                      facts    C2 rows    C4 rows    C1 rows  target
+median-degree                   5          1          5         10  level-2 set 2000
+hub (highest degree)        1,010          1      1,005      1,930  level-2 set 2000
+median-degree                   5          1          5         25  level-4 set 200000
+hub (highest degree)        1,010          1      1,010      5,915  level-4 set 200000
+
+entity ids: median-degree 1201, hub 179 (degree 1,010)
+
+C1's count can come in BELOW C4's for a shallow target, and that is a DAG
+property rather than a saving: the new ancestors are already reached by one of
+the fact's other paths, so the closure row exists and only its justification
+changed -- which is exactly why that row cannot be deleted by matching an
+ancestor id when the membership is removed. See E7.
+
+=== E4: an entity-set is nested under another entity-set ====================
+event                               facts under     cont_anc      C4 rows      C1 rows
+set 20000 under set 2199                  9,745           22            0       17,855
+set 2000 under set 1019                 103,090          111            0       88,215
+
+C2 and C4 write ZERO rows for this event: neither stores a transitive edge, so
+re-nesting a container is a change to container_ancestry alone -- a table bounded
+by the number of containers. C1 pays it at fact cardinality.
+
+=== E4, timed rather than counted ===========================================
+The middle event above, actually applied inside a transaction and rolled back,
+so the figure is wall clock and not a row count.
+
+C2/C4  set 2000 under set 1019, container_ancestry repair only   8.4ms
+C1     the same event propagated to fact_ancestry     10.0s
+
+=== E7: re-parenting, which F1 §9 flagged as unbudgeted and still is =======
+Moving a container is E4 plus the removal of the old edge. Under C1 the removal
+is the expensive half: a (fact, ancestor) row may be justified by a second path,
+so it cannot be deleted by matching the old ancestor -- every candidate row has
+to be re-derived. Counted here as the rows that would have to be re-examined:
+  container 2000    facts beneath it      103,090   C1 rows to re-derive 1,030,900
+  container 20000   facts beneath it        9,745   C1 rows to re-derive 97,450
+
+In a tree the delete is a match on the old ancestor id. In a DAG it is not, and
+that asymmetry is the one maintenance cost that has no cheap form under C1.
