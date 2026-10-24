@@ -1,0 +1,112 @@
+F3 question 2 -- what happens to F1's scalar containment key
+
+F1's key: "one scalar column per row holding the id of the row's ancestor
+at a declared containment depth". Five candidates, one table, 10,000,000 rows.
+
+  K1 ep_zone      scalar, declared on the tree dimension: the fact's episode
+  K2 zones[]      every direct container, GIN
+  K3 zones3[]     the same lifted to entity-set level 3
+  K4 per-kind     ep_zone scalar + set_zones[] GIN, one key per containment kind
+  K5 canonical    one designated primary container per fact, scalar
+
+=== index size ==============================================================
+index                      size
+fact_key_ep              301 MB
+fact_key_canon           301 MB
+fact_key_zones           153 MB
+fact_key_zones3          145 MB
+fact_key_setz             83 MB
+fact_key_pkey            214 MB
+
+=== candidate rows surviving the key, and authorized rows the key destroys ==
+A nonzero `pruned away` is not a recall miss tuning can recover: the row is
+gone before the fragment is evaluated and the consumer is told nothing.
+
+probe     key              key set     candidates     authorized     over x  pruned away
+p_graph   key set is 122,221 containers -- past the 20,000 ceiling; no key applies, see the write-up
+p_es1     K1 ep_zone       100,000     10,000,000      1,056,020        9.5            0
+p_es1     K2 zones[]         1,166      1,056,020      1,056,020        1.0            0
+p_es1     K3 zones3[]          116      1,056,020      1,056,020        1.0            0
+p_es1     K4 per-kind        1,166      1,056,020      1,056,020        1.0            0
+p_es1     K5 canonical       1,166        779,975      1,056,020        0.7      276,045
+p_es2     K1 ep_zone        58,635      5,863,500        103,090       56.9            0
+p_es2     K2 zones[]           111        103,090        103,090        1.0            0
+p_es2     K3 zones3[]           11        103,090        103,090        1.0            0
+p_es2     K4 per-kind          111        103,090        103,090        1.0            0
+p_es2     K5 canonical         111         77,640        103,090        0.8       25,450
+p_es3     K1 ep_zone         6,740        674,000          9,745       69.2            0
+p_es3     K2 zones[]            11          9,745          9,745        1.0            0
+p_es3     K3 zones3[]            1          9,745          9,745        1.0            0
+p_es3     K4 per-kind           11          9,745          9,745        1.0            0
+p_es3     K5 canonical          11          8,160          9,745        0.8        1,585
+p_es4     K1 ep_zone           520         52,000            675       77.0            0
+p_es4     K2 zones[]             1            675            675        1.0            0
+p_es4     K3 zones3[]            1          9,745            675       14.4            0
+p_es4     K4 per-kind            1            675            675        1.0            0
+p_es4     K5 canonical           1            675            675        1.0            0
+p_epi     K1 ep_zone            10          1,000          1,000        1.0            0
+p_epi     K2 zones[]            10          1,000          1,000        1.0            0
+p_epi     K3 zones3[]           10          1,000          1,000        1.0            0
+p_epi     K4 per-kind           10          1,000          1,000        1.0            0
+p_epi     K5 canonical          10            131          1,000        0.1          869
+p_mix     K1 ep_zone         6,733        673,300         11,263       59.8            0
+p_mix     K2 zones[]            16         11,263         11,263        1.0            0
+p_mix     K3 zones3[]            6         11,263         11,263        1.0            0
+p_mix     K4 per-kind           16         11,263         11,263        1.0            0
+p_mix     K5 canonical          16          8,131         11,263        0.7        3,132
+
+=== K1 in a DAG: the key set cannot be read off the container graph =========
+No episode is a descendant of an entity-set, so a principal whose grant is on
+an entity-set has an EMPTY episode key set while holding authorized facts. The
+only sound construction walks the authorized facts. Its cost:
+
+probe           episodes  via facts p95     from DAG
+p_graph   key set is 122,221 containers -- past the 20,000 ceiling; no key applies, see the write-up
+p_es1            100,000   3925.40   3988.28            0
+p_es2             58,635    784.08    821.11            0
+p_es3              6,740     35.51     38.98            0
+p_es4                520      3.33      3.83            0
+p_epi                 10      2.66      2.97           10
+p_mix              6,733     40.76     56.15            5
+
+=== the key-only page: what the key alone exposes (F1 condition (i)) ========
+probe     key              unauth/50     p50/p95 ms
+p_graph   key set is 122,221 containers -- past the 20,000 ceiling; no key applies, see the write-up
+p_es1     K1 ep_zone              43     64.77     71.15
+p_es1     K2 zones[]               0      4.84      5.40
+p_es1     K3 zones3[]              0      1.52      1.71
+p_es1     K4 per-kind              0      5.15      6.36
+p_es1     K5 canonical             0      2.17      2.61
+p_es2     K1 ep_zone              50     37.36     39.53
+p_es2     K2 zones[]               0      6.46      6.89
+p_es2     K3 zones3[]              0      2.04      2.34
+p_es2     K4 per-kind              0      5.53      6.22
+p_es2     K5 canonical             0      1.84      2.13
+p_es3     K1 ep_zone              50      6.93      7.88
+p_es3     K2 zones[]               0      7.44      8.21
+p_es3     K3 zones3[]              0      5.17      6.90
+p_es3     K4 per-kind              0      8.07     11.18
+p_es3     K5 canonical             0      1.36      1.52
+p_es4     K1 ep_zone              48      2.15      2.40
+p_es4     K2 zones[]               0      1.30      1.86
+p_es4     K3 zones3[]             44      5.21      5.79
+p_es4     K4 per-kind              0      1.41      1.81
+p_es4     K5 canonical             0      0.96      1.12
+p_epi     K1 ep_zone               0      1.25      1.77
+p_epi     K2 zones[]               0     94.31     96.84
+p_epi     K3 zones3[]              0     95.38    103.50
+p_epi     K4 per-kind              0     98.54    101.30
+p_epi     K5 canonical             0      0.94      1.07
+p_mix     K1 ep_zone              45      6.98      7.91
+p_mix     K2 zones[]               0      8.93      9.48
+p_mix     K3 zones3[]              0      6.50      6.94
+p_mix     K4 per-kind              0      8.67      9.11
+p_mix     K5 canonical             0      1.34      1.54
+
+=== the safe shape: key pre-filters, fragment authorizes (p50 / p95 ms) =====
+                         p_graph                 p_es1                 p_es2                 p_es3                 p_es4                 p_epi                 p_mix
+K1 ep_zone               skipped       69.53     73.76       86.61     93.86       43.37     46.42       54.06     57.42       13.06     14.22       43.17     45.40
+K2 zones[]               skipped        5.53      6.38        6.75      7.15        8.66      9.32        7.74      9.85       96.14     99.92        9.57     10.39
+K3 zones3[]               skipped        2.32      2.43        2.75      3.69        6.53      7.03       46.09     47.52       97.45    102.26        7.36      8.22
+K4 per-kind               skipped        5.47      6.25        6.14      6.71        9.03     10.53        7.87      9.13      100.62    102.00        9.61     10.09
+K5 canonical               skipped        3.14      3.59        2.57      3.06        6.12      7.02        7.06      8.54      395.41    410.18        7.82      8.86

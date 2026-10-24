@@ -50,7 +50,7 @@ const postgresImage = "pgvector/pgvector:pg18"
 // queryBudget bounds one measured query. A strategy that cannot answer inside
 // it is recorded as a timeout rather than allowed to hang the run — and a
 // timeout is a result: A2's budget for the same query is 20 ms.
-const queryBudget = 180 * time.Second
+const queryBudget = 120 * time.Second
 
 // serverArgs are the F1 spike's server settings, reproduced exactly except
 // for the two lines noted.
@@ -313,7 +313,7 @@ func measure(ctx context.Context, t *testing.T, p *pg, reps int, sql string, arg
 	t.Helper()
 	samples := make([]float64, 0, reps)
 	var rows int64
-	for range reps {
+	for i := 0; i < reps; i++ {
 		qctx, cancel := context.WithTimeout(ctx, queryBudget)
 		start := time.Now()
 		r, err := p.pool.Query(qctx, sql, args...)
@@ -331,11 +331,27 @@ func measure(ctx context.Context, t *testing.T, p *pg, reps int, sql string, arg
 		if err != nil {
 			return timing{Reps: len(samples), TimedOut: true, Note: trunc(err.Error())}
 		}
-		samples = append(samples, float64(time.Since(start).Microseconds())/1000)
+		elapsed := time.Since(start)
+		samples = append(samples, float64(elapsed.Microseconds())/1000)
 		rows = n
+		// Adaptive repetition count. At A2's scale the slowest cells are
+		// seconds rather than milliseconds, and twenty executions of a cell
+		// that takes a minute would cost more wall clock than every other
+		// cell in the spike combined -- for a p95 that is already obvious
+		// from three samples. The first execution decides; the reduction is
+		// recorded in the cell so a table never implies a sample size it
+		// does not have.
+		if i == 0 {
+			switch {
+			case elapsed > 20*time.Second && reps > 3:
+				reps = 3
+			case elapsed > 2*time.Second && reps > 5:
+				reps = 5
+			}
+		}
 	}
 	sort.Float64s(samples)
-	return timing{Reps: reps, P50: pct(samples, 0.50), P95: pct(samples, 0.95), Rows: rows}
+	return timing{Reps: len(samples), P50: pct(samples, 0.50), P95: pct(samples, 0.95), Rows: rows}
 }
 
 // trunc keeps a driver error short enough for a table cell.

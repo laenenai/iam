@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -76,15 +77,38 @@ func TestF3(t *testing.T) {
 	probes := loadProbes(ctx, t, p)
 	res.Baseline = measure(ctx, t, p, 300, "select 1")
 
-	reportFixture(ctx, t, p, prm, probes, res)
-	reportRead(ctx, t, p, probes, res)
-	reportKeys(ctx, t, p, probes, res)
-	reportVisibleBelow(ctx, t, p, probes, res)
-	reportMaintenance(ctx, t, p, prm, res)
-	reportPredicateSets(ctx, t, p, res)
-	reportExplain(ctx, t, p, probes)
+	only := sections()
+	if only["fixture"] {
+		reportFixture(ctx, t, p, prm, probes, res)
+	} else {
+		loadAuthorized(ctx, t, p, probes)
+	}
+	if only["read"] {
+		reportRead(ctx, t, p, probes, res)
+	}
+	if only["keys"] {
+		reportKeys(ctx, t, p, probes, res)
+	}
+	if only["recommended"] {
+		reportRecommended(ctx, t, p, probes, res)
+	}
+	if only["visible"] {
+		reportVisibleBelow(ctx, t, p, probes, res)
+	}
+	if only["maintenance"] {
+		reportMaintenance(ctx, t, p, prm, res)
+	}
+	if only["predicate"] {
+		reportPredicateSets(ctx, t, p, res)
+	}
+	if only["explain"] {
+		reportExplain(ctx, t, p, probes)
+	}
 
 	res.Probes = append(res.Probes, probes...)
+	if !sections()["fixture"] {
+		t.Log("f3: F3_ONLY was set, so results.json covers only the sections that ran")
+	}
 	blob, err := json.MarshalIndent(res, "", "  ")
 	if err != nil {
 		t.Fatalf("f3: marshal results: %v", err)
@@ -151,4 +175,39 @@ func loadProbes(ctx context.Context, t *testing.T, p *pg) []probeRow {
 		out[i].NAccess = len(out[i].Accessible)
 	}
 	return out
+}
+
+// allSections is every report, in the order TestF3 runs them.
+var allSections = []string{
+	"fixture", "read", "keys", "recommended", "visible", "maintenance",
+	"predicate", "explain",
+}
+
+// sections reads F3_ONLY, a comma-separated list of report names, so a
+// measurement can be re-run against a kept fixture without paying for the
+// whole matrix again. Empty means all of them, which is what a reproduction
+// run does.
+func sections() map[string]bool {
+	out := map[string]bool{}
+	raw := os.Getenv("F3_ONLY")
+	if raw == "" {
+		for _, s := range allSections {
+			out[s] = true
+		}
+		return out
+	}
+	for _, s := range strings.Split(raw, ",") {
+		out[strings.TrimSpace(s)] = true
+	}
+	return out
+}
+
+// loadAuthorized fills in the per-probe authorized count that the fixture
+// report normally computes, so a partial run's tables still have the
+// denominator every ratio in them is over.
+func loadAuthorized(ctx context.Context, t *testing.T, p *pg, probes []probeRow) {
+	t.Helper()
+	for i := range probes {
+		probes[i].Authorized = scalar[int64](ctx, t, p, qAuthorizedCount, probes[i].Accessible)
+	}
 }

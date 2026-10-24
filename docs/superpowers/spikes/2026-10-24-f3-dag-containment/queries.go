@@ -519,3 +519,33 @@ where c.kind = 3
   and not exists (select 1 from container_ancestry ca
                   where ca.container_id = $1 and ca.ancestor_id = c.id)
 order by c.id desc limit 1`
+
+// qPageKeySafeC2 is the combination the write-up recommends and which no
+// other cell measures: the K2 array key pre-restricts, and the fragment that
+// authorizes is C2's -- the one that stores nothing authorization-mutable at
+// fact cardinality. qPageKeySafe pairs the key with C4's fragment instead,
+// which is the easier join and the more expensive table to maintain, so
+// measuring only that would have recommended a shape on the strength of a
+// different shape's number. $1 key set, $2 cursor, $3 principal.
+const qPageKeySafeC2 = `
+select fk.id from fact_key fk
+where fk.id > $2 and fk.zones && $1::int[]
+  and exists (
+    select 1 from (
+        select f.episode_id as cid from fact f where f.id = fk.id
+      union all
+        select esm.set_id
+        from fact_entity fe
+        join entity_set_member esm on esm.entity_id = fe.entity_id
+        where fe.fact_id = fk.id) d
+    join container_ancestry ca on ca.container_id = d.cid
+    join grant_tuple g on g.container_id = ca.ancestor_id
+    join membership_closure mc on mc.userset_id = g.userset_id and mc.principal_id = $3)
+order by fk.id limit 50`
+
+// qPageKeyOnlyK2 is the same query with the fragment removed, so the pair
+// prices what the fragment costs on top of the key.
+const qPageKeyOnlyK2 = `
+select fk.id from fact_key fk
+where fk.id > $2 and fk.zones && $1::int[]
+order by fk.id limit 50`

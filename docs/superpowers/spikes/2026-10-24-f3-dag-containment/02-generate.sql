@@ -69,8 +69,12 @@ select 1000000 + g, 2 from generate_series(0, ${N_EPISODE} - 1) g;
 -- deployment grants on the coarse sets and files on the fine ones.
 -- ---------------------------------------------------------------------------
 
+-- generate_series is given bigint bounds throughout the fact and entity
+-- generators: at scale 1.0 the mixing multiplications overflow int4 (g / 10 *
+-- 7919 is 7.9e9 at g = 10,000,000), and the failure is a bare
+-- "integer out of range" naming no column.
 insert into entity (id, country)
-select g, (g * 7) % 20 from generate_series(1, ${N_ENTITY}) g;
+select g, (g * 7) % 20 from generate_series(1::bigint, ${N_ENTITY}::bigint) g;
 
 insert into entity_set_member (entity_id, set_id)
 select entity_id, set_id
@@ -107,7 +111,7 @@ on conflict do nothing;
 -- ---------------------------------------------------------------------------
 
 insert into fact (id, episode_id)
-select g, 1000000 + (g % ${N_EPISODE}) from generate_series(1, ${N_FACT}) g;
+select g, 1000000 + (g % ${N_EPISODE}) from generate_series(1::bigint, ${N_FACT}::bigint) g;
 
 -- The within-pool offset is derived from the fact's ORDINAL INSIDE its episode
 -- (g / N_EPISODE) and not from g directly. An earlier version used (g * 37) %
@@ -123,14 +127,14 @@ from (
     select g as fact_id,
            1 + ((g % ${N_EPISODE}) % ${N_TOPIC}) * 100
              + (((g / ${N_EPISODE}) * 37 + (g % ${N_EPISODE})) % 100) as entity_id
-    from generate_series(1, ${N_FACT}) g
+    from generate_series(1::bigint, ${N_FACT}::bigint) g
     union all
     select g,
            case when (g % 10) = 5
                 then 1 + ((g / 10 * 7919) % ${N_HUB})
                 else 1 + ((g % ${N_EPISODE}) % ${N_TOPIC}) * 100
                        + (((g / ${N_EPISODE}) * 61 + 13) % 100) end
-    from generate_series(1, ${N_FACT}) g
+    from generate_series(1::bigint, ${N_FACT}::bigint) g
     where (g % 5) < 2
 ) z
 on conflict do nothing;
