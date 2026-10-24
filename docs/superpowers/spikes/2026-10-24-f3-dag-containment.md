@@ -167,12 +167,29 @@ quoted as a conclusion.
 | +1 entity into a level-4 set, **hub** entity (1,010 facts) | **1 row** | 1,010 | **5,915** |
 | re-nest an entity-set | container rows only | **0** | at fact cardinality |
 
-**Read cost** (`read.txt`), keyset page of 50 against A2's "+ < 20 ms":
-unfiltered 0.85 ms; the best unkeyed strategy 102.79 ms at 0.097% selectivity
-and 1,110 ms at 0.01%; the key-restricted shape 8.97–13.38 ms at the same
-selectivities. The point decision — §7.1's `Decide` — is **1.0–1.5 ms under
-every strategy at every selectivity**, so the DAG cost nothing at point
-granularity and only ever showed up in the filtered-read path.
+**Read cost** (`read.txt`, `recommended.txt`), keyset page of 50 against A2's
+"+ < 20 ms". Unfiltered: **0.85 ms**. The best unkeyed strategy: **102.79 ms**
+at 0.097% selectivity and **1,110 ms** at 0.01%, so no unkeyed strategy met A2
+below about 1%. Adding the key helped by one to two orders of magnitude and
+**did not settle into a shape**, which is the honest form of this row and the
+reason it is not a conclusion:
+
+| at 0.097% / 0.01% selectivity | p50 ms |
+|---|---|
+| best unkeyed (`C1`) | 102.79 / 1,110.58 |
+| key set bound, no row-local key (`C5`) | **9.19** / 48.99 |
+| key + the cheap-join fragment (`K2 + C4`) | 8.51 / 96.72 |
+| key + the cheap-to-maintain fragment (`K2 + C2`) | 179.07 / **4.91** |
+
+The last two rows invert between those two selectivities by a factor of
+twenty, in opposite directions. That is plan choice rather than strategy, and
+F1 hit the same wall from the other side — its §8 recorded a plan-stability
+episode it "could not explain away". Settling it was work the spike never got
+to, and anyone quoting a single cell from this table is quoting a plan.
+
+The one row here that *is* clean: **the point decision — §7.1's `Decide` — is
+1.0–1.5 ms under every strategy at every selectivity.** So the DAG cost nothing
+at point granularity and only ever showed up in the filtered-read path.
 
 **Keys** (`keys.txt`), five candidates for F1's scalar key, and the one result
 here that outlived the spike: a scalar key on the tree dimension (the fact's
