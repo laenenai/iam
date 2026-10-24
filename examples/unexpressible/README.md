@@ -66,15 +66,29 @@ right thing; nothing pends on it.
 object without seeing its siblings — with one containment edge different.
 D7's `path-count` claim asserts one path and its `visible-set` claim
 compares the reachable set element by element; both pass. U3's `path-count`
-asserts two, and `DirectPath` refuses. The difference is one edge that KGS
-§9.3 requires.
+asserts two, and `DirectPath` refuses. The difference used to be one edge
+that KGS §9.3 required.
+
+> **It no longer requires it, as of 2026-10-24.** kgs was respecified onto a
+> containment tree — one parent per graph, one graph per quad — so §17's F3
+> is closed and `../UNEXPRESSIBLE.md` has moved U3's entry to "Resolved
+> without being solved". **U3's scenario and its claims stay exactly as they
+> are**, because both are still true statements about the fixture U3
+> declares: containment above that fact really is a DAG and `DirectPath`
+> really does refuse it. What changed is that no specified consumer asks for
+> that shape, so the pair below reads as a record of a shape the design was
+> asked to support and no longer is, rather than as a live gap. The
+> follow-up that would make U3 a live scenario is named in
+> `../UNEXPRESSIBLE.md`: `scenario.Visible` has to stop being built on
+> `DirectPath` first.
 
 Read U3 against [D8](../discretionary/) as well, which is newer and raises
 the stakes. D8 is the legal ethical wall, and part of how it asserts that a
 screened associate cannot learn the matter exists is a `visible-set` claim.
-So "what does `visible_below` mean once containment is a DAG" is no longer
-only a usability question about finding things — it is part of how a screen
-is tested.
+So "what does `visible_below` mean once containment is a DAG" was never only
+a usability question about finding things — it was part of how a screen is
+tested, which is why the pair is still worth reading now that the question
+is dormant rather than open.
 
 **U1 against U4.** They used to be cousins: one about the rule language
 (there is no way to *write* "not salary") and the other about the compiled

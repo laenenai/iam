@@ -552,17 +552,51 @@ direct path** — Lakekeeper's bi-directional inheritance, made an explicit
 `visible_below`-style relation that reads bare relations and recurses downward
 rather than being derived at read time.
 
-> **"Only on the direct path" is unimplemented and currently undefined, pending
-> F3.** It presumes containment is a tree. Once a kgs fact belongs to an episode
-> *and* to zero or more nestable entity-sets there are several paths, and the
-> phrase names nothing. The three repairs are not equivalent: a union of paths
-> reopens leak channel #1, an intersection is usually empty, and designating a
-> primary container per write pushes the decision onto every consumer write.
-> This matters more since A3 than it did: with no deny mechanism, "the screened
-> principal navigates to nothing" is part of how a conflict screen is asserted
-> (the corpus's D8), so the phrase is load-bearing for a security property and
-> not only for navigation. Do
-> not build against this sentence until F3 is settled.
+> **"Only on the direct path" is implementable as of 2026-10-24, because every
+> specified consumer's containment is a tree** — one parent per container, one
+> container per resource. The sentence has a referent rather than being the
+> open problem it was, and F3 is closed. **It is also a sentence with a
+> precondition, and the precondition belongs next to it:** the phrase is
+> well-defined exactly while `scenario.DirectPath` can find one path. A
+> consumer registering a schema in which a resource has two containment paths
+> does not get a degraded version of this relation; it gets a phrase that names
+> nothing again, and F3 reopens.
+>
+> What changed is not an answer to the question. The question was removed. kgs
+> was respecified on 2026-10-24 — `kgs/docs/epistemic_quad_store_spec.md`,
+> §2.1 and §4.2 — onto a four-tier graph tree, UNIVERSE → WORLD → SCOPE →
+> TOPIC, with `named_graphs.parent_graph_id` holding one parent and
+> `tenant_quads.graph_id` one graph per quad. The nestable, sometimes
+> predicate-defined entity-sets that made containment many-to-many are absent
+> from it entirely. F3's own first branch — "kgs's entity-sets stop being an
+> authorization container" — is what happened, and it happened in the consumer
+> rather than here.
+>
+> **The three repairs are recorded as superseded rather than deleted**, because
+> the spike that was measuring them got far enough to show that two of the
+> three were worse than the finding admitted, and a future DAG consumer should
+> not have to rediscover it. A union of paths was going to reopen leak channel
+> #1: measured at **2,356 containers made list-visible to a principal granted
+> ten episodes — 1,000 facts of 10,000,000 — that it held no grant on and none
+> below**, 2,354 of them entity-sets. An intersection was called "usually
+> empty"; measured, it was exactly `{tenant, graph}` — size 2, min 2, max 2 —
+> for *every* resource with more than one path, so it names nothing below the
+> graph rather than being merely sparse. Designating a primary container per
+> write still pushes the decision onto every consumer write, and as a
+> containment key it silently pruned **87%** of one probe's authorized rows.
+> The surviving candidate, which nobody had written down, is to anchor the
+> relation on the **grant** rather than on the object: a container is navigable
+> iff it lies on a path from one of the principal's own grants down to
+> something it may read, which is well-defined for any number of paths and
+> leaks nothing by construction. That is where to start if F3 reopens.
+> `docs/superpowers/spikes/2026-10-24-f3-dag-containment.md` carries the numbers
+> and says plainly that they are partial.
+>
+> One thing did not change. With no deny mechanism, "the screened principal
+> navigates to nothing" is part of how a conflict screen is asserted (the
+> corpus's D8), so this phrase is load-bearing for a security property and not
+> only for navigation — which is why the precondition above is a precondition
+> and not a footnote.
 
 This matters more here than in a catalog, because it is how a consumer answers
 "find the thing you may see" without revealing its siblings. KGS §7.3 derives
@@ -748,8 +782,40 @@ to store*, and leave the rest as a join:
    membership changes, and the write is proportional to the group's members.
 2. **Ancestry closure** — `resource → every ancestor on its containment path`.
    Bounded by hierarchy depth, changes only when the hierarchy changes, and
-   most consumers already maintain it (CAS's fileset nesting, kgs's entity-set
+   most consumers already maintain it (CAS's fileset nesting, kgs's graph
    nesting).
+
+> **"Its containment path", singular, is correct for every specified consumer
+> as of 2026-10-24 — and the word doing the work is "specified".** CAS
+> registers `tenant > fileset > document > slot`; kgs, respecified that day
+> (`kgs/docs/epistemic_quad_store_spec.md` §2.1, §4.2), registers a four-tier
+> graph tree with `named_graphs.parent_graph_id` holding exactly one parent and
+> `tenant_quads.graph_id` exactly one graph per quad. One parent per container
+> and one container per resource is what makes this closure "bounded by
+> hierarchy depth" true rather than aspirational, and F3 is closed on that
+> basis.
+>
+> **Two consequences to keep in view, because the sentence is now load-bearing
+> in a way it was not when it was a draft assumption.**
+>
+> First, it is a **registered-schema invariant and not a property of this
+> module**. Nothing in §8.4's schema registration currently rejects a
+> containment declaration that gives a resource two parents, and a consumer
+> that writes one gets a closure whose row count is a function of resource
+> cardinality rather than of hierarchy depth, silently. The corpus already has
+> the check — `scenario.Paths` enumerates every path and `scenario.DirectPath`
+> refuses when there is more than one — so the cheap guard is to make schema
+> registration run it, and §15 carries that as the builder's item.
+>
+> Second, if that invariant is ever relaxed, this closure is the wrong shape
+> and F3 reopens with F1's condition (iii) attached. The partial spike
+> (`docs/superpowers/spikes/2026-10-24-f3-dag-containment.md`) measured the
+> naive repair at kgs A2's scale before it was abandoned: keyed on the
+> **resource**, a DAG closure over 10,000,000 facts was **106,495,540 rows and
+> 10.9 GB**; keyed on the **container**, the same containment was **433,063
+> rows and 37 MB**. A factor of 246, and the direction it points is that a
+> multi-path closure must be keyed on the container with the resource's own
+> edges left as a join — not that §9.2 as written needs widening.
 
 The predicate then compiles to an index join over small tables:
 
@@ -1099,10 +1165,14 @@ What that changes, stated plainly because one of them is a cost:
   change than building adapters against an unfinished port. The duplication
   guards land at that moment.
 - **This module is no longer on anyone's critical path**, which is the right
-  place for it to be given §17 still holds **three open findings** (F3, F4,
-  F8), two of which can still move the public API: F3, and F1's resolution
-  which depends on it. The count was eight; A3 and §10 closed four by deletion
-  and resolved one.
+  place for it to be given §17 still holds **two open findings** (F4, F8),
+  neither of which can change the shape of what is already decided. The count
+  was eight; A3 and §10 closed four by deletion and resolved one, and F3 closed
+  on 2026-10-24 when the consumer that caused it was respecified onto a
+  containment tree — which took F1's condition (iii) with it. **So the thing
+  that was blocking the public API is gone**, and the honest consequence is
+  that the argument for this module staying off the critical path is now the
+  sequencing one (§16 question 4) rather than the API-instability one.
 
 The superseded decision is kept below, because the reasoning in it is still
 the reasoning that applies if a date ever returns.
@@ -1131,14 +1201,22 @@ alpha behaviour for designed behaviour.
 **And the owner has asked to accelerate this module regardless.** The
 compression comes from three things, not from starting more phases at once:
 
-1. **Resolve the API-shaping findings by measurement, immediately.** F1
-   (filtered ANN) and F3 (tree versus DAG containment) decide whether
-   `Predicate` returns a SQL fragment or a fragment *plus* an indexable key the
-   consumer partitions by, and whether the ancestry closure is depth-bounded or
-   many-to-many at fact cardinality. These are empirical questions against a
-   real pgvector fixture, not design discussions, and until they are answered
-   every other decision is provisional. F1 is therefore the first task in the
-   module, ahead of phase 1.
+1. ~~**Resolve the API-shaping findings by measurement, immediately.**~~
+   **Done, and only half of it was done the way this item expected.** F1
+   (filtered ANN) was resolved by measurement on 2026-10-23 and answered the
+   first question: `Predicate` returns a fragment *plus* an indexable key.
+   F3 (tree versus DAG containment) was *not* resolved by measurement — the
+   probe was abandoned on 2026-10-24 when kgs was respecified onto a
+   containment tree and the many-to-many case stopped existing. So the second
+   question is answered too: the ancestry closure is depth-bounded. **The
+   lesson is worth keeping, because this item asserted the opposite of what
+   happened:** it said these were "empirical questions against a real pgvector
+   fixture, not design discussions", and one of the two turned out to be a
+   question about a consumer's data model that a consumer's redesign settled
+   for free. A finding whose subject lives in another document can be closed
+   by that document changing, and checking whether it has is cheaper than
+   measuring. Neither finding shapes the API any more, so nothing downstream
+   is provisional on this account.
 2. **Write the port and the conformance suite centrally and first.** It is the
    seam CAS needs anyway, it forces the API decisions into the open, and it is
    the yardstick every parallel workstream is judged against. **It is not
@@ -1146,7 +1224,7 @@ compression comes from three things, not from starting more phases at once:
    no longer exists (§13): with one mechanism there is no combination of
    operations for an adversarial search to explore.
 3. **Parallelise only what does not depend on the API.** The identity registry
-   (formerly phase 3) is wholly independent of F1/F3/F4 and moves to the front.
+   (formerly phase 3) is wholly independent of F1/F4 and moves to the front.
    The `Engine` adapter and the F5/F6 topology and connection spikes were the
    other items here and all three are deleted (§10). The classification store
    for the tree case is deleted too (A3). So this item is now just the identity
@@ -1207,6 +1285,18 @@ case.
 
 - **Closure storage shape**: one table per closure, a single wide table, or
   materialized views. Decided by the A2 predicate-plan tests.
+- **Enforcing §9.2's single-path invariant at schema registration.** Added
+  2026-10-24 with F3's resolution, because the resolution turns a drafting
+  assumption into a requirement: §8.4 accepts a consumer's containment
+  declaration and nothing in it rejects one that gives a resource two parents.
+  A consumer that writes such a schema gets an ancestry closure whose size is a
+  function of resource cardinality rather than of hierarchy depth, and gets it
+  without an error. The check exists — `examples/scenario`'s `Paths` enumerates
+  every containment path and `DirectPath` refuses when there is more than one —
+  so this is a wiring decision rather than a design one: whether registration
+  refuses a multi-path schema outright, or admits it and refuses to emit a
+  containment key for it. Refusing outright is the safer default and is the
+  recommendation.
 - **Whether the deny epoch is global, per tenant, or per principal.** Global is
   simplest and invalidates most aggressively; per principal is the finest and
   the most bookkeeping. The A2 revocation budget decides.
@@ -1292,28 +1382,38 @@ lost and each has an owner. Items the check raised that *were* resolved are in
 §8.3, §9.3, §10 and §16 above.
 
 **The register was rewritten on 2026-10-23**, after the no-deny decision (A3)
-and the engine decision (§10). The arithmetic, because the README quotes a
-count and the count must be true:
+and the engine decision (§10), and **amended on 2026-10-24** when F3 closed.
+The arithmetic, because the README quotes a count and the count must be true:
 
 | Disposition | Findings |
 |---|---|
 | **Closed by deletion** | F5, F6, F9 |
-| **Resolved** | F1 (by measurement, conditions carried), F2 (half of it deleted, half carried), F7 |
-| **Open** | F3, F4, F8 |
+| **Resolved** | F1 (by measurement, two conditions carried), F2 (half deleted, half carried), F3 (by respecification, with a precondition), F7 |
+| **Open** | F4, F8 |
 
-Three open. Two of the three can still move the public API — F3, and F1's
-resolution which depends on it — which is what §14 means by this module not
-being on anyone's critical path.
+**Two open, and neither can move the public API any more.** That is the one
+structural change on 2026-10-24: F3 closed, and F1's condition (iii) closed
+with it, so the `Predicate` signature is no longer waiting on anything. F4 can
+still *grow* the surface — it is a fork about whether `Predicate` returns a
+permitted-attribute set — but it cannot change the shape of what is already
+decided.
+
+**F3 is resolved conditionally and the condition is not a formality.** It
+closed because the consumer whose data model caused it was respecified onto a
+containment tree, not because a way to project a DAG was found. A future
+consumer with multi-path containment reopens F3 and reopens F1's condition
+(iii) with it. §8.2 and §9.2 carry the precondition next to the sentences that
+depend on it, which is the only place a reader will actually meet it.
 
 | # | Finding | Status |
 |---|---|---|
-| F1 | ~~**Filtered ANN versus the predicate.**~~ **RESOLVED by measurement, 2026-10-23** — see `docs/superpowers/spikes/2026-10-23-f1-filtered-ann.md`. Postgres 18.6 / pgvector 0.8.7, 2,000,000 `halfvec(768)` rows, 30 queries per cell. **`Predicate` returns a fragment *plus* a key.** Pushing the predicate inside the ANN index scan (option a) failed at **every** selectivity, not merely the low ones — no variant reached recall@20 0.95 anywhere, defaults scored **0.000** on adversarial queries at 0.1%, and tuning it to a full index walk cost **18 seconds**. Pre-restricting the candidate set by a key (option b) reached 0.955–0.962 at 1% and 0.1% with a per-partition HNSW, and 1.000 in 5 ms with an exact scan over the pruned set. **And A2's closure budget survives intact:** the key is one scalar column per row holding the id of the row's ancestor at a declared containment depth, derived from the containment path only and naming no principal, group or grant — so adding a member to a 50-member team with access to 200,000 objects writes **2 rows and zero fact rows**, identical to the closures alone, where a per-principal key would write 200,000. The worry that (b) required the forbidden materialization was unfounded; §9.2 stands as written. | **Still closed, with three conditions carried forward, and one of them is a dependency rather than a caveat.** (i) **The fragment stays mandatory.** Key-only is not a slow path, it is a disclosure: with a grant finer than the key, a key-only top-20 returned **9 unauthorized rows out of 20**. The key pre-filters; it never authorizes. (ii) **The consumer must choose exact-versus-ANN explicitly** — the planner gets it wrong at 1% selectivity, scoring 0.100 where an exact scan over the same pruned set scores 1.000 in 131 ms. (iii) **A scalar key presumes a containment tree, so this answer depends on F3's, which is open.** Settle F3 before freezing the signature. Unaffected by A3 and by §10: the spike measured our own Postgres tables either way. |
-| F2 | **Half resolved by deletion, half carried into the containment key.** The spike measured the discretionary closure join at **0.006 ms per candidate row, index-served**: the closures were never the problem. The problem was the tier-2 classification anti-join, walking 200,394 `fact_classification` rows and turning a 0.46 ms keyset page into **296 ms** — and the gate's cost was a function of *assignment* cardinality, which KGS propagates to every derived fact, observation and vector. That half is **closed by deletion** (A3): there is no gate, no anti-join, and A2 is back to one budget, which was already met. §8.3's "classifications are small and change rarely" was false by this measurement and the sentence is deleted with its section. | **The containment-key half stays open and is the only half left.** The key is what made the measured query fast (3 ms) for reasons unrelated to ANN, so the §4 fixture must still carry a realistic containment shape and the predicate-plan tests must still assert an index join over it. What is no longer required is distinguishing label *definitions* from *assignments* in the fixture, because there are neither. |
-| F3 | **Containment is a DAG, not a tree.** §9.2's ancestry closure and §8.2's "only on the direct path" both assume one path, but a kgs fact has an episode *and* zero or more nestable, sometimes predicate-defined entity-sets. Many-to-many at fact cardinality, maintained on every write, and "the direct path" is undefined. | **Open, blocking for §9.2, and unchanged by anything decided on 2026-10-23.** Either kgs's entity-sets stop being an authorization container, or the closure and `visible_below` are redefined for multiple paths. Note that **OpenFGA never solved this either** — it is a property of kgs's data model, not of an engine — so §10 neither helps nor hurts it. One thing did change: navigational visibility now carries more weight, because with no deny mechanism a conflict screen is asserted partly by "the screened principal navigates to nothing" (the corpus's D8). So "what does `visible_below` mean in a DAG" is now also a question about how a screen is tested. |
+| F1 | ~~**Filtered ANN versus the predicate.**~~ **RESOLVED by measurement, 2026-10-23** — see `docs/superpowers/spikes/2026-10-23-f1-filtered-ann.md`. Postgres 18.6 / pgvector 0.8.7, 2,000,000 `halfvec(768)` rows, 30 queries per cell. **`Predicate` returns a fragment *plus* a key.** Pushing the predicate inside the ANN index scan (option a) failed at **every** selectivity, not merely the low ones — no variant reached recall@20 0.95 anywhere, defaults scored **0.000** on adversarial queries at 0.1%, and tuning it to a full index walk cost **18 seconds**. Pre-restricting the candidate set by a key (option b) reached 0.955–0.962 at 1% and 0.1% with a per-partition HNSW, and 1.000 in 5 ms with an exact scan over the pruned set. **And A2's closure budget survives intact:** the key is one scalar column per row holding the id of the row's ancestor at a declared containment depth, derived from the containment path only and naming no principal, group or grant — so adding a member to a 50-member team with access to 200,000 objects writes **2 rows and zero fact rows**, identical to the closures alone, where a per-principal key would write 200,000. The worry that (b) required the forbidden materialization was unfounded; §9.2 stands as written. | **Still closed. Two conditions carried forward; the third is satisfied as of 2026-10-24.** (i) **The fragment stays mandatory.** Key-only is not a slow path, it is a disclosure: with a grant finer than the key, a key-only top-20 returned **9 unauthorized rows out of 20**. The key pre-filters; it never authorizes. (ii) **The consumer must choose exact-versus-ANN explicitly** — the planner gets it wrong at 1% selectivity, scoring 0.100 where an exact scan over the same pruned set scores 1.000 in 131 ms. (iii) ~~**A scalar key presumes a containment tree, so this answer depends on F3's, which is open.** Settle F3 before freezing the signature.~~ **SATISFIED, 2026-10-24.** What satisfied it is **F3's resolution, which is the consumer's respecification onto a containment tree** (`kgs/docs/epistemic_quad_store_spec.md` §2.1, §4.2: one parent per graph, one graph per quad) — not a measurement of a multi-path key, which was never completed. The presumption the condition named is now true of every specified consumer, so the key stays **scalar** exactly as F1 measured it and **the signature can be frozen.** The condition is satisfied rather than deleted, because it is the precondition in another form: a consumer with multi-path containment reopens F3 and reopens this condition with it, and the abandoned spike's partial numbers say which way to go if that happens — a scalar key on one dimension of a two-dimensional containment over-approximated by **57–77×** and its key-only page returned **43–50 unauthorized rows of 50**, while an array of the resource's direct containers with a GIN index was exact. Unaffected by A3 and by §10: the spike measured our own Postgres tables either way. |
+| F2 | **Half resolved by deletion, half carried into the containment key.** The spike measured the discretionary closure join at **0.006 ms per candidate row, index-served**: the closures were never the problem. The problem was the tier-2 classification anti-join, walking 200,394 `fact_classification` rows and turning a 0.46 ms keyset page into **296 ms** — and the gate's cost was a function of *assignment* cardinality, which KGS propagates to every derived fact, observation and vector. That half is **closed by deletion** (A3): there is no gate, no anti-join, and A2 is back to one budget, which was already met. §8.3's "classifications are small and change rarely" was false by this measurement and the sentence is deleted with its section. | **The containment-key half stays open and is the only half left.** The key is what made the measured query fast (3 ms) for reasons unrelated to ANN, so the §4 fixture must still carry a realistic containment shape and the predicate-plan tests must still assert an index join over it. What is no longer required is distinguishing label *definitions* from *assignments* in the fixture, because there are neither. **Narrowed 2026-10-24 by F3's resolution:** "a realistic containment shape" now means a realistic **tree**, which is a much cheaper fixture to build than the one F3 was going to need — the abandoned F3 probe spent 13 m 23 s and ~20 GB on a multi-path one, of which 7 m 12 s was the resource-keyed DAG closure alone. |
+| F3 | ~~**Containment is a DAG, not a tree.**~~ §9.2's ancestry closure and §8.2's "only on the direct path" both assume one path, but a kgs fact had an episode *and* zero or more nestable, sometimes predicate-defined entity-sets. Many-to-many at fact cardinality, maintained on every write, and "the direct path" undefined. **RESOLVED 2026-10-24 by respecification of the consumer, not by measurement.** kgs's implementation target is now `kgs/docs/epistemic_quad_store_spec.md`, whose containment is a strict four-tier tree — UNIVERSE → WORLD → SCOPE → TOPIC (§2.1) — with `named_graphs.parent_graph_id` holding **one** parent, `tenant_quads.graph_id` **one** graph per quad, and `tenant_entities.home_graph_id` **one** graph per entity (§4.2). Its own ancestry walk is `WITH RECURSIVE … UNION ALL` over `parent_graph_id` (§4.3), which is correct only for a single parent. There is no entity-set table, no many-to-many membership and nothing predicate-defined; the words do not appear in the document. So F3 closed by **its own first branch** — "kgs's entity-sets stop being an authorization container" — chosen in the consumer's design rather than argued here, and that also disposes of the branch this register had marked as the owner's. | **Resolved, with one precondition carried forward, and the precondition is the whole of what is left.** **The resolution is scoped to the specified consumers**: CAS's `tenant > fileset > document > slot` and kgs's four-tier graph tree are both trees, so §9.2's "its containment path" has a referent and §8.2's "only on the direct path" is implementable. It is **not** a result about authorization containment in general, and must not be read as one — a future consumer whose resources belong to several containers reopens this finding and F1's condition (iii) with it. `acre` is a planned consumer nobody has specified and is therefore evidence in neither direction. **What this costs:** the single-path assumption is now a registered-schema invariant that §8.4 does not currently enforce — a consumer could declare a two-parent containment and get a closure whose size is a function of resource cardinality, silently. The corpus has the check already (`scenario.Paths`, `scenario.DirectPath`); §15 carries wiring it into schema registration. **The spike that was measuring the alternative is abandoned**, and its partial numbers are kept because two of F3's three stated repairs turned out worse than the finding admitted: a union of paths made **2,356 containers list-visible to a principal holding no grant on any of them**, and the intersection was exactly `{tenant, graph}` for every multi-path resource rather than merely "usually empty". See `docs/superpowers/spikes/2026-10-24-f3-dag-containment.md`. |
 | F4 | **An attribute-granular restriction cannot be enforced by a row predicate.** A `WHERE` fragment hides rows, not columns. kgs is fine (facts are rows); CAS is not (document fields are columns). | **Open, and it lost a branch.** Either `Predicate` returns a permitted-attribute set the *consumer* applies — moving part of the trust boundary into consumer code, and making §9.4's audit responsible for consumer compliance — or this module becomes a query rewriter across three query builders. Two different modules; pick one before phase 1 fixes the API. **What changed:** the finding used to be about an attribute-scoped *classification*, and a third resolution existed implicitly — declare the label and accept that the gate answers correctly while `Predicate` cannot. There is no label, so F4 and F7 are now one fork with one option on it. CAS's own cheapest answer is unaffected and more attractive: make the sensitive field its own addressable resource, so the columnar case becomes a row case and an ordinary grant reaches it. |
 | F5 | ~~**OpenFGA store topology.**~~ One store per tenant versus one global store with tenant-prefixed ids, with §8.4's per-consumer schema versioning possibly uncomputable in the second shape. | **CLOSED BY DELETION, 2026-10-23 (§10).** There is no store. |
 | F6 | ~~**Which `tenancy` connection the engine gets.**~~ `tenancy`'s data-plane handles carry RLS session context and its control-plane path must not accept caller-supplied predicates; OpenFGA set no tenant context, ran its own migrations against this project's goose decision, and its queries inherited whatever RLS the pool's role carried. | **CLOSED BY DELETION, 2026-10-23 (§10), and it is the finding that most deserved it.** The honest resolution was never a wiring choice: a component that sets no tenant context and runs its own migrations is unacceptable next to `tenancy`'s RLS model, and the one-function-signature A1 argument that selected OpenFGA answered connection *plumbing* rather than connection *semantics*. §10 records this as one of the two reasons the engine is dropped. |
-| F7 | **Two of kgs §9.3's rule dimensions fall outside §8.5's permitted subset** — ontology scope ("may read `Person` but not `salary`": attribute-conditioned and exclusionary) and predicate-defined entity-sets (authorization as a function of data). The old answer was "use a classification", which converted a discretionary restriction into an absolute no owner could lift. | **RESOLVED, 2026-10-23, and the resolution is a refusal plus a definitive answer.** The discretionary-restriction form is **refused permanently**: A3 rules out exclusion and §8.5 rules out attribute conditions, and neither refusal is open to a case-by-case exception. And since classifications no longer exist, **"kgs loses the ontology-scope dimension" is the definitive answer rather than one of two** — the branch that made this a choice was the classification workaround. The one remaining way the requirement could be met is F4's consumer-applied attribute set, which is why the two findings are one fork. The predicate-defined-entity-set dimension stays unresolved but it lands in F3, not here: see `examples/UNEXPRESSIBLE.md`'s U5. Nothing here is a design conversation any more; what is left is a decision in kgs. |
+| F7 | **Two of kgs §9.3's rule dimensions fall outside §8.5's permitted subset** — ontology scope ("may read `Person` but not `salary`": attribute-conditioned and exclusionary) and predicate-defined entity-sets (authorization as a function of data). The old answer was "use a classification", which converted a discretionary restriction into an absolute no owner could lift. | **RESOLVED, 2026-10-23, and the resolution is a refusal plus a definitive answer.** The discretionary-restriction form is **refused permanently**: A3 rules out exclusion and §8.5 rules out attribute conditions, and neither refusal is open to a case-by-case exception. And since classifications no longer exist, **"kgs loses the ontology-scope dimension" is the definitive answer rather than one of two** — the branch that made this a choice was the classification workaround. The one remaining way the requirement could be met is F4's consumer-applied attribute set, which is why the two findings are one fork. The predicate-defined-entity-set dimension stays unresolved but it lands in F3, not here: see `examples/UNEXPRESSIBLE.md`'s U5. Nothing here is a design conversation any more; what is left is a decision in kgs. **Updated 2026-10-24:** that decision was taken, in the direction that removes the dimension. kgs's respecified containment (`kgs/docs/epistemic_quad_store_spec.md`) has no entity-set, explicit or predicate-defined, so the second dimension is gone along with F3 and U5's subject is gone with it. **Both halves of F7 are therefore closed, and neither by this module getting more expressive** — one by a permanent refusal here, one by the requirement being withdrawn there. |
 | F8 | **What is the audit unit on the `Predicate` path?** A filtered read over 10M rows makes no per-row decision and produces no denials — absent rows are not refusals. KGS §8.6 requires denied access to be audited. | **Open.** Likely the compiled predicate plus parameters plus epoch, but §7.1's "auditable without being informative" needs a concrete answer for the surface carrying the traffic. **Two notes.** The removal of the mandatory tier makes this slightly *simpler* in one respect — there is no "gate failed before any grant was consulted" event to audit separately — and leaves the hard part untouched, since the hard part was always that a filtered read has no per-row decision. And **caveats would make it worse**: a caveated grant means an absent row might be absent because a caveat narrowed it, which is a refusal with a reason the predicate path has no place to record. That is one more argument for A3's guardrail. |
 | F9 | ~~**Nothing checks whether the actor on a mandatory act may classify.**~~ The registry enforced the witness (a `MandatoryAct` carrying channel, actor, reason and instant, unforgeable in Go) and not the right, because §16.2 was unanswered — so an ordinary principal could construct an act naming themselves, join a conflict screen's clearance group, and the gate opened. The `examples/` corpus did exactly that against the real registry, and the registry accepted it. | **CLOSED BY DELETION, 2026-10-23 (A3).** There are no mandatory acts. **And it is one of the two reasons the tier was removed**, so this entry should be read as having been answered rather than discarded: an absolute administered through an unguarded channel was only as absolute as that channel, which is the correctness half of A3's argument. §16.2, which was this finding's blocking input, is moot and says so explicitly. The corpus scenario that demonstrated it (U6) is recorded in `examples/UNEXPRESSIBLE.md` under "Resolved by removal" rather than deleted. |
 

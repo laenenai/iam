@@ -144,7 +144,7 @@ with no executable demonstration behind it, would be worse than nothing.
 | have roles without a permission per (role, kind) | a role is an *object* with an `assignee` relation | [D3](discretionary/) |
 | share by link | a tuple whose subject is the capability token's bearer identity | [D5](discretionary/) |
 | transfer ownership | a tuple write. It carries everything, because grants are all there is | [D6](discretionary/) |
-| let somebody find a deep object without seeing its siblings | bottom-up navigational visibility — but read [U3](UNEXPRESSIBLE.md) first if your containment is a DAG | [D7](discretionary/) |
+| let somebody find a deep object without seeing its siblings | bottom-up navigational visibility, which works because containment is a tree — one parent per container. If yours is not, it does not work at all, and [U3](UNEXPRESSIBLE.md) says what to build instead | [D7](discretionary/) |
 | keep one principal from seeing a resource | **do not grant it.** Default-deny is the only thing that refuses, and it is liftable by anyone who may share | [D6](discretionary/), [H1](household/) |
 | run a legal conflict screen / ethical wall | the matter is not inside the firm-wide container and nothing names the screened principal on it. **It survives nobody** — for a screen that must survive a future administrator, `escrow` | [D8](discretionary/) |
 | make a rule that no grant, owner or admin can defeat | **you cannot, by policy.** There is no deny mechanism. Encrypt it under a key the deployment does not hold | [UNEXPRESSIBLE.md](UNEXPRESSIBLE.md), [H4](household/) |
@@ -217,9 +217,9 @@ the honest accounting is short:
 | | Scenario | Finding |
 |---|---|---|
 | U1 | "May read `Person` entities but not `salary` facts" cannot be written at all | §17 F7 + F4 — and **strictly harder than it was**: its cheap resolution was "use a classification" |
-| U3 | Containment is a DAG once entity-sets exist, so "only the direct path" names nothing | §17 F3 |
 | U4 | An attribute-scoped restriction cannot be enforced by a row predicate, whatever tier it is written in | §17 F4 — **redirected**: the classification framing is moot, the `WHERE`-hides-rows problem is not |
-| U5 | A predicate-defined entity-set makes authorization a function of data a later write changes | §17 F7 + F3 |
+| U5 | A predicate-defined entity-set makes authorization a function of data a later write changes | §17 F7, whose second dimension is now **closed by withdrawal** — the mechanism is gone from the consumer's spec. The entry stays, because the hazard belongs to any predicate-defined grouping and will be asked for again |
+| ~~U3~~ | ~~Containment is a DAG once entity-sets exist, so "only the direct path" names nothing~~ | **resolved by withdrawal, 2026-10-24** — kgs was respecified onto a containment tree, so §17 F3 closed by its own first branch. Not solved: the requirement went. Its *scenario* is still in `unexpressible/` and UNEXPRESSIBLE.md says why |
 | ~~U2~~ | ~~"Use a classification" turns "don't show her the salary" into an absolute nobody can lift~~ | **resolved by removal** — there is no classification to answer with. It is also *why* the mechanism went |
 | ~~U6~~ | ~~Nothing checks whether the actor on a mandatory act may classify at all~~ | **resolved by removal** — there are no mandatory acts. §17 F9 closed, §16 Q2 moot |
 
@@ -252,8 +252,12 @@ are evaluated by the corpus's own reference decision procedure. When
 `Decide` lands, run both against the same tables and diff them — which is
 design §9.4's differential authorization audit aimed one layer up.
 
-**Demonstrated as broken:** the four scenarios in UNEXPRESSIBLE.md, each by
-a claim that runs.
+**Demonstrated as broken:** the four scenarios in `unexpressible/`, each by
+a claim that runs. UNEXPRESSIBLE.md's main list is three of them: U3's
+requirement was withdrawn on 2026-10-24 and its entry moved, while its
+scenario stays and its claims still pass, because `DirectPath` does still
+refuse the DAG the fixture declares. The mismatch is deliberate and
+UNEXPRESSIBLE.md names the follow-up that ends it.
 
 **Not covered, and not coverable here:** that a screen stays shut. D8
 asserts that the matter has one containment path and that the screened

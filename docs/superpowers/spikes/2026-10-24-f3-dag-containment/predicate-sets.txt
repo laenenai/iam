@@ -1,0 +1,27 @@
+F3 question 4 -- can a predicate-defined entity-set be an authorization container?
+
+Fifty predicate-defined sets, each one equality on one indexed column of the
+entity row -- the cheapest predicate there is. Every number here is therefore a
+FLOOR on the mechanism's cost, not an estimate of it.
+
+=== the membership nobody wrote =============================================
+entities satisfying one predicate                   100,000
+entity_set_member rows for 50 such sets           5,000,000
+fact_ancestry rows those edges imply (C1)        84,625,000
+
+=== applying one refresh, timed and rolled back =============================
+full refresh of 50 predicate-defined sets, membership only   23.3s
+
+=== the restrictive direction, priced on one row ============================
+One UPDATE of entity.country -- an ordinary data write by a principal holding no
+authorization permission -- removes the entity from one predicate-defined set and
+adds it to another. What that removal has to retract:
+
+median-degree entity     facts        5   fact_ancestry rows to retract (C1)       20
+hub entity               facts    1,010   fact_ancestry rows to retract (C1)    4,040
+
+Under C2 the same removal is one row of entity_set_member -- and that is the
+whole of the difference. What C2 does NOT fix is which path the change rides:
+the write is a data write, so a REVOCATION travels design §9.3's permissive
+path, and §9.3's one rule is that the restrictive change propagates on the fast
+path. That is a semantic defect and no closure shape repairs it.
