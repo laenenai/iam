@@ -144,6 +144,8 @@ package iamtest // iamtest
 
 func NoSecretLeaksInAnyRendering(t *testing.T, v any, material []byte)
 
+func RendersOnlyARedactionMarker(t *testing.T, v any)
+
 func RunRegistrySuite(t *testing.T, newRegistry func(t *testing.T) iam.Registry)
 
 package examples // examples

@@ -209,6 +209,13 @@ func TestKeySetRendersNoKeyMaterial(t *testing.T) {
 	}
 
 	iamtest.NoSecretLeaksInAnyRendering(t, ks, raw)
+	// KeySet renders nothing but its type and the marker, so it is held to
+	// the positive half too. The document it holds is a *public* JWKS, so
+	// this is a type gaining the mechanism for an invariant it had already
+	// declared rather than a confidentiality hole being closed — but a
+	// reader of a log line still needs to be able to tell a withheld
+	// document from an empty one.
+	iamtest.RendersOnlyARedactionMarker(t, ks)
 
 	// The other half of the convention: a placeholder that identifies
 	// nothing is a log line nobody can act on. The issuer and the key id
