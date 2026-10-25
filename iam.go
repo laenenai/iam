@@ -634,6 +634,38 @@ func RenderPostgres(r Residual, firstArg int) (Fragment, error) {
 // TenantKey. A policy is created once and evaluated for every principal and
 // every tenant, so a literal for either would pin it to one; the principal
 // comes from PrincipalGUC and the tenant is already `tenancy`'s half.
+//
+// # What the evaluating role needs, and the one thing to look at twice
+//
+// A policy's expression is evaluated with the privileges of the role
+// running the statement, so that role needs USAGE on the `iam` schema and
+// SELECT on exactly five relations — the ones the rendering reads:
+//
+//	GRANT USAGE ON SCHEMA iam TO <app_role>;
+//	GRANT SELECT ON iam.container_closure, iam.grants,
+//	                iam.live_principals, iam.live_group_members,
+//	                iam.principals
+//	    TO <app_role>;
+//
+// Those five and no more. `iam.live_group_members` and
+// `iam.live_principals` are views over `iam.group_members` and
+// `iam.principals`, and a view is read with the privileges of its owner
+// unless it was created with `security_invoker`, so granting the views does
+// not require granting their base tables — except that `iam.principals`
+// *is* read directly, to confirm the deciding principal belongs to this
+// tenant.
+//
+// **That last grant is the one to look at twice.** `iam.principals` carries
+// no row-level-security policy — a stated gap, see RLSTablesExemptFromPolicy
+// — so a role holding SELECT on it can read principal rows across tenants
+// with an ordinary statement of its own. The policy itself leaks nothing:
+// its subquery's result never reaches the caller, and the tenant comparison
+// inside it is what keeps a principal from another tenant from being
+// matched. What the grant exposes is the table, to a role that asks it
+// directly. Three things follow, in order of preference: grant it to the
+// narrowest role that evaluates the policy; do not give that role the
+// ability to run arbitrary statements if that is avoidable; and treat the
+// exemption as something to close rather than to live with.
 func RenderPostgresPolicy(r Residual) (string, error) {
 	return pgauthz.RenderPolicy(r)
 }

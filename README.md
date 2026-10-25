@@ -158,6 +158,11 @@ The failure mode is **zero rows, never an error**. A session with no principal
 context, or a malformed one, matches nothing and raises nothing — so there is
 no existence oracle and no statement broken instead of filtered.
 
+The role that evaluates the policy needs `USAGE` on the `iam` schema and
+`SELECT` on five relations; `RenderPostgresPolicy`'s doc comment lists them
+and flags the one worth looking at twice, because `iam.principals` carries no
+row-level-security policy of its own yet.
+
 ## There is no deny mechanism
 
 This is the thing to know before adopting it, and it is a decision rather than

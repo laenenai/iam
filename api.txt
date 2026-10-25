@@ -314,6 +314,10 @@ const CapDecide Capability = "Decide"
 
 const CapDerivation Capability = "Derivation"
 
+const CapMarkingStore Capability = "MarkingStore"
+
+const CapNestedGroupMember Capability = "NestedGroupMember"
+
 const CapPredicate Capability = "Predicate"
 
 const CapTupleStore Capability = "TupleStore"
@@ -427,6 +431,8 @@ var ErrNoDenyMechanism = errors.New("there is no deny mechanism, by design")
 
 var ErrNoDirectPath = errors.New("containment is a DAG here, so there is no single direct path (design §8.2, finding F3)")
 
+var ErrNotTranslatable = errors.New("this fixture has no form in the authorization layer as built")
+
 var ErrUnexpressible = errors.New("outside the permitted subset (design §8.5)")
 
 type Expectation struct {
@@ -462,6 +468,13 @@ func (Fixture) Marking(label string) (Marking, bool)
 func (Fixture) Principal(name string) (PrincipalSpec, bool)
 
 func (Fixture) Relation(kind, relation string) (Relation, bool)
+
+type Gap struct {
+	What string
+	Why string
+}
+
+func (Gap) String() string
 
 type GroupSpec struct {
 	Name string
@@ -527,6 +540,18 @@ func R(s string) Ref
 
 func Readable(f Fixture, resource Ref) error
 
+type RealWorld struct {
+	// has unexported fields
+}
+
+func (*RealWorld) Decide(ctx context.Context, principal, action string, resource Ref) (Decision, error)
+
+func (*RealWorld) Expressible() bool
+
+func (*RealWorld) Gaps() []Gap
+
+func Realize(ctx context.Context, authorizer iam.Authorizer, env *Env, f Fixture) (*RealWorld, error)
+
 const ReasonDirect ReasonKind = "direct-tuple"
 
 const ReasonInherited ReasonKind = "inherited-tuple"
@@ -570,9 +595,9 @@ type ResourceKind struct {
 	Actions map[string]string
 }
 
-func RunCorpus(t *testing.T, scenarios []Scenario, newRegistry func(t *testing.T) iam.Registry)
+func RunCorpus(t *testing.T, scenarios []Scenario, newAuthority func(t *testing.T) iamtest.Authority)
 
-func RunScenario(t *testing.T, s Scenario, reg iam.Registry)
+func RunScenario(t *testing.T, s Scenario, a iamtest.Authority)
 
 type Scenario struct {
 	ID string
