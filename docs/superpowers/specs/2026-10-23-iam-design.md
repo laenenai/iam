@@ -1207,6 +1207,27 @@ decisions and `Predicate` for filtered reads.
 
 ## 14. Phasing
 
+> **Where this stands, 2026-10-25.** The identity registry and the
+> authorization layer are both built: containers and containment as a tree,
+> the containment closure keyed on the container, grants as membership
+> composed with the registry's own live membership, `Decide`, and a typed
+> residual a consumer renders into a restrictive row-level-security policy.
+> Each has a conformance suite and two adapters.
+>
+> What is *not* built is the rest of §9's protocol, and the distinction is
+> the one §11's seam note makes: there is no projection in the deployment
+> that exists, because the closures are the authority and live in the
+> consumer's own Postgres. The change log and its gapless cursor are in
+> place; nothing is built on them. So kgs's phase-0 dependency on the
+> **full** projection protocol — deny epoch, fail-closed staleness,
+> differential audit — is not met, and §16's question 4 is still the thing
+> that decides whether it has to be.
+>
+> `Predicate`'s filtered-read contract is unbuilt while F4 is open, which is
+> the one item below that was expected to move the public API and is the one
+> that still can — in the direction of *growing* it, not changing what is
+> decided.
+
 **Superseded later on 2026-10-23: the modules go first, then CAS.** The owner's
 decision — *"we will implement everything else first then go back to CAS,
 better to have CAS working with production grade implementations"* — reverses
