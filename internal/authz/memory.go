@@ -50,10 +50,12 @@ type Memory struct {
 	schemas    map[string]domain.Schema
 	containers map[domain.ContainerID]domain.Container
 	grants     map[grantKey]domain.Grant
-	// log is the change log, append-only, indexed by position. Entry i
-	// holds revision i+1, which is what makes the revision gapless
-	// without a counter that can be bumped independently of an append.
-	log []domain.Change
+	// log is the change log, append-only, one slice per tenant. Entry i
+	// of a tenant's slice holds revision i+1, which is what makes the
+	// revision gapless without a counter that can be bumped
+	// independently of an append — and the revision is per tenant for
+	// the reason the port's Revision method gives.
+	log map[domain.TenantID][]domain.Change
 }
 
 // grantKey is a grant's identity: the container, the permission and the
@@ -83,6 +85,7 @@ func NewMemory(reg registry.Registry, cfg Config) (*Memory, error) {
 		schemas:    make(map[string]domain.Schema),
 		containers: make(map[domain.ContainerID]domain.Container),
 		grants:     make(map[grantKey]domain.Grant),
+		log:        make(map[domain.TenantID][]domain.Change),
 	}, nil
 }
 
@@ -260,7 +263,7 @@ func (m *Memory) Grant(ctx context.Context, spec domain.GrantSpec) (domain.Revis
 		// Idempotent, and deliberately not logged: a log entry for a
 		// write that changed nothing makes a projection do work for no
 		// reason and makes the log's length a function of retries.
-		return m.revisionLocked(), nil
+		return m.revisionLocked(spec.TenantID), nil
 	}
 
 	now := domain.Canonical(m.cfg.Clock.Now())
@@ -332,7 +335,7 @@ func (m *Memory) Revoke(ctx context.Context, spec domain.GrantSpec) (domain.Revi
 		// log entry: a projection replaying a revocation of a grant it
 		// never saw would be doing work to reach the state it is already
 		// in.
-		return m.revisionLocked(), nil
+		return m.revisionLocked(spec.TenantID), nil
 	}
 	delete(m.grants, key)
 
@@ -395,6 +398,10 @@ func (m *Memory) Decide(ctx context.Context, req domain.Request) (domain.Decisio
 		return domain.Decision{}, err
 	}
 
+	m.mu.RLock()
+	rev := m.revisionLocked(req.TenantID)
+	m.mu.RUnlock()
+
 	now := m.cfg.Clock.Now()
 
 	// The principal's own liveness, for the direct arm. An unknown
@@ -403,7 +410,7 @@ func (m *Memory) Decide(ctx context.Context, req domain.Request) (domain.Decisio
 	principal, err := m.reg.PrincipalByID(ctx, req.Principal)
 	switch {
 	case errors.Is(err, domain.ErrPrincipalNotFound), errors.Is(err, domain.ErrNotFound):
-		return domain.Deny(), nil
+		return domain.Deny(rev), nil
 	case err != nil:
 		return domain.Decision{}, err
 	}
@@ -415,7 +422,7 @@ func (m *Memory) Decide(ctx context.Context, req domain.Request) (domain.Decisio
 		// arms have to agree about this: deprovisioning that worked on
 		// group grants and not on personal ones would pass a test suite
 		// and leak on exactly the grants somebody wrote deliberately.
-		return domain.Deny(), nil
+		return domain.Deny(rev), nil
 	}
 
 	groups, err := m.reg.LiveGroupsOf(ctx, req.Principal, now)
@@ -432,7 +439,7 @@ func (m *Memory) Decide(ctx context.Context, req domain.Request) (domain.Decisio
 			// An unknown container denies rather than erroring, so that
 			// "no such container" and "you hold nothing on it" are one
 			// answer.
-			return domain.Deny(), nil
+			return domain.Deny(rev), nil
 		}
 		return domain.Decision{}, err
 	}
@@ -442,7 +449,7 @@ func (m *Memory) Decide(ctx context.Context, req domain.Request) (domain.Decisio
 		// name is the reason reported when both could fire.
 		key := grantKey{container: ancestor, permission: req.Permission, subject: domain.PrincipalSubject(req.Principal)}
 		if g, ok := m.grants[key]; ok {
-			return domain.Allow(g, depth), nil
+			return domain.Allow(g, depth, rev), nil
 		}
 		// Then the group arm, in a deterministic order, so two adapters
 		// attribute the same allow to the same grant when a principal is
@@ -452,11 +459,11 @@ func (m *Memory) Decide(ctx context.Context, req domain.Request) (domain.Decisio
 		for _, gid := range sorted {
 			key := grantKey{container: ancestor, permission: req.Permission, subject: domain.GroupSubject(gid)}
 			if g, ok := m.grants[key]; ok {
-				return domain.Allow(g, depth), nil
+				return domain.Allow(g, depth, rev), nil
 			}
 		}
 	}
-	return domain.Deny(), nil
+	return domain.Deny(rev), nil
 }
 
 // Filter implements Authorizer.
@@ -471,7 +478,7 @@ func (m *Memory) Filter(ctx context.Context, req FilterRequest) (domain.Residual
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	rev := m.revisionLocked()
+	rev := m.revisionLocked(req.TenantID)
 	if !m.permissionDeclaredLocked(req.Permission) {
 		// None, not an error: the failure mode a consumer's policy must
 		// have is zero rows. An error here would break the consumer's
@@ -496,8 +503,8 @@ func (m *Memory) Changes(ctx context.Context, tenant domain.TenantID, after doma
 	defer m.mu.RUnlock()
 
 	out := make([]domain.Change, 0, limit)
-	for _, c := range m.log {
-		if c.Revision <= after || c.TenantID != tenant {
+	for _, c := range m.log[tenant] {
+		if c.Revision <= after {
 			continue
 		}
 		out = append(out, c)
@@ -509,17 +516,20 @@ func (m *Memory) Changes(ctx context.Context, tenant domain.TenantID, after doma
 }
 
 // Revision implements Authorizer.
-func (m *Memory) Revision(ctx context.Context) (domain.Revision, error) {
+func (m *Memory) Revision(ctx context.Context, tenant domain.TenantID) (domain.Revision, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, fmt.Errorf("%w: %w", domain.ErrUnavailable, err)
 	}
+	if tenant == "" {
+		return 0, fmt.Errorf("%w: empty tenant id", domain.ErrInvalidRequest)
+	}
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.revisionLocked(), nil
+	return m.revisionLocked(tenant), nil
 }
 
-func (m *Memory) revisionLocked() domain.Revision {
-	return domain.Revision(len(m.log))
+func (m *Memory) revisionLocked(tenant domain.TenantID) domain.Revision {
+	return domain.Revision(len(m.log[tenant]))
 }
 
 // appendLocked appends one entry and returns the revision it was given.
@@ -532,7 +542,7 @@ func (m *Memory) revisionLocked() domain.Revision {
 // because a sequence there would allocate before commit and let a reader
 // see revision 5 while 4 is still in flight.
 func (m *Memory) appendLocked(c domain.Change) domain.Revision {
-	c.Revision = domain.Revision(len(m.log) + 1)
-	m.log = append(m.log, c)
+	c.Revision = domain.Revision(len(m.log[c.TenantID]) + 1)
+	m.log[c.TenantID] = append(m.log[c.TenantID], c)
 	return c.Revision
 }

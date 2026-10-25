@@ -13,7 +13,7 @@ version: "2"
 sql:
   - engine: "postgresql"
     schema: "db/migrations"
-    queries: "db/queries"
+    queries: "db/queries/identity"
     gen:
       go:
         package: "gen"
@@ -130,3 +130,147 @@ sql:
             go_type:
               import: "github.com/laenenai/iam/internal/domain"
               type: "GroupSource"
+
+  # ---------------------------------------------------------------------
+  # The authorization layer's own generated package.
+  # ---------------------------------------------------------------------
+  #
+  # A second entry rather than more queries in the first, because the
+  # generated package belongs beside the adapter that uses it: a `gen`
+  # package under internal/registry/pgregistry holding the statements the
+  # authorization adapter runs would make the layering a lie, and an
+  # import of it from internal/authz would be the first reader's
+  # confusion.
+  #
+  # Both entries read the same `schema:` directory, so every statement in
+  # either is type-checked against the whole of db/migrations. That is why
+  # db/queries has subdirectories now: sqlc resolves `queries:` as one
+  # directory of statements per output package.
+  - engine: "postgresql"
+    schema: "db/migrations"
+    queries: "db/queries/authz"
+    gen:
+      go:
+        package: "gen"
+        out: "internal/authz/pgauthz/gen"
+        sql_package: "pgx/v5"
+        emit_pointers_for_null_types: true
+        overrides:
+          # The two base mappings, repeated because overrides are
+          # per-output rather than shared. iam.ulid is a DOMAIN over text,
+          # so without this sqlc has no Go type for it at all.
+          - db_type: "iam.ulid"
+            go_type: "string"
+          - db_type: "iam.ulid"
+            nullable: true
+            go_type:
+              type: "string"
+              pointer: true
+          - db_type: "timestamptz"
+            go_type: "time.Time"
+          - db_type: "timestamptz"
+            nullable: true
+            go_type:
+              type: "time.Time"
+              pointer: true
+
+          # Typed ids everywhere, for the reason the first entry gives: a
+          # generated layer handing back a bare string undoes the whole
+          # point of the typed ids at exactly the boundary where they
+          # matter.
+          - column: "iam.containers.id"
+            go_type:
+              import: "github.com/laenenai/iam/internal/domain"
+              type: "ContainerID"
+          - column: "iam.containers.tenant_id"
+            go_type:
+              import: "github.com/laenenai/iam/internal/domain"
+              type: "TenantID"
+          - column: "iam.containers.parent_id"
+            go_type:
+              import: "github.com/laenenai/iam/internal/domain"
+              type: "ContainerID"
+              pointer: true
+
+          - column: "iam.container_closure.tenant_id"
+            go_type:
+              import: "github.com/laenenai/iam/internal/domain"
+              type: "TenantID"
+          - column: "iam.container_closure.container_id"
+            go_type:
+              import: "github.com/laenenai/iam/internal/domain"
+              type: "ContainerID"
+          - column: "iam.container_closure.ancestor_id"
+            go_type:
+              import: "github.com/laenenai/iam/internal/domain"
+              type: "ContainerID"
+
+          - column: "iam.grants.tenant_id"
+            go_type:
+              import: "github.com/laenenai/iam/internal/domain"
+              type: "TenantID"
+          - column: "iam.grants.container_id"
+            go_type:
+              import: "github.com/laenenai/iam/internal/domain"
+              type: "ContainerID"
+          - column: "iam.grants.permission"
+            go_type:
+              import: "github.com/laenenai/iam/internal/domain"
+              type: "Permission"
+          - column: "iam.grants.principal_id"
+            go_type:
+              import: "github.com/laenenai/iam/internal/domain"
+              type: "PrincipalID"
+              pointer: true
+          - column: "iam.grants.group_id"
+            go_type:
+              import: "github.com/laenenai/iam/internal/domain"
+              type: "GroupID"
+              pointer: true
+
+          - column: "iam.authz_changelog.tenant_id"
+            go_type:
+              import: "github.com/laenenai/iam/internal/domain"
+              type: "TenantID"
+          - column: "iam.authz_changelog.kind"
+            go_type:
+              import: "github.com/laenenai/iam/internal/domain"
+              type: "ChangeKind"
+          - column: "iam.authz_changelog.container_id"
+            go_type:
+              import: "github.com/laenenai/iam/internal/domain"
+              type: "ContainerID"
+          - column: "iam.authz_changelog.permission"
+            go_type:
+              import: "github.com/laenenai/iam/internal/domain"
+              type: "Permission"
+          - column: "iam.authz_changelog.principal_id"
+            go_type:
+              import: "github.com/laenenai/iam/internal/domain"
+              type: "PrincipalID"
+              pointer: true
+          - column: "iam.authz_changelog.group_id"
+            go_type:
+              import: "github.com/laenenai/iam/internal/domain"
+              type: "GroupID"
+              pointer: true
+
+          # Read when a grant names a subject, to refuse one that names a
+          # principal or group that does not exist or belongs to another
+          # tenant.
+          - column: "iam.principals.id"
+            go_type:
+              import: "github.com/laenenai/iam/internal/domain"
+              type: "PrincipalID"
+          - column: "iam.principals.tenant_id"
+            go_type:
+              import: "github.com/laenenai/iam/internal/domain"
+              type: "TenantID"
+          - column: "iam.groups.id"
+            go_type:
+              import: "github.com/laenenai/iam/internal/domain"
+              type: "GroupID"
+          - column: "iam.groups.tenant_id"
+            go_type:
+              import: "github.com/laenenai/iam/internal/domain"
+              type: "TenantID"

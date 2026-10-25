@@ -209,6 +209,14 @@ type Decision struct {
 	// cannot explain is an answer it cannot audit: Via names the row to
 	// go and look at.
 	Via Grant
+	// Revision is the authorization state this answer was computed
+	// against — the head of the tenant's change log at the instant the
+	// decision was taken. See Revision for why it is here before
+	// anything reads it: a Decision that grew this field later would be a
+	// breaking change at every call site, and a deployment where `iam` is
+	// a separate store cannot tell design §9.3's bounded lag from
+	// §16.5's divergence without it.
+	Revision Revision
 	// Depth is how many containment hops lie between the request's
 	// container and Via.Container — 0 when the grant was written on the
 	// container itself, n when it was inherited from n hops up. It is a
@@ -220,13 +228,21 @@ type Decision struct {
 }
 
 // Deny returns the decision this layer gives when no grant reaches the
-// request. It is a constructor rather than a literal so that every
-// refusal in every adapter is the identical value, and so the zero
+// request, as of rev. It is a constructor rather than a literal so that
+// every refusal in every adapter is the identical value, and so the zero
 // Decision — which also denies — is never the thing a caller inspects.
-func Deny() Decision { return Decision{Allowed: false, Reason: ReasonNoGrant} }
+//
+// It takes the revision because a deny has to carry one too: "denied" and
+// "cannot tell you what state that was computed against" must not be the
+// same result, which is the whole reason a separated deployment can trust
+// a refusal.
+func Deny(rev Revision) Decision {
+	return Decision{Allowed: false, Reason: ReasonNoGrant, Revision: rev}
+}
 
-// Allow returns an allow attributed to via, reached depth hops up.
-func Allow(via Grant, depth int) Decision {
+// Allow returns an allow attributed to via, reached depth hops up, as of
+// rev.
+func Allow(via Grant, depth int, rev Revision) Decision {
 	reason := ReasonDirect
 	switch {
 	case depth > 0:
@@ -236,13 +252,13 @@ func Allow(via Grant, depth int) Decision {
 			reason = ReasonUserset
 		}
 	}
-	return Decision{Allowed: true, Reason: reason, Via: via, Depth: depth}
+	return Decision{Allowed: true, Reason: reason, Via: via, Depth: depth, Revision: rev}
 }
 
 // String renders the decision for a log line or a test failure.
 func (d Decision) String() string {
 	if !d.Allowed {
-		return "deny (" + string(d.Reason) + ")"
+		return fmt.Sprintf("deny (%s) @%d", d.Reason, d.Revision)
 	}
-	return fmt.Sprintf("allow (%s, %d hops) via %s", d.Reason, d.Depth, d.Via)
+	return fmt.Sprintf("allow (%s, %d hops) @%d via %s", d.Reason, d.Depth, d.Revision, d.Via)
 }

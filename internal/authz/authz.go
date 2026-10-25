@@ -143,7 +143,7 @@ import (
 //
 // A session with no principal context must match no rows and raise no
 // error. The rendered predicate uses `nullif(current_setting(…, true),
-// '')` with no cast, exactly as tenancy's tenant predicate does and for
+// ”)` with no cast, exactly as tenancy's tenant predicate does and for
 // exactly its two reasons: every id here is a Crockford base32 ULID and
 // never a uuid, so a cast would raise on every real row; and
 // current_setting returns the empty string rather than NULL once any
@@ -355,10 +355,17 @@ type Authorizer interface {
 	// db/migrations/00003_authorization.sql.
 	Changes(ctx context.Context, tenant domain.TenantID, after domain.Revision, limit int) ([]domain.Change, error)
 
-	// Revision returns the current head of the change log: the
-	// authorization state of this deployment right now. Zero means no
-	// authorization write has ever happened.
-	Revision(ctx context.Context) (domain.Revision, error)
+	// Revision returns the current head of this tenant's change log: the
+	// authorization state of that tenant right now. Zero means no
+	// authorization write has ever happened in it.
+	//
+	// It is per tenant and not per deployment, which was forced rather
+	// than chosen: a deployment-wide counter cannot coexist with the
+	// row-level-security policy on the log, because under a tenant
+	// session context `max(revision)` is that tenant's maximum and two
+	// tenants would be handed the same next value. Per tenant is also
+	// the unit a projection resumes.
+	Revision(ctx context.Context, tenant domain.TenantID) (domain.Revision, error)
 }
 
 // DefaultChangeLimit is the page size Changes uses when a caller asks for

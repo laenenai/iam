@@ -101,19 +101,28 @@
 -- and a cursor stored at 5 then skips 4 forever — the dropped-revocation
 -- hazard design §9.3 describes and §17 records under
 -- `DefaultChangelogHorizonOffset = 0`. Instead every closure-affecting
--- write takes one deployment-wide advisory lock for the remainder of its
--- transaction and assigns `max(revision) + 1` under it. Revision order is
--- then commit order, with no gaps and no horizon offset to tune, which is
--- the first of the two options design §15 leaves open and the one it calls
--- "more work".
+-- write takes a per-tenant advisory lock for the remainder of its
+-- transaction and assigns `max(revision) + 1` within that tenant under it.
+-- Revision order is then commit order, with no gaps and no horizon offset
+-- to tune, which is the first of the two options design §15 leaves open
+-- and the one it calls "more work".
 --
--- What it costs is stated rather than hidden: closure-affecting writes in
--- a deployment serialize against each other. Reads take no lock at all.
--- Grants, containers and group memberships are written rarely and read on
--- every statement, so this is the cheap side of the trade; a deployment
--- that measures contention here makes the lock per tenant, which also
--- makes the revision per tenant, and that is a one-line change deferred
--- until somebody has the measurement.
+-- **The revision is per tenant, and that was forced rather than chosen.**
+-- A deployment-wide counter was the first design and it cannot coexist
+-- with the row-level-security policy on this table: under a tenant session
+-- context, `max(revision)` is that tenant's maximum, so a global sequence
+-- read through the policy would hand two tenants the same next value and
+-- the primary key would reject the second. Per tenant is also the unit a
+-- projection actually resumes — a consumer projects one tenant's
+-- authorized set, not a deployment's — and it makes the lock per tenant,
+-- so one tenant's writes no longer serialize against another's.
+--
+-- What it costs is stated rather than hidden: closure-affecting writes
+-- *within one tenant* serialize against each other, and two tenants whose
+-- names collide in the lock's 32-bit hash serialize with each other as
+-- well, which costs throughput and nothing else. Reads take no lock at
+-- all, and grants and containers are written rarely and read on every
+-- statement, so this is the cheap side of the trade.
 --
 -- The log carries no foreign keys, deliberately. It is a log: it must
 -- still describe a grant that has since been revoked and a container that
@@ -354,8 +363,12 @@ CREATE INDEX grants_tenant_idx ON iam.grants (tenant_id);
 -- bound" from §16.5's "diverged", and the reason it exists now is that
 -- adding it later is a breaking change to every call site.
 CREATE TABLE iam.authz_changelog (
-    revision      bigint PRIMARY KEY,
+    -- (tenant_id, revision) and not revision alone: the revision is per
+    -- tenant, for the reason this file's header gives. tenant_id leads
+    -- because every read of this table is one tenant's changes after a
+    -- cursor, which is then an index-only range scan on the primary key.
     tenant_id     iam.ulid NOT NULL,
+    revision      bigint NOT NULL,
 
     -- What happened. The set is closed to the three writes that can move
     -- an authorization answer in this layer; a fourth would be a schema
@@ -378,12 +391,9 @@ CREATE TABLE iam.authz_changelog (
 
     recorded_at   timestamptz NOT NULL DEFAULT now(),
 
+    PRIMARY KEY (tenant_id, revision),
     CONSTRAINT authz_changelog_revision_positive CHECK (revision > 0)
 );
-
--- The reader's probe: one tenant's changes after a cursor, in order.
-CREATE INDEX authz_changelog_tenant_revision_idx
-    ON iam.authz_changelog (tenant_id, revision);
 
 -- ---------------------------------------------------------------------------
 -- iam.live_principals: the second artifact a decision joins

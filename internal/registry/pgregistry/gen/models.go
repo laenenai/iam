@@ -11,8 +11,8 @@ import (
 )
 
 type IamAuthzChangelog struct {
-	Revision    int64
 	TenantID    string
+	Revision    int64
 	Kind        string
 	ContainerID string
 	Permission  string
