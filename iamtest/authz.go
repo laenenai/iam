@@ -3,6 +3,7 @@ package iamtest
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -758,6 +759,78 @@ func RunAuthorizerSuite(t *testing.T, newAuthority func(t *testing.T) Authority)
 		}
 	})
 
+	// StoredInstantsRoundTripAtMicrosecondPrecision is a convention this
+	// project hit twice independently, on the same day, in two other
+	// modules: Postgres timestamptz holds microseconds, so a time.Time
+	// carrying nanoseconds compares equal to itself in memory and unequal
+	// through the database. In `audit` that would have reported every
+	// persisted entry as tampered; in `meter` it would have made a
+	// conformance suite pass for the wrong reason.
+	//
+	// It is asserted here rather than left to the Postgres adapter because
+	// the in-memory adapter is the one that *can* get it wrong invisibly:
+	// it has no database to truncate for it, so an adapter that skipped
+	// canonicalization would round-trip nanoseconds happily and then
+	// disagree with its Postgres sibling about whether two instants are
+	// the same instant.
+	t.Run("StoredInstantsRoundTripAtMicrosecondPrecision", func(t *testing.T) {
+		a := newAuthority(t)
+		ctx := context.Background()
+		tenant := newTenant()
+		mustRegister(t, a, suiteSchema())
+
+		created := mustContainer(t, a, tenant, kindRoot, "")
+		readBack, err := a.Authorizer.Container(ctx, tenant, created.ID)
+		if err != nil {
+			t.Fatalf("Container: %v", err)
+		}
+		assertCanonicalInstant(t, created.CreatedAt, "the CreatedAt CreateContainer returned")
+		assertCanonicalInstant(t, readBack.CreatedAt, "the CreatedAt Container read back")
+		if !created.CreatedAt.Equal(readBack.CreatedAt) {
+			t.Fatalf("a container's CreatedAt changed on the way through the store: %v then %v.\n"+
+				"Both must be UTC at microsecond precision, or two adapters disagree about whether two instants "+
+				"are the same instant", created.CreatedAt, readBack.CreatedAt)
+		}
+
+		anne := mustPrincipal(t, a, tenant, "anne")
+		mustGrant(t, a, iam.GrantSpec{
+			TenantID: tenant, Container: created.ID, Permission: permRead, Subject: iam.PrincipalSubject(anne),
+		})
+		grants, err := a.Authorizer.GrantsOn(ctx, tenant, created.ID)
+		if err != nil {
+			t.Fatalf("GrantsOn: %v", err)
+		}
+		if len(grants) != 1 {
+			t.Fatalf("GrantsOn returned %d grants, want 1", len(grants))
+		}
+		assertCanonicalInstant(t, grants[0].GrantedAt, "the GrantedAt GrantsOn returned")
+
+		// And the same grant reached through a decision, because Via is a
+		// second path to the same row and a second chance to lose
+		// precision.
+		d := assertDecision(t, a, iam.Request{TenantID: tenant, Principal: anne, Permission: permRead, Container: created.ID},
+			true, iam.ReasonDirect, 0, "the grant just written")
+		assertCanonicalInstant(t, d.Via.GrantedAt, "the GrantedAt Decide attributed the allow to")
+		if !grants[0].GrantedAt.Equal(d.Via.GrantedAt) {
+			t.Fatalf("one grant has two instants depending on how it is read: %v from GrantsOn, %v from Decide",
+				grants[0].GrantedAt, d.Via.GrantedAt)
+		}
+
+		// A logged change carries one too, and it is for people rather
+		// than for ordering — the revision orders the log — but a
+		// nanosecond in it would still disagree across adapters.
+		changes, err := a.Authorizer.Changes(ctx, tenant, 0, 0)
+		if err != nil {
+			t.Fatalf("Changes: %v", err)
+		}
+		if len(changes) == 0 {
+			t.Fatal("the log is empty after a container and a grant")
+		}
+		for i, c := range changes {
+			assertCanonicalInstant(t, c.RecordedAt, fmt.Sprintf("change %d's RecordedAt", i))
+		}
+	})
+
 	// TheResidualIsStructuredAndFailsClosed. The residual is the surface a
 	// consumer's row-level-security policy is built from, so two things
 	// about it are contractual: it is a typed expression rather than text,
@@ -850,6 +923,28 @@ func RunAuthorizerSuite(t *testing.T, newAuthority func(t *testing.T) Authority)
 }
 
 // --- helpers ------------------------------------------------------------
+
+// assertCanonicalInstant requires an instant to be in UTC and truncated to
+// microseconds, which is the form every instant this module stores or
+// compares is in. See iam.Canonical.
+func assertCanonicalInstant(t *testing.T, at time.Time, what string) {
+	t.Helper()
+	if at.IsZero() {
+		t.Errorf("%s is the zero time", what)
+		return
+	}
+	if at.Location() != time.UTC {
+		t.Errorf("%s is in %v rather than UTC: %v", what, at.Location(), at)
+	}
+	if at.Nanosecond()%1000 != 0 {
+		t.Errorf("%s carries sub-microsecond precision (%d ns): %v.\n"+
+			"Postgres timestamptz holds microseconds, so this value compares equal to itself in memory and "+
+			"unequal through the database", what, at.Nanosecond(), at)
+	}
+	if !at.Equal(iam.Canonical(at)) {
+		t.Errorf("%s is not iam.Canonical of itself: %v vs %v", what, at, iam.Canonical(at))
+	}
+}
 
 func mustRegister(t *testing.T, a Authority, s iam.Schema) {
 	t.Helper()
