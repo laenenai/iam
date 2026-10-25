@@ -10,6 +10,42 @@ import (
 	"github.com/laenenai/iam/internal/domain"
 )
 
+type IamAuthzChangelog struct {
+	Revision    int64
+	TenantID    string
+	Kind        string
+	ContainerID string
+	Permission  string
+	PrincipalID *string
+	GroupID     *string
+	RecordedAt  time.Time
+}
+
+type IamContainer struct {
+	ID        string
+	TenantID  string
+	Kind      string
+	ParentID  *string
+	Label     string
+	CreatedAt time.Time
+}
+
+type IamContainerClosure struct {
+	TenantID    string
+	ContainerID string
+	AncestorID  string
+	Depth       int32
+}
+
+type IamGrant struct {
+	TenantID    string
+	ContainerID string
+	Permission  string
+	PrincipalID *string
+	GroupID     *string
+	GrantedAt   time.Time
+}
+
 type IamGroup struct {
 	ID        domain.GroupID
 	TenantID  domain.TenantID
@@ -28,6 +64,10 @@ type IamLiveGroupMember struct {
 	PrincipalID domain.PrincipalID
 	GroupID     domain.GroupID
 	Source      domain.GroupSource
+}
+
+type IamLivePrincipal struct {
+	ID string
 }
 
 type IamPrincipal struct {

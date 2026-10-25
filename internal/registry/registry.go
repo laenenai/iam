@@ -240,6 +240,17 @@ type Registry interface {
 	// group.
 	EnsureGroup(ctx context.Context, tenant domain.TenantID, name string) (domain.Group, error)
 
+	// GroupByID returns the group with this internal id, or
+	// domain.ErrNotFound.
+	//
+	// It is the counterpart of PrincipalByID and it was missing, which
+	// mattered once something held a group id rather than a name: the
+	// authorization layer resolves a grant's group subject through it, to
+	// refuse a grant naming a group that does not exist or belongs to
+	// another tenant. Both of those are reported as not found, because
+	// telling them apart is a cross-tenant existence oracle.
+	GroupByID(ctx context.Context, id domain.GroupID) (domain.Group, error)
+
 	// AddGroupMember records a locally-sourced membership
 	// (domain.GroupSourceLocal), which claim reconciliation never
 	// removes. Adding an existing membership is idempotent. It refuses a

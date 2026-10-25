@@ -569,3 +569,12 @@ func (r *Registry) LiveGroupsOf(ctx context.Context, p domain.PrincipalID, asOf 
 	}
 	return ids, nil
 }
+
+// GroupByID implements registry.Registry.
+func (r *Registry) GroupByID(ctx context.Context, id domain.GroupID) (domain.Group, error) {
+	row, err := r.q.GroupByID(ctx, id)
+	if err != nil {
+		return domain.Group{}, mapErr(err)
+	}
+	return toGroup(row), nil
+}

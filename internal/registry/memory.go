@@ -550,3 +550,13 @@ func (m *Memory) LiveGroupsOf(ctx context.Context, p domain.PrincipalID, asOf ti
 	slices.Sort(out)
 	return out, nil
 }
+
+// GroupByID implements Registry.
+func (m *Memory) GroupByID(ctx context.Context, id domain.GroupID) (domain.Group, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.Group{}, fmt.Errorf("%w: %w", domain.ErrUnavailable, err)
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.groupLocked(id)
+}
