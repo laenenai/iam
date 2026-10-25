@@ -234,11 +234,39 @@ the other had it backwards.
   which destroys exactly the unforgeability the type exists for. A storage
   concern must not be solved by widening a security-relevant type's surface.
 
-**The one genuine exception: SQL composed at runtime.** `iam`'s `Predicate`
-returns a composable fragment for the consumer to embed in its own statement,
-so there is no fixed query to generate. Hand-compose it, state in the package
-doc that it is the exception and why, and keep its text in one place rather than
-assembled across methods.
+**The one genuine exception: SQL composed at runtime.** `iam`'s authorization
+residual is rendered into a boolean expression the consumer embeds in its own
+statement or its own row-level-security policy, over a column that belongs to
+the consumer — so there is no fixed query to generate. Hand-compose it, state
+in the package doc that it is the exception and why, and keep its text in one
+place rather than assembled across methods.
+
+Updated 2026-10-25, when that renderer was built, with two refinements the
+original wording did not anticipate.
+
+- **What crosses the port is a typed expression, not the SQL.** `iam`'s
+  `Filter` returns a residual — a small closed expression tree — and a
+  per-backend renderer turns it into that backend's query language. SQL text
+  across a port gives every consumer a dependency on the string, so a second
+  storage backend becomes a breaking change for all of them rather than a new
+  renderer. The exception above is therefore about the *renderer*, which is one
+  file in one adapter, and not about the port.
+- **A renderer must be allowed to refuse.** CQL can filter only on a partition
+  key and a prefix of the clustering columns, so some residuals are not
+  renderable there at all — a data-modelling constraint on the consumer rather
+  than a translation problem. Every render path returns an error, so a backend
+  refuses honestly instead of emitting something that filters less than it
+  claims.
+
+**And one more limit of sqlc, found the same day:** *it does not infer
+nullability through a `LEFT JOIN LATERAL`.* A statement shaped to always return
+one row — a scalar subquery left-joined to an optional match — generates every
+column of the optional side as non-nullable, so it compiles and then fails at
+run time on the first row where the match is absent. The two ways out are to
+coalesce each column to a sentinel in SQL, which throws away the typed ids at
+exactly the boundary they exist for, or to split the statement in two and put
+them in one repeatable-read transaction, which keeps every column honestly
+typed and costs one round trip. `iam`'s `Decide` takes the second.
 
 Anything else hand-written is a departure that needs a reason in the package
 doc — and "the SQL matters here" is not one, because that is the case sqlc
@@ -261,6 +289,14 @@ serves best.
   security-relevant value, is the thing the rule above forbids. Map the column
   to `[]byte` and convert through the type's validating constructor, which
   rejects a wrong length instead of truncating.
+
+**And two more generator quirks.** sqlc rejects an `INSERT ... SELECT` whose
+select list has unaliased expressions — `*ast.ResTarget has nil name` — so
+alias every column in one, even where the alias says nothing. And one output
+package means one `queries:` directory: a module with two adapters that each
+need their own generated package needs two `sql:` entries and a subdirectory
+per entry, which is why `iam`'s queries live in `db/queries/identity` and
+`db/queries/authz`.
 
 **And one generator quirk**: sqlc v1.30.0 collapses repeated `sqlc.arg()`
 references to a single parameter but does **not** collapse repeated `@name`

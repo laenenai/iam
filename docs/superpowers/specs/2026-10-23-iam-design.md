@@ -687,6 +687,17 @@ is the only honest way to approve such a change.
 > diff, so the delta between two registered schema versions is computed here,
 > over our own tables. That is a real cost of §10 and it is recorded rather
 > than discovered later.
+>
+> **And it is not built, as of 2026-10-25.** `RegisterSchema` validates a
+> declaration and remembers it *in the process*: the schema is not persisted,
+> not versioned, and no delta between two versions is computed. What that
+> costs, precisely: two binaries with different registered schemas disagree
+> about which container *kinds* may be created, and agree about every
+> decision — because the tree a decision reads is enforced by the single
+> parent column in the database rather than by the declaration. So the gap is
+> in change *management*, not in enforcement. A schema registration that could
+> widen access is still the thing §16.3 asks the owner about, and it still has
+> no mechanism.
 
 ### 8.5 The restriction, as a feature
 
@@ -799,13 +810,19 @@ to store*, and leave the rest as a join:
 > in a way it was not when it was a draft assumption.**
 >
 > First, it is a **registered-schema invariant and not a property of this
-> module**. Nothing in §8.4's schema registration currently rejects a
-> containment declaration that gives a resource two parents, and a consumer
-> that writes one gets a closure whose row count is a function of resource
-> cardinality rather than of hierarchy depth, silently. The corpus already has
-> the check — `scenario.Paths` enumerates every path and `scenario.DirectPath`
-> refuses when there is more than one — so the cheap guard is to make schema
-> registration run it, and §15 carries that as the builder's item.
+> module**. ~~Nothing in §8.4's schema registration currently rejects a
+> containment declaration that gives a resource two parents~~ — **closed
+> 2026-10-25**: `domain.Schema.Validate` refuses such a declaration outright
+> with its own sentinel, `ErrMultipleContainmentParents`, naming the schema,
+> the kind, both parents and the two row counts below, and nothing from a
+> refused schema is registered. The check is reimplemented in
+> `internal/domain` rather than reusing the corpus's `Paths`/`DirectPath`,
+> because `examples` imports the facade and the import cannot go the other
+> way; the corpus's version is the fixture-level twin and a test holds the two
+> together. The instance-level half is enforced by `iam.containers.parent_id`
+> being one nullable column that no statement in the module updates — so the
+> tree is a column rather than a convention, and a cycle needs an UPDATE that
+> does not exist.
 >
 > Second, if that invariant is ever relaxed, this closure is the wrong shape
 > and F3 reopens with F1's condition (iii) attached. The partial spike
@@ -1283,34 +1300,138 @@ case.
 
 ## 15. Open decisions left to the builder
 
-- **Closure storage shape**: one table per closure, a single wide table, or
-  materialized views. Decided by the A2 predicate-plan tests.
-- **Enforcing §9.2's single-path invariant at schema registration.** Added
-  2026-10-24 with F3's resolution, because the resolution turns a drafting
-  assumption into a requirement: §8.4 accepts a consumer's containment
-  declaration and nothing in it rejects one that gives a resource two parents.
-  A consumer that writes such a schema gets an ancestry closure whose size is a
-  function of resource cardinality rather than of hierarchy depth, and gets it
-  without an error. The check exists — `examples/scenario`'s `Paths` enumerates
-  every containment path and `DirectPath` refuses when there is more than one —
-  so this is a wiring decision rather than a design one: whether registration
-  refuses a multi-path schema outright, or admits it and refuses to emit a
-  containment key for it. Refusing outright is the safer default and is the
-  recommendation.
-- **Whether the deny epoch is global, per tenant, or per principal.** Global is
-  simplest and invalidates most aggressively; per principal is the finest and
-  the most bookkeeping. The A2 revocation budget decides.
+**Amended 2026-10-25**, when the authorization layer was built. Six of the
+items below are now decided and say so with their reason; the rest are
+untouched. Two decisions were taken that this section did not anticipate at
+all, and they are recorded at the end rather than folded in, because a
+section of "open decisions" should not quietly grow answers to questions it
+never asked.
+
+- ~~**Closure storage shape**: one table per closure, a single wide table, or
+  materialized views. Decided by the A2 predicate-plan tests.~~
+  **DECIDED 2026-10-25: one table per closure, and the containment one is
+  keyed on the container.** `iam.container_closure(tenant_id, container_id,
+  ancestor_id, depth)`, primary key `(container_id, ancestor_id)`, with the
+  reflexive depth-0 row included. The membership closure needed no new table:
+  `iam.live_group_members` over `iam.group_members` already is it.
+  - The keying is the decision, not the table count. F3's spike priced both
+    ends on one 10,000,000-row fixture: keyed on the **resource**,
+    106,495,540 rows and 10.9 GB; keyed on the **container**, 433,063 rows
+    and 37 MB. The closure holds no resource at all, so a consumer's row
+    carries one scalar column naming its container and the resource's own
+    edge stays in the consumer's table.
+  - The reflexive row is what makes a decision one join rather than a union
+    of "a grant here" and "a grant above". It costs one row per container and
+    it means the residual a consumer ANDs into its own policy is one EXISTS
+    instead of two clauses that have to stay in step inside somebody else's
+    policy text.
+  - Not materialized views: a materialized copy of a *denial* needs a refresh
+    path, and §9.3 makes a stale denial a disclosure.
+- ~~**Enforcing §9.2's single-path invariant at schema registration.**~~
+  **DECIDED 2026-10-25: registration refuses a multi-parent declaration
+  outright**, which was this section's own recommendation.
+  `domain.Schema.Validate` returns `ErrMultipleContainmentParents` — its own
+  sentinel, not folded into `ErrInvalidSchema`, because the caller that hits
+  it has to redesign a data model or reopen F3 rather than fix a field — and
+  the message names the schema, the kind and both parents, with the 10.9 GB
+  against 37 MB numbers in it. The refusal is total: nothing from a refused
+  schema is registered, so a container of one of its kinds still fails, since
+  a partially registered schema is worse than a refused one.
+
+  Two things were done differently from the recommendation, both narrowings.
+  The check is reimplemented in `internal/domain` rather than reusing
+  `examples/scenario`'s `Paths`/`DirectPath`, because `examples` imports the
+  facade and the import cannot go the other way; the corpus's version remains
+  the fixture-level twin and the two are held together by a test rather than
+  by shared code. And the invariant is enforced twice over: at declaration by
+  that refusal, and at instance level by `iam.containers.parent_id` being one
+  nullable column with no statement in the module that updates it — so a
+  cycle needs an UPDATE that does not exist, and the tree is a column rather
+  than a convention.
+- ~~**Whether the deny epoch is global, per tenant, or per principal.**~~
+  **MOOT, and replaced by something else: there is no deny epoch, and the
+  revision is per tenant.** The epoch existed to invalidate cached decisions
+  on a revocation; with the closures being the authority and living in the
+  same Postgres the consumer queries, a revocation takes effect in the
+  consumer's next statement and there is nothing to invalidate. What took its
+  place is the change log's **revision** (§9.3's amendment, 2026-10-25), and
+  that one is per tenant — not by preference but because it cannot be
+  otherwise: under a tenant session context `max(revision)` is that tenant's
+  maximum, so a deployment-wide counter read through the row-level-security
+  policy on the log would hand two tenants the same next value. Per tenant is
+  also the unit a projection resumes.
 - Projection update strategy: incremental deltas from the write log versus
   periodic full recompute per affected subtree, and the crossover point.
-- Whether the write log is ordered by a commit-time sequence or by a
+- ~~Whether the write log is ordered by a commit-time sequence or by a
   statement-time stamp plus a horizon offset (§9.3). The first avoids a floor
-  on propagation latency and is more work.
+  on propagation latency and is more work.~~
+  **DECIDED 2026-10-25: commit-time order, and the work is one statement.**
+  Every closure-affecting write takes a per-tenant advisory lock for the
+  remainder of its transaction and assigns `max(revision) + 1` under it, so
+  revision order is commit order with no gaps and no horizon offset to tune.
+  Not a sequence: a sequence allocates before commit, so a reader can observe
+  revision 5 while 4 is still in flight and a cursor stored at 5 skips 4
+  forever — the hazard §17 records as `DefaultChangelogHorizonOffset = 0`.
+  The cost, stated: closure-affecting writes within one tenant serialize
+  against each other, and two tenants colliding in the lock's 32-bit hash
+  serialize with each other; reads take no lock at all.
 - Differential audit sampling rate and selection strategy in production.
-- Whether `Predicate` returns a SQL fragment, a CTE, or a joinable view, and
-  how it is parameterized safely across the three consumers' query builders.
-- Caching of decisions in-process, and its invalidation against the deny epoch.
-- Concrete relation naming conventions, and whether `_effective` relations are
-  generated from a declaration or written out in each registered schema.
+- ~~Whether `Predicate` returns a SQL fragment, a CTE, or a joinable view, and
+  how it is parameterized safely across the three consumers' query builders.~~
+  **SUPERSEDED 2026-10-25: all three answers share one defect, and it is not a
+  SQL defect.** Each of them puts **SQL text across the port**, so every
+  consumer holds a dependency on the string and a second storage backend —
+  and other backends are coming — becomes a breaking change for all of them
+  rather than a new renderer here. So the authority returns a *residual*: a
+  typed expression over the consumer's own column, with a per-backend
+  renderer. This is where OPA's partial evaluation and Oso's data filtering
+  both landed, and for this reason.
+
+  The Postgres renderer is the only one built. **CQL is the known hard case
+  and it is not a translation problem**: Cassandra filters only on a partition
+  key and a prefix of the clustering columns, so "this row's container is one
+  the principal may read" is renderable there only if the containment key *is*
+  part of the table's key — a data-modelling constraint on the consumer. Every
+  render path therefore returns an error, so a backend can refuse honestly
+  rather than emit something that filters less than it claims.
+
+  The question this leaves open is narrower and is still open: what the
+  residual has to grow for F4's attribute set, if that is the branch taken.
+- Caching of decisions in-process. Its invalidation no longer has a deny
+  epoch to check against and would check the revision instead — which is
+  exactly what the revision is for, and still unbuilt.
+- ~~Concrete relation naming conventions, and whether `_effective` relations
+  are generated from a declaration or written out in each registered schema.~~
+  **MOOT 2026-10-25: there are no relations.** §8.2's bare/effective split was
+  adopted because `_effective` is precisely what a closure materializes — and
+  with the containment closure materialized directly and keyed on the
+  container, there is nothing left for a second relation per grant to hold. A
+  permission on a container, inherited down, is the whole language. Lakekeeper's
+  numbers stand as the reason the split mattered in a model that had relations.
+
+**Two decisions this section did not ask for.**
+
+- **The revision exists on every answer before anything reads it.** A
+  `Decision` and a residual each carry the authorization state they were
+  computed against. Nothing builds consistency semantics on it yet: no
+  "decide at revision R", no bound, no arithmetic. It is there because it
+  cannot be added later without changing the shape of every answer, and the
+  deployment that needs it — `iam` separated, with the consumer projecting
+  locally — is the one where it is the only thing distinguishing §9.3's
+  bounded lag from §16.5's divergence. It is this design's zookie.
+- **Tenant isolation is `tenancy`'s `EnableRLS`, asserted from `MigrateUp`
+  rather than written into a migration.** A hand-written *permissive* tenant
+  predicate was a measured cross-tenant disclosure in this project on
+  2026-10-23 — OR-ed away by any later permissive policy — and `EnableRLS`
+  creates it `AS RESTRICTIVE` with a permissive companion to AND against. It
+  is asserted on every `Up` because it is idempotent by design and therefore
+  repairs a drifted predicate, which a one-shot `CREATE POLICY` cannot. The
+  cost: "the schema is what the migrations say" is no longer the whole truth
+  about this database, and `migrate.RLSTables` is the rest of it. The identity
+  tables stay uncovered, named with the reason in
+  `migrate.RLSTablesExemptFromPolicy`, because covering them requires the
+  registry adapter to establish a tenant session context on every statement —
+  a stated gap, not a decision.
 - Go module layout and whether the AuthZEN surface is a subpackage.
 
 ## 16. Outstanding questions for the owner
@@ -1382,7 +1503,25 @@ lost and each has an owner. Items the check raised that *were* resolved are in
 §8.3, §9.3, §10 and §16 above.
 
 **The register was rewritten on 2026-10-23**, after the no-deny decision (A3)
-and the engine decision (§10), and **amended on 2026-10-24** when F3 closed.
+and the engine decision (§10), **amended on 2026-10-24** when F3 closed, and
+**amended again on 2026-10-25** when the authorization layer was built.
+
+**What 2026-10-25 changed in this register, and what it did not.** F3's
+precondition is now *enforced* rather than recorded: schema registration
+refuses a multi-parent declaration with its own sentinel (§8.4, §9.2, §15).
+F2's remaining half — the containment-key half — is half-addressed: a
+realistic containment *tree* fixture exists and the **point** decision's plan
+is asserted to be an index join (closure primary key, then
+`grants_container_permission_idx`), measured at about 0.17 ms of server time
+against the spike's 1.0–1.5 ms. What is still unmeasured is the filtered-read
+side of A2, "adds < 20 ms at p95 over 10,000,000 rows", which needs a
+ten-million-row fixture and is a spike rather than a unit test; the first
+version of that assertion was written against a small fixture, failed, and was
+*correct to fail* — the planner built the authorized container set once and
+hashed it, which is the better plan because that set is bounded by container
+count. The assertion was wrong, not the plan. **F4 and F8 are untouched and
+remain the two open findings**, and F4's branch is still unchosen, which is why
+`Predicate`'s filtered-read contract is unbuilt.
 The arithmetic, because the README quotes a count and the count must be true:
 
 | Disposition | Findings |
