@@ -1,5 +1,8 @@
 -- 00003_authorization.sql is the authorization layer: containers, the
--- containment closure, and grants.
+-- containment closure keyed on the container, grants, and the change log a
+-- separated deployment resumes a projection from. Plus one view,
+-- iam.live_principals, and two composite keys on the identity tables so
+-- that no containment edge or grant can cross a tenant.
 --
 -- ===========================================================================
 -- THE ONE DECISION THIS FILE IS ABOUT: THE CLOSURE IS KEYED ON THE CONTAINER
