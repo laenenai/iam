@@ -106,10 +106,10 @@ var ErrCapabilityUnconfigured = errors.New("capability unconfigured")
 
 // --- The authorization layer ------------------------------------------
 //
-// Seven sentinels, and the shape of the set is itself a statement: six of
-// them are well-formedness refusals asked before any state is consulted,
-// the seventh reports a stored tree that is not one, and none of them is a
-// denial. A denial is not an error here. Decide
+// Eight sentinels, and the shape of the set is itself a statement: seven
+// of them are well-formedness refusals asked before any state is
+// consulted, the eighth reports a stored tree that is not one, and none of
+// them is a denial. A denial is not an error here. Decide
 // returns a Decision whose Allowed is false, because default-deny is the
 // ordinary answer to most questions a consumer asks and an error-shaped
 // deny trains callers to treat refusals as outages.
@@ -167,3 +167,26 @@ var ErrInvalidRequest = errors.New("invalid request")
 // every create — and it exists because the alternative to an error here
 // is an authorization decision that never returns.
 var ErrContainmentCycle = errors.New("containment cycle")
+
+// ErrInvalidResidual indicates a residual, or a node of one, is not well
+// formed: a key that is not a plain column name, a tenant term naming no
+// tenant, an authorization term naming no principal or no permission, or a
+// residual with no expression at all.
+//
+// It is a refusal and never a degraded render. The two things a renderer
+// could otherwise do with a malformed term are to match nothing, which
+// domain.None already says explicitly, or to match everything — and the
+// second is the whole authorization layer failing open on a zero value.
+var ErrInvalidResidual = errors.New("invalid residual")
+
+// ErrUnrenderable indicates a backend's renderer cannot express a residual
+// in that backend's query language. It is not a defect in the residual.
+//
+// The known case is CQL: Cassandra can filter only on a partition key and
+// a prefix of the clustering columns, so "this row's container is one the
+// principal may read" is renderable there only if the containment key is
+// part of the table's key — a data-modelling constraint on the consumer
+// rather than a translation problem. Every render path returns an error so
+// that such a backend can refuse honestly instead of emitting something
+// that filters less than it claims.
+var ErrUnrenderable = errors.New("residual not renderable by this backend")

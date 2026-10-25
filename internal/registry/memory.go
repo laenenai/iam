@@ -521,3 +521,32 @@ func compareStrings(a, b string) int {
 		return 0
 	}
 }
+
+// LiveGroupsOf implements Registry. See that interface for why it omits
+// where GroupsOf errors, and why it does not apply the staleness bound.
+func (m *Memory) LiveGroupsOf(ctx context.Context, p domain.PrincipalID, asOf time.Time) ([]domain.GroupID, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("%w: %w", domain.ErrUnavailable, err)
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	principal, ok := m.principals[p]
+	if !ok {
+		// An unknown principal holds nothing, and says so the same way a
+		// known principal with no memberships does.
+		return []domain.GroupID{}, nil
+	}
+	if !LiveForDecision(principal, asOf) {
+		return []domain.GroupID{}, nil
+	}
+
+	out := make([]domain.GroupID, 0, len(m.members))
+	for gid, members := range m.members {
+		if _, member := members[p]; member {
+			out = append(out, gid)
+		}
+	}
+	slices.Sort(out)
+	return out, nil
+}

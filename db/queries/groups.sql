@@ -112,3 +112,26 @@ SELECT p.* FROM iam.group_members m
 JOIN iam.principals p ON p.id = m.principal_id
 WHERE m.group_id = sqlc.arg(group_id)
 ORDER BY p.id;
+
+-- name: LiveGroupsOfPrincipal :many
+-- The authorization decision's identity question: which groups may this
+-- principal's permissions arrive through, right now.
+--
+-- It reads iam.live_group_members and not iam.group_members, and that is
+-- the whole reason this statement exists separately from
+-- GroupsOfPrincipal above. The view is the artifact a consumer's own
+-- statement joins when it renders this module's residual, so answering
+-- the Go-side question from the same view means there is exactly one
+-- definition of "live membership" in SQL. A second copy of the predicate
+-- here would be a second thing to keep in step, and the way it would fail
+-- is that a deprovisioned principal keeps reading until somebody notices.
+--
+-- Postgres inlines the view, so the probe still lands on
+-- iam.group_members' (principal_id, group_id) primary key.
+--
+-- The deployment's staleness bound is deliberately absent: the view
+-- cannot read configuration, and this module's two decision surfaces have
+-- to agree about the same principal. See registry.LiveGroupsOf.
+SELECT lgm.group_id FROM iam.live_group_members lgm
+WHERE lgm.principal_id = sqlc.arg(principal_id)
+ORDER BY lgm.group_id;

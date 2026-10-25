@@ -277,6 +277,56 @@ type Registry interface {
 	// lost.
 	GroupMembers(ctx context.Context, g domain.GroupID, asOf time.Time) ([]domain.PrincipalID, error)
 
+	// LiveGroupsOf returns the ids of the groups whose membership an
+	// authorization decision for this principal may go through at asOf.
+	//
+	// It exists because the authorization layer needs exactly one
+	// identity fact — "which subjects may this principal act as, right
+	// now" — and the two methods above both answer a slightly different
+	// question. It is on this port rather than reimplemented beside the
+	// grants, and that is the decision this method embodies: a second
+	// copy of membership would be a copy that goes stale, and a
+	// deprovisioned principal would keep reading until somebody synced
+	// it. The Postgres adapter answers this from
+	// iam.live_group_members, the same view the joinable residual
+	// renders into a consumer's own statement, so there is one
+	// definition of live membership in SQL and nothing to drift.
+	//
+	// It differs from GroupsOf in three ways, each of which is the
+	// reason it is not GroupsOf:
+	//
+	//   - **It omits rather than errors.** A deprovisioned principal, an
+	//     expired agent run and a principal that does not exist all
+	//     return an empty slice and no error. A decision must not be an
+	//     existence oracle, and a decision that returned an error where
+	//     it means "no" would train callers to treat a refusal as an
+	//     outage.
+	//   - **It does not apply the deployment's staleness bound.** That
+	//     bound is configuration rather than a row, and the residual a
+	//     consumer renders into its own statement runs where no
+	//     configuration exists — so if this method applied the bound,
+	//     this module's two decision surfaces would disagree with each
+	//     other about the same principal. Design §8.1 puts the bound on
+	//     the way in, which is where GroupsOf enforces it.
+	//   - **It returns ids and not groups.** A decision joins on the id;
+	//     the name is for people.
+	//
+	// Deprovisioning and agent-run expiry *are* applied, because those
+	// two must deny inside the decision itself: §8.1 requires
+	// deprovisioning to deny immediately, and the Postgres view enforces
+	// both in the same statement that records them.
+	//
+	// asOf is the instant the decision is being taken. An adapter whose
+	// store evaluates liveness itself may additionally exclude a
+	// principal that is unusable at that store's own instant, so a caller
+	// passing an asOf in the future can get the stricter of the two
+	// answers. The asymmetry is stated rather than smoothed over because
+	// it can only ever deny more, and the alternative — forbidding the
+	// store from applying its own clock — would mean a view that cannot
+	// be joined inside a consumer's statement, which is the one thing
+	// this method exists to make possible.
+	LiveGroupsOf(ctx context.Context, p domain.PrincipalID, asOf time.Time) ([]domain.GroupID, error)
+
 	// DelegateAgentRun creates an ephemeral agent-run principal with its
 	// own internal id, delegated from parent, expiring spec.TTL after the
 	// registry's clock reads now.
@@ -381,4 +431,25 @@ func NormalizeClaimGroups(groups []string) []string {
 	}
 	slices.Sort(out)
 	return out
+}
+
+// LiveForDecision reports whether a principal may be matched by an
+// authorization decision at asOf: not deprovisioned, and not an agent run
+// past its deadline.
+//
+// It is the Go statement of exactly what the Postgres views
+// iam.live_principals and iam.live_group_members say in SQL, and it is
+// exported so that the authorization layer's in-memory adapter and those
+// views cannot drift apart without a test failing. Two conditions, and
+// deliberately not a third: the deployment's staleness bound is not here,
+// because a view cannot read deployment configuration and this module's
+// two decision surfaces have to agree. See LiveGroupsOf.
+func LiveForDecision(p domain.Principal, asOf time.Time) bool {
+	if !p.DeprovisionedAt.IsZero() {
+		return false
+	}
+	if !p.ExpiresAt.IsZero() && !p.ExpiresAt.After(asOf) {
+		return false
+	}
+	return true
 }
