@@ -2,10 +2,15 @@
 #
 # Regenerate with: go test ./examples/... -run TestLedger -update-ledger
 #
-# live           every assertion runs against the real module today.
-# pending        the expectation table needs the named `iam` capability;
-#                the identity fixture and the structural claims still run,
-#                and the table is held by the corpus's reference oracle.
+# live           every assertion runs against the real module today: the
+#                identity fixture, the grants, and the expectation table,
+#                which is answered by iam.Decide and the corpus's reference
+#                oracle and diffed between them (design §9.4).
+# pending        the scenario waits on the named `iam` capability. Everything
+#                it can run still runs, and most pending tables are now
+#                answered by both evaluators too — what is missing is the
+#                half of the scenario's claim about the design that no code
+#                here can carry yet.
 # unexpressible  the design cannot express the use case; the named §17
 #                finding is where it bites. See UNEXPRESSIBLE.md.
 #
@@ -16,20 +21,20 @@
 
 ID  STATUS         WAITING ON                                   SCENARIO
 A1  live           -                                            A user delegates to an agent run; the run is its own principal; deprovisioning cascades
-A2  pending        Decide+TupleStore                            The researcher: world-layer write, and no read permission on any private fact
-A3  pending        Decide+TupleStore                            Marking-aware model access: a provider not allowlisted for `privileged` never receives it
-D1  pending        Decide+TupleStore                            Google-Drive-style folder share inherits down at one tuple per hop
-D2  pending        Decide+TupleStore                            Several levels of nested containers, still one tuple
-D3  pending        Decide+TupleStore                            A workspace with roles, where adding a resource type adds no roles
-D4  pending        Decide+TupleStore                            Grant to a team as a userset; a membership change takes effect with no re-grant
-D5  pending        Decide+TupleStore                            Link sharing: the subject is a capability token's bearer identity
-D6  pending        Decide+TupleStore                            Ownership transfer carries everything, because grants are all there is to carry
-D7  pending        TupleStore+VisibleBelow                      Bottom-up navigational visibility: the path to it, and only that path
-D8  pending        Decide+TupleStore+VisibleBelow               The legal ethical wall is a grant nobody wrote, and that is all it is now
-H1  pending        Decide+TupleStore                            Pascal's personal invoice stays his because nobody granted it to her
-H2  pending        Decide+TupleStore                            She uploads an invoice from the same supplier and learns nothing about his
-H3  pending        Decide+TupleStore                            The daughter's school document yields an entity both parents can read
-H4  pending        Decide+TupleStore                            The will: Decide returns allow and the content is still unreadable
+A2  live           -                                            The researcher: world-layer write, and no read permission on any private fact
+A3  pending        MarkingStore                                 Marking-aware model access: a provider not allowlisted for `privileged` never receives it
+D1  live           -                                            Google-Drive-style folder share inherits down at one tuple per hop
+D2  live           -                                            Several levels of nested containers, still one tuple
+D3  pending        NestedGroupMember                            A workspace with roles, where adding a resource type adds no roles
+D4  live           -                                            Grant to a team as a userset; a membership change takes effect with no re-grant
+D5  live           -                                            Link sharing: the subject is a capability token's bearer identity
+D6  live           -                                            Ownership transfer carries everything, because grants are all there is to carry
+D7  pending        VisibleBelow                                 Bottom-up navigational visibility: the path to it, and only that path
+D8  pending        VisibleBelow                                 The legal ethical wall is a grant nobody wrote, and that is all it is now
+H1  live           -                                            Pascal's personal invoice stays his because nobody granted it to her
+H2  live           -                                            She uploads an invoice from the same supplier and learns nothing about his
+H3  live           -                                            The daughter's school document yields an entity both parents can read
+H4  pending        MarkingStore                                 The will: Decide returns allow and the content is still unreadable
 U1  unexpressible  F7 (ontology scope) + F4                     `May read Person entities but not salary facts` cannot be written at all
 U3  unexpressible  F3 (DAG containment)                         Containment is a DAG once entity-sets are involved, so `only the direct path` names nothing
 U4  unexpressible  F4 (attribute granularity vs row predicate)  An attribute-scoped restriction cannot be enforced by a row predicate, whatever tier it is written in

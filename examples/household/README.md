@@ -154,10 +154,27 @@ dead-man's switch. None of that is in this module.
 
 ## Status
 
-All four are **pending** on `Decide` and the tuple store. The
-entity-existence claims, the marking resolution, the crypto-unreadability
-and the model-provider refusal all run today against fixture data; the live
-claims run against the real registry.
+**H1, H2 and H3 are live.** Each fixture's identity layer is materialized
+against a real registry, its episodes and facts become real containers, its
+tuples become real grants, and every row of its expectation table is
+answered by `iam.Decide` and by the corpus's reference procedure and the
+two are diffed — same verdict, same reason, same grant responsible. The
+sentence the project exists for is now a passing differential rather than a
+pinned table: she reads her own ACME invoice, he reads his, neither reads
+the other's, and one supplier entity exists for both of them through two
+disjoint sets of assertions.
+
+**H4 is pending on `MarkingStore`**, and its table is not what waits — the
+table runs the full differential, including the row that matters most,
+where `Decide` returns allow for the will. What waits is the other half of
+the scenario. This module stores no marking and no enforcement class at
+all, so `crypto-unreadable` is answered by the corpus over fixture data,
+and a consumer cannot yet ask `iam` *why* content is unreadable. H4's whole
+point is that an allow and a readable byte are different things; half of
+that distinction is live and half of it is still the corpus's own.
+
+The entity-existence claims and the marking resolution run against fixture
+data in all four; the live claims run against the real registry.
 
 **H3 should be read next to [U3](../UNEXPRESSIBLE.md).** The fixture here
 keeps containment a tree: a fact's only container is its episode. KGS §9.3

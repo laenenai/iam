@@ -522,12 +522,18 @@ One item this file asks for rather than applies:
 And two this file asks for because of U3's withdrawal:
 
 7. **The single-path assumption should be enforced where it is made, not
-   assumed where it is relied on.** *Asked, and §15 now carries it.* With F3
-   closed on the strength of "every specified consumer's containment is a
-   tree", nothing in §8.4's schema registration rejects a consumer that
-   declares otherwise — it would get an ancestry closure sized by resource
-   cardinality and no error. The corpus already owns the check
-   (`scenario.Paths`, `scenario.DirectPath`), so this is wiring.
+   assumed where it is relied on.** *Asked, and **landed**.* The ask was
+   that §8.4's schema registration reject a consumer declaring multi-path
+   containment rather than silently handing it an ancestry closure sized by
+   resource cardinality. It now does: a schema giving a container kind two
+   or more containment parents is refused with
+   `iam.ErrMultipleContainmentParents`, and the refusal carries F3's own
+   measurement — 106,495,540 rows and 10.9 GB keyed on the resource against
+   433,063 rows and 37 MB keyed on the container. The corpus's own check
+   (`scenario.Paths`, `scenario.DirectPath`) is what
+   `scenario.Realize` applies before it writes a single container, so a
+   multi-path fixture is refused on the corpus's side too — which is why
+   U3's scenario cannot reach the real module and says so when it runs.
 
 8. **`scenario.Visible` should stop being built on `DirectPath`.** *Asked,
    not applied.* The oracle computes a principal's navigable set by taking
@@ -539,3 +545,38 @@ And two this file asks for because of U3's withdrawal:
    again, and it is implementation work with a design question in it rather
    than a documentation change, so it is named here instead of being done
    quietly.
+
+And two this file did not expect, found by running the corpus against the
+real module rather than against its own oracle. Neither is a requirement
+the design cannot express, so neither is a scenario here; both are
+`iam.Authorizer` being narrower than §8.2 as the corpus writes it, and
+they are recorded here because this is where the module's gaps are kept.
+
+9. **`iam.ContainerKind` cannot declare a kind nested inside itself.**
+   *Found 2026-10-25, not fixed.* A kind declares at most one parent kind,
+   is refused if it names itself as its parent, and at write time is
+   refused both as a root whose kind declares a parent and as a child whose
+   kind declares none. Together those mean a `folder` inside a `folder`
+   with a `folder` at the root has no declaration at all — and that is an
+   ordinary Drive hierarchy, not exotica: D2 and D7 are both this shape,
+   and so is any consumer with user-created nesting. The corpus works
+   round it by synthesizing a container kind per containment depth
+   (`scenario.Realize`), which costs nothing a decision can see and is
+   plainly a workaround. A consumer cannot do the same without knowing
+   every object's depth in advance.
+
+10. **`iam` inherits every permission down the whole container tree, where
+    §8.2's form 3 is declared per relation.** *Found 2026-10-25, not
+    fixed.* There is one containment closure and no per-permission
+    inheritance, so a grant on a container reaches every descendant for
+    every permission. The corpus's Drive schema says something narrower:
+    `viewer` and `editor` inherit from the parent and `owner` does not, so
+    a folder's owner is declared not to own the documents inside it. No
+    expectation row in the corpus distinguishes the two, because no row
+    asks a non-inheriting permission about a nested object — which is
+    luck rather than design. `scenario.Realize` refuses to report an allow
+    that `iam`'s closure carried further than the fixture's schema says
+    the relation travels, so the row that first distinguishes them fails
+    loudly instead of quietly agreeing. A divergence between the model a
+    consumer reads in a schema and the model the module evaluates is the
+    most expensive kind of authorization bug there is.

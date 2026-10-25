@@ -242,11 +242,21 @@ func TestUnexpressibleScenarioNeedsADemonstration(t *testing.T) {
 	}
 }
 
-// TestLiveScenarioCannotCarryATable keeps the status honest in the other
-// direction. "Live" is the corpus's claim that every assertion in a
-// scenario runs against the real module today, and an expectation table
-// does not.
-func TestLiveScenarioCannotCarryATable(t *testing.T) {
+// TestLiveScenarioKeepsItsTable pins the rule that replaced one this file
+// used to assert the opposite of.
+//
+// The old rule refused a live scenario that carried an expectation table,
+// on the grounds that a table needed a decision API that did not exist.
+// The API exists, and the rule was in the way of the thing the table was
+// written for: harness.go has always said the table is pinned "so that
+// when the real Decide arrives the two can be run against the same rows
+// and diffed", and design §9.4's differential audit is that diff. A rule
+// that forced the table out of a scenario at exactly the moment the diff
+// became possible would have deleted the audit to preserve a definition.
+//
+// What a live scenario still may not do is pend on something, and the
+// second half of this test keeps that.
+func TestLiveScenarioKeepsItsTable(t *testing.T) {
 	t.Parallel()
 
 	s := scenario.Scenario{
@@ -265,8 +275,16 @@ func TestLiveScenarioCannotCarryATable(t *testing.T) {
 			Want: scenario.Deny, Reason: scenario.ReasonNoGrant,
 		}},
 	}
-	if err := s.Validate(); err == nil {
-		t.Fatal("a scenario with an expectation table validated as live")
+	if err := s.Validate(); err != nil {
+		t.Fatalf("a live scenario must be allowed to keep its expectation table — that table is what the "+
+			"real module and the reference oracle are diffed against: %v", err)
+	}
+
+	alsoPending := s
+	alsoPending.PendingOn = []scenario.Capability{scenario.CapVisibleBelow}
+	if err := alsoPending.Validate(); err == nil {
+		t.Fatal("a scenario validated as live while naming a capability it waits for. `live` is the claim " +
+			"that nothing in the scenario depends on an API that does not exist, so the two cannot both hold")
 	}
 }
 

@@ -16,6 +16,13 @@ type Capability string
 const (
 	// CapDecide is design §6's single-decision surface,
 	// `iam.Decide(principal, action, resource, at)`.
+	//
+	// **It has arrived**, as `iam.Authorizer.Decide(ctx, iam.Request)` —
+	// a point decision over a container, its ancestors and a principal's
+	// live group membership. Nothing in the corpus pends on it any more,
+	// and the constant stays because the tripwire reports what has
+	// arrived rather than only what is waited on, and because a scenario
+	// added tomorrow should not have to re-invent the name.
 	CapDecide Capability = "Decide"
 	// CapPredicate is design §6's second and more important surface: a
 	// composable SQL fragment plus its bound parameters, embedded in the
@@ -24,6 +31,19 @@ const (
 	CapPredicate Capability = "Predicate"
 	// CapTupleStore is the relation-tuple store of design §8.2 and the
 	// registered-schema registry of §8.4.
+	//
+	// Nothing pends on it any more either, and the reason is worth more
+	// than the constant. What arrived is not a tuple store: it is grants
+	// on containers, a containment tree, and a schema that declares
+	// container kinds and permission names. Every pending scenario that
+	// waited on "the tuple store" actually wanted somewhere to write its
+	// fixture's grants, and that exists — examples/scenario/realapi.go
+	// translates a tuple into a grant with no loss for thirteen of the
+	// fourteen fixtures. Arbitrary relation tuples remain deliberately
+	// unbuilt (see internal/authz's package doc), so the constant names
+	// something real that does not exist, and no scenario should pend on
+	// it unless it genuinely needs a relation that is not containment or
+	// membership.
 	CapTupleStore Capability = "TupleStore"
 	// CapDerivation is the declared-derivation surface, through which a
 	// derived object acquires the union of its inputs' markings. It still
@@ -56,11 +76,56 @@ const (
 	// remember those two by hand.
 	CapAttributePredicate Capability = "AttributePredicate"
 
+	// CapNestedGroupMember is a group one of whose members is itself a
+	// group — design §8.2's form 2 applied to its own output, and the one
+	// thing D3 needs and cannot have. `iam` rules it out twice over and on
+	// purpose: a group's members are principals, never other groups, and
+	// there are no roles as first-class objects with relations of their
+	// own for a userset to be resolved through instead. See
+	// internal/authz's package doc, which states both absences as
+	// decisions.
+	//
+	// It is worth being exact about what D3 loses, because it is one row
+	// and not the scenario: `role:ws-reader#assignee@team:eng#member`, a
+	// whole team holding a role. A principal assigned the role by name
+	// works; the team does not. Roles-as-objects is otherwise intact, and
+	// the scenario's point — that adding a resource kind adds no roles —
+	// is carried by the rows that do run.
+	//
+	// The needles below are the shapes such a capability would have to
+	// arrive in on this module's surface, and they are a guess about a
+	// future method name rather than a certainty. That is the honest
+	// weakness of a string tripwire, and it is why pending.txt exists
+	// beside it: a name nobody predicted lands the change as a reviewed
+	// ledger diff instead.
+	CapNestedGroupMember Capability = "NestedGroupMember"
+
+	// CapMarkingStore is design §8.3's markings and their enforcement
+	// class, stored in this module. H4 and A3 wait on it.
+	//
+	// `Decide` never reading a marking is the design and is not the gap:
+	// the cryptographic tier is deliberately not part of the decision.
+	// The gap is that this layer stores no marking *at all*, so a
+	// consumer cannot ask this module why content is unreadable, and the
+	// claims that carry H4's and A3's whole point —
+	// ClaimCryptoUnreadable, ClaimProviderRefused, ClaimMarkingSet — are
+	// answered by the corpus's own marking resolution over fixture data.
+	// Those two scenarios' expectation tables are fully live against
+	// `iam.Decide`; what is not live is the half that matters most in
+	// them, which is why they are honestly still pending.
+	//
+	// The needles are the design's own vocabulary rather than a guess:
+	// §8.3 calls them markings and calls the field an enforcement class,
+	// and the corpus has used both names since it was written.
+	CapMarkingStore Capability = "MarkingStore"
+
 	// There was a CapClassificationStore here: the tier-2 store of labels
 	// on resources and clearances on clearance groups. It went with the
 	// deny mechanism. The scenarios that waited on it now wait on
-	// `Decide` and the tuple store, because what they assert has become an
-	// ordinary question about grants.
+	// CapMarkingStore for the half of it that was never a deny — a label
+	// saying what content *is* — and on nothing at all for the half that
+	// was, because what they assert about access has become an ordinary
+	// question about grants.
 )
 
 // Available reports which capabilities this build of `iam` actually has.
@@ -87,6 +152,8 @@ var tripwireSymbols = map[Capability][]string{
 	CapDerivation:         {"type Derivation", "func DeclareDerivation"},
 	CapVisibleBelow:       {"VisibleBelow"},
 	CapAttributePredicate: {"type AttributePredicate", "PermittedAttributes"},
+	CapNestedGroupMember:  {"AddGroupToGroup", "AddNestedGroup", "NestedGroups", "GroupInGroup"},
+	CapMarkingStore:       {"type Marking", "MarkingsOf", "EnforcementClass"},
 }
 
 // facadeHeader is the line api.txt uses to start the facade's own
@@ -254,10 +321,15 @@ func Ledger(scenarios []Scenario) string {
 	b.WriteString("#\n")
 	b.WriteString("# Regenerate with: go test ./examples/... -run TestLedger -update-ledger\n")
 	b.WriteString("#\n")
-	b.WriteString("# live           every assertion runs against the real module today.\n")
-	b.WriteString("# pending        the expectation table needs the named `iam` capability;\n")
-	b.WriteString("#                the identity fixture and the structural claims still run,\n")
-	b.WriteString("#                and the table is held by the corpus's reference oracle.\n")
+	b.WriteString("# live           every assertion runs against the real module today: the\n")
+	b.WriteString("#                identity fixture, the grants, and the expectation table,\n")
+	b.WriteString("#                which is answered by iam.Decide and the corpus's reference\n")
+	b.WriteString("#                oracle and diffed between them (design §9.4).\n")
+	b.WriteString("# pending        the scenario waits on the named `iam` capability. Everything\n")
+	b.WriteString("#                it can run still runs, and most pending tables are now\n")
+	b.WriteString("#                answered by both evaluators too — what is missing is the\n")
+	b.WriteString("#                half of the scenario's claim about the design that no code\n")
+	b.WriteString("#                here can carry yet.\n")
 	b.WriteString("# unexpressible  the design cannot express the use case; the named §17\n")
 	b.WriteString("#                finding is where it bites. See UNEXPRESSIBLE.md.\n")
 	b.WriteString("#\n")

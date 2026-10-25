@@ -154,7 +154,31 @@ that rather than leaving a reader to infer it.
 
 ## Status
 
-All eight are **pending** on the decision API: their expectation tables are
-evaluated by the corpus's reference procedure, which pins what `Decide`
-must answer without being evidence that it does. Their fixtures' identity
-layers and all their structural claims run live.
+**Six of the eight are live.** D1, D2, D4, D5 and D6 run end to end
+against the real module: the fixture's principals and groups are
+materialized against a real registry, its containment and grants against a
+real authorizer, and every row of its expectation table is answered twice
+— once by `iam.Decide` and once by the corpus's reference procedure — and
+the two answers are diffed. Same verdict, same reason, same grant
+responsible. That diff is design §9.4's differential authorization audit
+aimed one layer up, and it is now the main thing this directory does.
+
+**D3 is pending on `NestedGroupMember`**, and it is one row of six.
+`role:ws-reader#assignee@team:eng#member` is a set one of whose members is
+itself a set, and `iam` rules that out twice over on purpose: a group's
+members are principals and never other groups, and there are no roles as
+first-class objects with relations of their own for a userset to resolve
+through instead. A principal assigned the role by name works; a whole team
+holding it does not. Because one tuple has no form, D3's table falls back
+to the oracle alone rather than running a differential with a fixture the
+module never received in full — the harness decides that from what the
+translation could not write, not from the status.
+
+**D7 and D8 are pending on `VisibleBelow`**, and their tables are not
+what waits. Both tables run the full differential today. What neither of
+them can carry is the `visible-set` claim: D7 *is* bottom-up navigational
+visibility, and D8's strongest remaining assertion is that the screened
+associate cannot navigate to a matter she is screened off. Nothing in
+`iam` answers "which containers may this principal see the existence of",
+so both sets are computed by the corpus over fixture data. That is the
+honest state and it is why the status is not `live`.

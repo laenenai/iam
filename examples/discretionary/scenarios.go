@@ -127,9 +127,8 @@ func folderShare() scenario.Scenario {
 			tuple-to-userset inheritance. The number that matters is in the claim
 			rather than the prose: one tuple reaches five objects, and anti-goal A2's
 			closure budget exists to catch the implementation that writes five.`,
-		Governs:   []string{"§8.2 form 3", "§9.2", "A2"},
-		Status:    scenario.StatusPending,
-		PendingOn: []scenario.Capability{scenario.CapDecide, scenario.CapTupleStore},
+		Governs: []string{"§8.2 form 3", "§9.2", "A2"},
+		Status:  scenario.StatusLive,
 		Fixture: scenario.Fixture{
 			Tenant: "acme",
 			Kinds:  driveKinds(),
@@ -210,9 +209,8 @@ func nestedContainers() scenario.Scenario {
 			depth-6, ten-million-row budget. This scenario pins the semantics the
 			projection must preserve: the answer at depth four is the same as the
 			answer at depth one, and it came from the same single tuple.`,
-		Governs:   []string{"§8.2 form 3", "§8.2 bare/effective", "§9.2"},
-		Status:    scenario.StatusPending,
-		PendingOn: []scenario.Capability{scenario.CapDecide, scenario.CapTupleStore},
+		Governs: []string{"§8.2 form 3", "§8.2 bare/effective", "§9.2"},
+		Status:  scenario.StatusLive,
 		Fixture: scenario.Fixture{
 			Tenant: "acme",
 			Kinds:  driveKinds(),
@@ -291,7 +289,7 @@ func workspaceRoles() scenario.Scenario {
 			change.`,
 		Governs:   []string{"§8.2 roles as objects", "§8.2 form 2", "§2 goal 5"},
 		Status:    scenario.StatusPending,
-		PendingOn: []scenario.Capability{scenario.CapDecide, scenario.CapTupleStore},
+		PendingOn: []scenario.Capability{scenario.CapNestedGroupMember},
 		Fixture: scenario.Fixture{
 			Tenant: "acme",
 			Kinds:  driveKinds(),
@@ -395,9 +393,8 @@ func grantToTeam() scenario.Scenario {
 			reason it can is that membership is the only set this design expands
 			(§9.2's first closure). The membership half of this scenario runs live
 			against the real registry today.`,
-		Governs:   []string{"§8.2 form 2", "§8.1", "§9.2", "A2"},
-		Status:    scenario.StatusPending,
-		PendingOn: []scenario.Capability{scenario.CapDecide, scenario.CapTupleStore},
+		Governs: []string{"§8.2 form 2", "§8.1", "§9.2", "A2"},
+		Status:  scenario.StatusLive,
 		Fixture: scenario.Fixture{
 			Tenant: "acme",
 			Kinds:  driveKinds(),
@@ -468,9 +465,8 @@ func linkSharing() scenario.Scenario {
 			there is no expiry, no attenuation and no revocation chain anywhere in
 			this scenario: the bearer identity is a principal like any other, so
 			link sharing costs one tuple and no mechanism.`,
-		Governs:   []string{"§8.2 link sharing", "§3 not a token library"},
-		Status:    scenario.StatusPending,
-		PendingOn: []scenario.Capability{scenario.CapDecide, scenario.CapTupleStore},
+		Governs: []string{"§8.2 link sharing", "§3 not a token library"},
+		Status:  scenario.StatusLive,
 		Fixture: scenario.Fixture{
 			Tenant: "acme",
 			Kinds:  driveKinds(),
@@ -552,9 +548,8 @@ func ownershipTransfer() scenario.Scenario {
 			do. And a record that must stay unreadable whatever a future owner
 			decides is not a policy question at all — that is H4, and the
 			mechanism is ` + "`escrow`" + `.`,
-		Governs:   []string{"§8.2 form 1", "§7.1", "no-deny anti-goal"},
-		Status:    scenario.StatusPending,
-		PendingOn: []scenario.Capability{scenario.CapDecide, scenario.CapTupleStore},
+		Governs: []string{"§8.2 form 1", "§7.1", "no-deny anti-goal"},
+		Status:  scenario.StatusLive,
 		Fixture: scenario.Fixture{
 			Tenant: "household",
 			Kinds:  driveKinds(),
@@ -652,7 +647,7 @@ func navigationalVisibility() scenario.Scenario {
 			can assert: reachable, and reachable by exactly one path.`,
 		Governs:   []string{"§8.2 bottom-up visibility", "KGS §7.3", "KGS §8.5 #1"},
 		Status:    scenario.StatusPending,
-		PendingOn: []scenario.Capability{scenario.CapVisibleBelow, scenario.CapTupleStore},
+		PendingOn: []scenario.Capability{scenario.CapVisibleBelow},
 		Fixture: scenario.Fixture{
 			Tenant: "household",
 			Kinds:  driveKinds(),
@@ -747,11 +742,9 @@ func ethicalWall() scenario.Scenario {
 			through the same mechanism turned every household preference into an
 			absolute no owner could lift. One honest weak mechanism and one honest
 			absolute beat one mechanism that read as absolute and was not.`,
-		Governs: []string{"CAS §9.3", "§1", "§7.1", "no-deny anti-goal"},
-		Status:  scenario.StatusPending,
-		PendingOn: []scenario.Capability{
-			scenario.CapDecide, scenario.CapTupleStore, scenario.CapVisibleBelow,
-		},
+		Governs:   []string{"CAS §9.3", "§1", "§7.1", "no-deny anti-goal"},
+		Status:    scenario.StatusPending,
+		PendingOn: []scenario.Capability{scenario.CapVisibleBelow},
 		Fixture: scenario.Fixture{
 			Tenant: "lawfirm",
 			Kinds:  driveKinds(),

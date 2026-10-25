@@ -46,11 +46,16 @@ type Decision struct {
 // It is an oracle for the corpus and emphatically not an engine. It
 // implements exactly design §8.2's four composition forms, refuses
 // anything else with ErrUnexpressible, and holds no projection, no
-// closure, no staleness bound and no deny epoch. Its purpose is to make
-// the corpus's expectation tables executable *before* `Decide` exists, so
-// that when `Decide` does exist the two can be run against the same tables
-// and diffed — which is design §9.4's differential authorization audit
-// aimed one layer up.
+// closure, no staleness bound and no deny epoch.
+//
+// Its purpose was to make the corpus's expectation tables executable
+// before `iam.Decide` existed. `Decide` exists, and the purpose did not
+// expire with the wait: realapi.go answers the same tables from the real
+// module and harness.go diffs the two, which is design §9.4's differential
+// authorization audit aimed one layer up. This function is one side of
+// that diff, and the side that is the *restriction* rather than an
+// implementation of it — which is why it is still worth keeping exactly as
+// small as it is.
 //
 // Note what is *not* in this function, and read it as the specification it
 // is: no label is consulted, no exclusion is subtracted, and no epoch is

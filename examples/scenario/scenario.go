@@ -30,33 +30,43 @@
 //
 // # Why data and not tests
 //
-// The same corpus has to run three times against three different things:
-// the in-memory registry that exists today, the Postgres registry, and the
-// decision API (`Decide`, `Predicate`) that does not exist yet. A test
-// function can only ever run against what it was written against. A
-// fixture plus a table can be replayed against any evaluator, and the
-// difference between two evaluators' answers to the same table is exactly
-// design §9.4's differential authorization audit.
+// The same corpus has to run against several different things: the
+// in-memory adapters, the Postgres adapters, and a consumer's own
+// implementation of the port. A test function can only ever run against
+// what it was written against. A fixture plus a table can be replayed
+// against any evaluator, and the difference between two evaluators'
+// answers to the same table is exactly design §9.4's differential
+// authorization audit.
 //
-// # What runs today, and what is pending on what
+// That is no longer a plan. The identity half of every fixture is
+// materialized against a real registry — JIT provisioning, group
+// membership, agent-run delegation, deprovisioning — and the grant half
+// against a real authorizer, by realapi.go: one container per object, one
+// grant per tuple, a userset resolved to a real group. Every reachable
+// expectation row is then answered twice, by `iam.Decide` and by the
+// reference decision procedure in oracle.go, and harness.go diffs the two
+// on the verdict, the reason and which grant was responsible.
 //
-// The identity half of every fixture is *materialized against a real
-// registry* — JIT provisioning, group membership, agent-run delegation,
-// deprovisioning — so those assertions are live.
+// The oracle is still here and still matters, because the diff needs two
+// sides. It implements design §8.2's four permitted composition forms and
+// nothing else: it refuses, with ErrUnexpressible, anything outside
+// §8.5's subset. It is a test oracle and deliberately not an engine — its
+// value is that it is the restriction made executable, so a scenario the
+// design cannot express fails here rather than being argued about, and a
+// row the module answers differently from the restriction is a finding
+// with two named sides rather than a mystery.
 //
-// The relation-tuple store does not exist, so expectation tables are
-// evaluated by the reference decision procedure in oracle.go. That oracle
-// implements design §8.2's four permitted composition forms and nothing
-// else: it refuses, with ErrUnexpressible, anything outside §8.5's subset.
-// It is a
-// test oracle and deliberately not an engine — its value is that it is the
-// restriction made executable, so a scenario the design cannot express
-// fails here rather than being argued about.
+// # What is pending, and on what
 //
-// Every scenario whose table needs the real API therefore carries
-// StatusPending and the capabilities it waits on. pending.go explains the
-// two mechanisms that stop a pending scenario from staying pending
-// silently.
+// A scenario that still waits on something `iam` does not have carries
+// StatusPending and names it. That is now usually about a *claim* rather
+// than a table: there is no bottom-up navigational visibility, so D7's and
+// D8's visible sets are the corpus's own, and no marking is stored
+// anywhere in the module, so H4's crypto enforcement and A3's provider
+// gate are too. Whether a table can be replayed against the real module is
+// a separate and mechanical question, answered by RealWorld.Gaps rather
+// than by a status. pending.go explains the two mechanisms that stop a
+// pending scenario from staying pending silently.
 package scenario
 
 import (
@@ -571,15 +581,29 @@ type Status string
 const (
 	// StatusLive means every assertion in the scenario runs against the
 	// real module: the identity fixture is materialized against a real
-	// registry and the structural claims are evaluated. Nothing in a live
-	// scenario depends on an API that does not exist.
+	// registry, the fixture's grants against a real authorizer, the
+	// expectation table is answered by `iam.Decide` and diffed against the
+	// reference oracle, and the structural claims are evaluated. Nothing in
+	// a live scenario depends on an API that does not exist.
+	//
+	// A live scenario keeps its expectation table, and that is the point of
+	// it rather than an exception to it. The table is what the two
+	// evaluators are diffed against each other on, which is design §9.4's
+	// differential audit; a live scenario with no table is one that had
+	// nothing to decide, like A1.
 	StatusLive Status = "live"
-	// StatusPending means the scenario's expectation table needs the
-	// decision API. Its identity fixture and its structural claims still
-	// run; its table is evaluated by the reference oracle and is *not*
-	// yet evidence about `iam`. PendingOn names what it waits for, and
-	// pending.go describes the two mechanisms that make it fail loudly
-	// when that arrives.
+	// StatusPending means the scenario still waits on a capability `iam`
+	// does not have, and PendingOn names it. Everything the scenario can
+	// run still runs — the identity fixture, the grant layer, the
+	// structural claims — and its table is answered by both evaluators
+	// wherever the fixture reaches the real module, which is a property of
+	// the fixture rather than of this status (see harness.go's realize).
+	//
+	// So a pending scenario is not a scenario that proves nothing. It is a
+	// scenario whose *claim about the design* is not fully carried by code
+	// that runs: D7's visible set, H4's crypto enforcement. pending.go
+	// describes the two mechanisms that make it fail loudly when the thing
+	// it waits for arrives.
 	StatusPending Status = "pending"
 	// StatusUnexpressible means the design cannot express the use case at
 	// all. The scenario exists to locate the gap precisely: its claims
@@ -653,10 +677,21 @@ func (s Scenario) Validate() error {
 	default:
 		return fmt.Errorf("scenario %s: unknown status %q", s.ID, s.Status)
 	}
-	if s.Status == StatusLive && len(s.Expect) != 0 {
-		return fmt.Errorf("scenario %s: it carries an expectation table, which needs the decision API, so it is "+
-			"pending and not live — a live scenario is one whose every assertion runs today", s.ID)
-	}
+	// There was a rule here refusing a live scenario that carried an
+	// expectation table, on the grounds that a table needed a decision API
+	// that did not exist. The API exists, and the rule was never the
+	// design: harness.go's runTable has always said that "the table is
+	// pinned, so that when the real Decide arrives the two can be run
+	// against the same rows and diffed", and design §9.4's differential
+	// audit is that diff. A live scenario therefore *keeps* its table and
+	// runs it against the real module beside the oracle, and the rule that
+	// would have forced the table out at exactly that moment is gone.
+	//
+	// What still holds is the other half: a live scenario may not be
+	// pending on anything, checked above. "Live" means every assertion in
+	// the scenario runs against the real module, and realize() in
+	// harness.go enforces that for the table by failing a live scenario
+	// whose fixture does not reach it.
 	if s.Status == StatusUnexpressible {
 		if len(s.Unreachable()) == 0 {
 			return fmt.Errorf("scenario %s: an unexpressible scenario must mark at least one expectation row "+
