@@ -56,6 +56,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sync"
 
 	"github.com/jackc/pgx/v5"
@@ -558,9 +559,17 @@ func (a *Authorizer) Changes(ctx context.Context, tenant domain.TenantID, after 
 
 	var out []domain.Change
 	err := a.read(ctx, tenant, func(q *gen.Queries) error {
+		if after > math.MaxInt64 {
+			// Unreachable against any real log — the column is a bigint
+			// and the revision is assigned as max+1 — and it is checked
+			// because the conversion below is from an unsigned type,
+			// where an out-of-range cursor would silently become a
+			// negative one and return the whole log instead of nothing.
+			return fmt.Errorf("%w: cursor %d is beyond any revision this log can hold", domain.ErrInvalidRequest, after)
+		}
 		rows, err := q.ChangesAfter(ctx, gen.ChangesAfterParams{
 			TenantID: tenant,
-			After:    int64(after),
+			After:    int64(after), //nolint:gosec // bounded above
 			PageSize: int32(limit), //nolint:gosec // bounded by NormalizeChangeLimit
 		})
 		if err != nil {

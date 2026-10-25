@@ -259,8 +259,13 @@ type Expr interface {
 type None struct{}
 
 func (None) isResidualExpr() {}
+
+// Validate reports whether the node is well formed. None always is: it is
+// the fail-closed node and has nothing to get wrong.
 func (None) Validate() error { return nil }
-func (None) String() string  { return "false" }
+
+// String renders the node for diagnostics, never for a database.
+func (None) String() string { return "false" }
 
 // All matches every row. It is never produced by this module's authority —
 // default-deny means there is no request whose answer is "everything" —
@@ -270,8 +275,12 @@ func (None) String() string  { return "false" }
 type All struct{}
 
 func (All) isResidualExpr() {}
+
+// Validate reports whether the node is well formed. All always is.
 func (All) Validate() error { return nil }
-func (All) String() string  { return "true" }
+
+// String renders the node for diagnostics, never for a database.
+func (All) String() string { return "true" }
 
 // And is the conjunction of its terms. It is the only combinator, because
 // the authority has nothing to disjoin: a principal's permissions on a
@@ -295,6 +304,7 @@ func (a And) Validate() error {
 	return nil
 }
 
+// String renders the node for diagnostics.
 func (a And) String() string {
 	if len(a.Terms) == 0 {
 		return "true"
@@ -337,6 +347,7 @@ func (t TenantIs) Validate() error {
 	return nil
 }
 
+// String renders the node for diagnostics.
 func (t TenantIs) String() string {
 	return t.Key.String() + " = tenant:" + string(t.Tenant)
 }
@@ -383,6 +394,7 @@ func (c ContainerPermits) Validate() error {
 	return nil
 }
 
+// String renders the node for diagnostics.
 func (c ContainerPermits) String() string {
 	return fmt.Sprintf("%s ∈ containers(%s, %s)", c.Key.String(), c.Principal, c.Permission)
 }
