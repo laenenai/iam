@@ -61,19 +61,22 @@ func TestThePolicyRenderingHasNoCastOnThePrincipal(t *testing.T) {
 				"caller with no principal context gets a raised error instead of zero rows", cast, using)
 		}
 	}
-	// The GUC name must not contain this module's import path, for the
-	// reason tenancy records for its own: a module rename must not be able
-	// to move it, because a policy that no longer matches does not fail —
-	// it stops filtering.
-	for _, modulePath := range []string{"laenenai", "iam/internal", "github.com"} {
-		if strings.Contains(authz.PrincipalGUC, modulePath) {
-			t.Errorf("PrincipalGUC = %q contains %q, so a module path rename could move it", authz.PrincipalGUC, modulePath)
-		}
-	}
+	// The GUC name is pinned by exact equality rather than by a sweep for
+	// substrings of this module's import path, and the exact form is the
+	// stronger of the two: it also catches the rename that does not happen
+	// to contain one.
+	//
+	// Why it is pinned at all is the reason `tenancy` records for its own.
+	// The name appears verbatim in the policy SQL of every consumer that
+	// adopts this, so moving it silently stops matching their existing
+	// policies while everything still compiles — and a policy that no
+	// longer matches does not fail, it stops filtering. It therefore
+	// deliberately contains no part of this module's import path, so that a
+	// module rename cannot move it; on 2026-10-23 exactly that rewrote a
+	// hash function's domain-separation tag in a sibling module and
+	// invalidated its committed test vectors.
 	if authz.PrincipalGUC != "app.principal_id" {
-		t.Errorf("PrincipalGUC = %q, want \"app.principal_id\".\nIt appears verbatim in the policy SQL of every "+
-			"consumer that adopts this, so renaming it silently stops matching their existing policies while "+
-			"everything still compiles", authz.PrincipalGUC)
+		t.Errorf("PrincipalGUC = %q, want \"app.principal_id\"", authz.PrincipalGUC)
 	}
 }
 
