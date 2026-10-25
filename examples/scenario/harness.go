@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/laenenai/iam"
+	"github.com/laenenai/iam/iamtest"
 )
 
 // APIGoldenPath is where the harness looks for the module's public surface
@@ -16,11 +17,19 @@ import (
 // directory, which is where the corpus's test lives.
 const APIGoldenPath = "../api.txt"
 
-// RunCorpus runs the whole use-case corpus. newRegistry is called once per
-// scenario with that scenario's own *testing.T, so an adapter that needs
-// setup and teardown registers it with t.Cleanup inside the factory and
-// every scenario gets fresh, isolated state — the same contract
-// iamtest.RunRegistrySuite uses, for the same reason.
+// RunCorpus runs the whole use-case corpus. newAuthority is called once
+// per scenario with that scenario's own *testing.T, so an adapter that
+// needs setup and teardown registers it with t.Cleanup inside the factory
+// and every scenario gets fresh, isolated state — the same contract
+// iamtest.RunAuthorizerSuite uses, and the same type, because it is the
+// same pair of adapters answering the same two halves of a decision.
+//
+// An Authority whose Authorizer is nil is legitimate rather than a
+// mistake: a consumer that has built the identity half and not the
+// authorization half still runs every fixture's identity layer and every
+// structural claim. What it loses is the differential below, and a
+// scenario marked live says so by failing, because `live` is the corpus's
+// claim that the scenario runs against the real module.
 //
 // It is exported, and lives in a non-test file, because the corpus has to
 // be runnable from another module: CAS's alpha builds its own
@@ -33,15 +42,17 @@ const APIGoldenPath = "../api.txt"
 //  1. validates the scenario — a fixture naming a principal that does not
 //     exist, or an action its kind does not register, would otherwise pass
 //     for the wrong reason;
-//  2. materializes the identity layer against reg, which is live;
-//  3. evaluates every structural claim, which is live;
-//  4. evaluates every reachable expectation row against the reference
-//     oracle, matching the reason as well as the verdict.
+//  2. materializes the identity layer against the registry, which is live;
+//  3. materializes the fixture's grant layer against the authorizer — a
+//     registered schema, a container per object, a grant per tuple;
+//  4. evaluates every reachable expectation row against *both* the
+//     reference oracle and the real `iam.Decide`, and diffs them;
+//  5. evaluates every structural claim, which is live.
 //
 // And then the part that matters more than any of it: it arms the pending
 // tripwire. If the module's public surface has grown a capability any
 // scenario is pending on, the run fails and names those scenarios.
-func RunCorpus(t *testing.T, scenarios []Scenario, newRegistry func(t *testing.T) iam.Registry) {
+func RunCorpus(t *testing.T, scenarios []Scenario, newAuthority func(t *testing.T) iamtest.Authority) {
 	t.Helper()
 
 	if len(scenarios) == 0 {
@@ -58,7 +69,7 @@ func RunCorpus(t *testing.T, scenarios []Scenario, newRegistry func(t *testing.T
 
 	for _, s := range scenarios {
 		t.Run(s.ID+"_"+slug(s.Title), func(t *testing.T) {
-			RunScenario(t, s, newRegistry(t))
+			RunScenario(t, s, newAuthority(t))
 		})
 	}
 
@@ -67,8 +78,21 @@ func RunCorpus(t *testing.T, scenarios []Scenario, newRegistry func(t *testing.T
 	})
 }
 
-// RunScenario runs one scenario against reg.
-func RunScenario(t *testing.T, s Scenario, reg iam.Registry) {
+// RunScenario runs one scenario against a pair of adapters.
+//
+// # Why the expectation table runs before the claims
+//
+// It used to run after, and that ordering does not survive the table being
+// answered by the real module as well as by the oracle. D4's
+// membership-change claim *writes* to the registry — it adds Lena to
+// `team:eng` and asserts that the authorization input moved — and D4's
+// table has a row pinning that Lena is denied before she joins. The oracle
+// reads fixture data and so never saw the write; `iam.Decide` reads live
+// membership and did, so the two disagreed about a row neither of them was
+// wrong about. The fixture is the world the table describes, so the table
+// is evaluated against the fixture as declared and the claims that
+// deliberately move it run afterwards.
+func RunScenario(t *testing.T, s Scenario, a iamtest.Authority) {
 	t.Helper()
 
 	if err := s.Validate(); err != nil {
@@ -78,9 +102,17 @@ func RunScenario(t *testing.T, s Scenario, reg iam.Registry) {
 		s.ID, s.Title, collapse(s.Models), strings.Join(s.Governs, ", "), s.Status)
 
 	clock := iam.SystemClock{}
-	env, err := Materialize(context.Background(), reg, s.Fixture, clock)
+	env, err := Materialize(context.Background(), a.Registry, s.Fixture, clock)
 	if err != nil {
 		t.Fatalf("materializing the identity layer against the real registry failed: %v", err)
+	}
+
+	world := realize(t, s, a, env)
+
+	if len(s.Expect) > 0 {
+		t.Run("ExpectationTable", func(t *testing.T) {
+			runTable(t, s, world)
+		})
 	}
 
 	for i, c := range s.Claims {
@@ -97,20 +129,81 @@ func RunScenario(t *testing.T, s Scenario, reg iam.Registry) {
 			}
 		})
 	}
-
-	if len(s.Expect) > 0 {
-		t.Run("ExpectationTable", func(t *testing.T) {
-			runTable(t, s)
-		})
-	}
 }
 
-// runTable evaluates the reachable rows against the reference oracle. It
-// is explicit in its failure messages that a match here is evidence about
-// the corpus's own oracle and not yet about `iam`: the table is pinned, so
-// that when the real Decide arrives the two can be run against the same
-// rows and diffed.
-func runTable(t *testing.T, s Scenario) {
+// realize materializes the fixture's grant layer against the authorizer,
+// returning nil when the table has to fall back to the oracle alone.
+//
+// The gate on the differential is a mechanical property of the fixture and
+// deliberately not the scenario's status. A status is a statement about the
+// whole scenario — D7 and D8 still wait on bottom-up visibility for their
+// *claims*, and H4 and A3 on a marking store — while whether a table can
+// be replayed against the real module is a question about the tuples, and
+// RealWorld answers it by reporting what it could not write. A
+// hand-maintained flag for this is exactly the thing pending.go exists to
+// avoid: it would be the one place a scenario could quietly claim less
+// than it runs.
+//
+// For a live scenario the fallback is a failure rather than a log. `live`
+// is the corpus's claim that every assertion in the scenario runs against
+// the real module, so a live scenario whose fixture does not reach it is
+// mislabelled, and this is where that is caught.
+func realize(t *testing.T, s Scenario, a iamtest.Authority, env *Env) *RealWorld {
+	t.Helper()
+
+	if a.Authorizer == nil {
+		if s.Status == StatusLive && len(s.Expect) > 0 {
+			t.Fatalf("%s is live and carries an expectation table, but this run supplied no Authorizer, so the "+
+				"table could only be answered by the corpus's own oracle. A live scenario is one that runs "+
+				"against the real module", s.ID)
+		}
+		if len(s.Expect) > 0 {
+			t.Log("no Authorizer supplied: the expectation table is answered by the reference oracle alone, " +
+				"so it says the requirement is expressible and pins what the answer must be, and says " +
+				"nothing about `iam`")
+		}
+		return nil
+	}
+
+	world, err := Realize(context.Background(), a.Authorizer, env, s.Fixture)
+	if err != nil {
+		if s.Status == StatusLive {
+			t.Fatalf("%s is live, so its fixture must materialize against the real authorization layer, and it "+
+				"did not: %v", s.ID, err)
+		}
+		t.Logf("the fixture does not materialize against the real authorization layer, so its table is answered "+
+			"by the reference oracle alone: %v", err)
+		return nil
+	}
+	if !world.Expressible() {
+		if s.Status == StatusLive {
+			t.Fatalf("%s is live, but part of its fixture has no form in the authorization layer as built:\n  %s",
+				s.ID, renderGaps(world.Gaps()))
+		}
+		t.Logf("part of this fixture has no form in the authorization layer as built, so its table is answered "+
+			"by the reference oracle alone:\n  %s", renderGaps(world.Gaps()))
+		return nil
+	}
+	return world
+}
+
+// runTable evaluates the reachable rows against the reference oracle and,
+// when the fixture reached the real authorization layer, against
+// `iam.Decide` as well — and diffs the two.
+//
+// That differential is design §9.4's differential authorization audit
+// aimed one layer up, and it is the most valuable assertion in this
+// directory. The oracle is §8.2's four permitted composition forms made
+// executable and nothing else; `iam.Decide` is what a consumer will
+// actually call. Two independent implementations of the same restriction
+// agreeing about a row is evidence; one of them disagreeing is a finding,
+// and the failure message says which of the two matched the pinned row so
+// that the finding has a direction.
+//
+// Each row is still checked against the pinned table as well as across the
+// two evaluators, because agreement between two evaluators that are both
+// wrong is not a pass.
+func runTable(t *testing.T, s Scenario, world *RealWorld) {
 	t.Helper()
 	for i, e := range s.Expect {
 		row := fmt.Sprintf("row%d_%s_%s_%s", i, slug(e.Principal), slug(e.Action), slug(e.Resource.String()))
@@ -124,6 +217,9 @@ func runTable(t *testing.T, s Scenario) {
 			if err != nil {
 				t.Fatalf("the reference decision procedure could not answer %s %s %s: %v\n  note: %s",
 					e.Principal, e.Action, e.Resource, err, e.Note)
+			}
+			if world != nil {
+				assertDifferential(t, e, got, world)
 			}
 			if got.Verdict != e.Want {
 				t.Fatalf("%s %s %s = %s (%s: %s), want %s because %s\n  note: %s",
@@ -141,6 +237,55 @@ func runTable(t *testing.T, s Scenario) {
 			}
 		})
 	}
+}
+
+// assertDifferential runs one row against the real module and fails if it
+// disagrees with the oracle about the verdict, the reason, or which grant
+// was responsible.
+func assertDifferential(t *testing.T, e Expectation, oracle Decision, world *RealWorld) {
+	t.Helper()
+
+	live, err := world.Decide(t.Context(), e.Principal, e.Action, e.Resource)
+	if err != nil {
+		t.Fatalf("the real module could not answer %s %s %s, which the reference oracle answered %s (%s): %v\n"+
+			"  An evaluator that errors where the other decides is a disagreement too, and this row is pinned "+
+			"as %s because %s.\n  note: %s",
+			e.Principal, e.Action, e.Resource, oracle.Verdict, oracle.Reason, err, e.Want, e.Because, e.Note)
+	}
+	if live == oracle {
+		return
+	}
+
+	matches := func(d Decision) bool {
+		return d.Verdict == e.Want && d.Reason == e.Reason && (e.Because == "" || d.Because == e.Because)
+	}
+	var direction string
+	switch {
+	case matches(oracle) && !matches(live):
+		direction = "The reference oracle matches the pinned row and `iam.Decide` does not, so the finding is " +
+			"about the module or about the translation: either it answers this differently from design §8.2's " +
+			"forms, or realapi.go wrote the wrong grants for this fixture."
+	case matches(live) && !matches(oracle):
+		direction = "`iam.Decide` matches the pinned row and the reference oracle does not, so the finding is " +
+			"about the oracle: §8.2's forms as this corpus made them executable are wrong about this row."
+	default:
+		direction = "Neither matches the pinned row, so the table is pinning something no evaluator here " +
+			"produces, and the requirement itself is what to re-read."
+	}
+
+	t.Fatalf("design §9.4's differential audit found a disagreement about %s %s %s.\n"+
+		"  the reference oracle says: %s (%s) through %q\n"+
+		"  the real iam.Decide says:  %s (%s) through %q\n"+
+		"  the table pins:            %s (%s) through %q\n"+
+		"  %s\n"+
+		"One of the two is wrong about authorization, and producing exactly that finding is what this "+
+		"differential is for. Decide which one, and fix that one — do not reconcile them by relaxing the "+
+		"comparison.\n  note: %s",
+		e.Principal, e.Action, e.Resource,
+		oracle.Verdict, oracle.Reason, oracle.Because,
+		live.Verdict, live.Reason, live.Because,
+		e.Want, e.Reason, e.Because,
+		direction, e.Note)
 }
 
 // evalLive evaluates a claim that needs the real registry.

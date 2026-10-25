@@ -129,6 +129,21 @@ says so rather than leaving the arithmetic to a reader.
 
 ## Status
 
-**A1 is live.** A2 and A3 are pending on `Decide` and the tuple store;
-their tables are pinned against the corpus's reference procedure, and their
-provider-gate and marking-set claims run today.
+**A1 and A2 are live.** A1 was always live and carries no table. A2 now
+runs end to end: the researcher's single `writer` grant on the world layer
+becomes a real grant on a real container, and every row of its table is
+answered by `iam.Decide` and by the corpus's reference procedure and
+diffed. The row worth knowing survived that diff unchanged — the
+researcher reading back what it wrote is a *union* and not an
+inheritance, because `read` resolved through `referent#viewer`'s union
+with `writer` and only then up the containment path, and both evaluators
+say so.
+
+**A3 is pending on `MarkingStore`.** Its table runs the full differential;
+what waits is the half the scenario is actually about. `iam` stores no
+marking and no enforcement class, so the provider-gate refusals and the
+resolved marking set over the derivation's inputs — leak channel #15 — are
+computed by the corpus over fixture data. Since the mandatory tier's
+removal that allowlist is the only thing between privileged content and a
+third-party provider, which makes it the claim in this directory that most
+wants to be running against something real.

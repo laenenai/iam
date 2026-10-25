@@ -14,11 +14,43 @@ package iam // .
 
 type AgentRunSpec = registry.AgentRunSpec
 
+type All = domain.All
+
+type And = domain.And
+
+type Authorizer = authz.Authorizer
+
+type AuthorizerConfig = authz.Config
+
 func Canonical(t time.Time) time.Time
+
+type Change = domain.Change
+
+const ChangeContainerCreated = domain.ChangeContainerCreated
+
+const ChangeGrantRevoked = domain.ChangeGrantRevoked
+
+const ChangeGrantWritten = domain.ChangeGrantWritten
+
+type ChangeKind = domain.ChangeKind
 
 type Claims = registry.Claims
 
 type Clock = domain.Clock
+
+type Container = domain.Container
+
+type ContainerID = domain.ContainerID
+
+type ContainerKind = domain.ContainerKind
+
+type ContainerPermits = domain.ContainerPermits
+
+type ContainerSpec = domain.ContainerSpec
+
+type Decision = domain.Decision
+
+const DefaultChangeLimit = authz.DefaultChangeLimit
 
 var ErrAgentRunExpired = domain.ErrAgentRunExpired
 
@@ -26,17 +58,31 @@ var ErrCapabilityUnconfigured = domain.ErrCapabilityUnconfigured
 
 var ErrConflict = domain.ErrConflict
 
+var ErrContainmentCycle = domain.ErrContainmentCycle
+
 var ErrInvalidClaims = domain.ErrInvalidClaims
 
 var ErrInvalidConfig = domain.ErrInvalidConfig
 
+var ErrInvalidContainer = domain.ErrInvalidContainer
+
 var ErrInvalidExternalSubject = domain.ErrInvalidExternalSubject
 
+var ErrInvalidGrant = domain.ErrInvalidGrant
+
 var ErrInvalidPrincipal = domain.ErrInvalidPrincipal
+
+var ErrInvalidRequest = domain.ErrInvalidRequest
+
+var ErrInvalidResidual = domain.ErrInvalidResidual
+
+var ErrInvalidSchema = domain.ErrInvalidSchema
 
 var ErrIssuerNotRegistered = domain.ErrIssuerNotRegistered
 
 var ErrMalformedID = domain.ErrMalformedID
+
+var ErrMultipleContainmentParents = domain.ErrMultipleContainmentParents
 
 var ErrNotFound = domain.ErrNotFound
 
@@ -46,11 +92,25 @@ var ErrPrincipalNotFound = domain.ErrPrincipalNotFound
 
 var ErrResyncRequired = domain.ErrResyncRequired
 
+var ErrSchemaNotRegistered = domain.ErrSchemaNotRegistered
+
 var ErrUnavailable = domain.ErrUnavailable
+
+var ErrUnrenderable = domain.ErrUnrenderable
 
 func EvaluateCondition(p Principal, bound time.Duration, asOf time.Time) PrincipalCondition
 
+type Expr = domain.Expr
+
 type ExternalSubject = domain.ExternalSubject
+
+type FilterRequest = authz.FilterRequest
+
+type Fragment = pgauthz.Fragment
+
+type Grant = domain.Grant
+
+type GrantSpec = domain.GrantSpec
 
 type Group = domain.Group
 
@@ -62,13 +122,21 @@ const GroupSourceClaim = domain.GroupSourceClaim
 
 const GroupSourceLocal = domain.GroupSourceLocal
 
+func GroupSubject(g GroupID) Subject
+
 type IssuerPolicy = idp.IssuerPolicy
 
 type JITProvisioner = idp.JITProvisioner
 
+type Key = domain.Key
+
 type KeySet = idp.KeySet
 
 type KeySource = idp.KeySource
+
+const MaxChangeLimit = authz.MaxChangeLimit
+
+const MaxContainmentDepth = domain.MaxContainmentDepth
 
 type Membership = domain.Membership
 
@@ -78,11 +146,19 @@ type Migration = migrate.Applied
 
 func MigrationStatus(ctx context.Context, pool *pgxpool.Pool) ([]Migration, error)
 
+func NamedPrincipal(p PrincipalID) PrincipalRef
+
+func NewContainerID(clock Clock) ContainerID
+
 func NewGroupID(clock Clock) GroupID
 
 func NewJITProvisioner(policy IssuerPolicy, reg Registry) (*JITProvisioner, error)
 
+func NewMemoryAuthorizer(reg Registry, cfg AuthorizerConfig) (Authorizer, error)
+
 func NewMemoryRegistry(cfg RegistryConfig) (Registry, error)
+
+func NewPostgresAuthorizer(pool *pgxpool.Pool, cfg AuthorizerConfig) (Authorizer, error)
 
 func NewPostgresRegistry(pool *pgxpool.Pool, cfg RegistryConfig) (Registry, error)
 
@@ -92,6 +168,10 @@ func NewStaticIssuerPolicy(accepted map[TenantID][]string) *StaticIssuerPolicy
 
 func NewTenantID(clock Clock) TenantID
 
+type None = domain.None
+
+func ParseContainerID(s string) (ContainerID, error)
+
 func ParseExternalSubject(issuer, subject string) (ExternalSubject, error)
 
 func ParseGroupID(s string) (GroupID, error)
@@ -100,9 +180,13 @@ func ParsePrincipalID(s string) (PrincipalID, error)
 
 func ParseTenantID(s string) (TenantID, error)
 
+type Permission = domain.Permission
+
 type Principal = domain.Principal
 
 type PrincipalCondition = domain.PrincipalCondition
+
+const PrincipalGUC = authz.PrincipalGUC
 
 type PrincipalID = domain.PrincipalID
 
@@ -113,6 +197,8 @@ const PrincipalKindAgentRun = domain.PrincipalKindAgentRun
 const PrincipalKindService = domain.PrincipalKindService
 
 const PrincipalKindUser = domain.PrincipalKindUser
+
+type PrincipalRef = domain.PrincipalRef
 
 type PrincipalState = domain.PrincipalState
 
@@ -126,25 +212,70 @@ const PrincipalStateUnknown = domain.PrincipalStateUnknown
 
 const PrincipalStateUsable = domain.PrincipalStateUsable
 
+func PrincipalSubject(p PrincipalID) Subject
+
 type Provisioner = idp.Provisioner
+
+func RLSTables() []string
+
+func RLSTablesExemptFromPolicy() map[string]string
+
+type Reason = domain.Reason
+
+const ReasonDirect = domain.ReasonDirect
+
+const ReasonInherited = domain.ReasonInherited
+
+const ReasonNoGrant = domain.ReasonNoGrant
+
+const ReasonUnevaluated = domain.ReasonUnevaluated
+
+const ReasonUserset = domain.ReasonUserset
 
 type Registry = registry.Registry
 
 type RegistryConfig = registry.Config
 
+func RenderPostgres(r Residual, firstArg int) (Fragment, error)
+
+func RenderPostgresPolicy(r Residual) (string, error)
+
+type Request = domain.Request
+
+type Residual = domain.Residual
+
+type Revision = domain.Revision
+
+type Schema = domain.Schema
+
+func SessionPrincipal() PrincipalRef
+
 type StaticIssuerPolicy = idp.StaticIssuerPolicy
 
 type StubKeySource = idp.StubKeySource
+
+type Subject = domain.Subject
 
 type SystemClock = domain.SystemClock
 
 type TenantID = domain.TenantID
 
+type TenantIs = domain.TenantIs
+
+func ValidPermissionName(p Permission) bool
+
 package iamtest // iamtest
+
+type Authority struct {
+	Registry iam.Registry
+	Authorizer iam.Authorizer
+}
 
 func NoSecretLeaksInAnyRendering(t *testing.T, v any, material []byte)
 
 func RendersOnlyARedactionMarker(t *testing.T, v any)
+
+func RunAuthorizerSuite(t *testing.T, newAuthority func(t *testing.T) Authority)
 
 func RunRegistrySuite(t *testing.T, newRegistry func(t *testing.T) iam.Registry)
 
@@ -182,6 +313,10 @@ const CapAttributePredicate Capability = "AttributePredicate"
 const CapDecide Capability = "Decide"
 
 const CapDerivation Capability = "Derivation"
+
+const CapMarkingStore Capability = "MarkingStore"
+
+const CapNestedGroupMember Capability = "NestedGroupMember"
 
 const CapPredicate Capability = "Predicate"
 
@@ -296,6 +431,8 @@ var ErrNoDenyMechanism = errors.New("there is no deny mechanism, by design")
 
 var ErrNoDirectPath = errors.New("containment is a DAG here, so there is no single direct path (design §8.2, finding F3)")
 
+var ErrNotTranslatable = errors.New("this fixture has no form in the authorization layer as built")
+
 var ErrUnexpressible = errors.New("outside the permitted subset (design §8.5)")
 
 type Expectation struct {
@@ -331,6 +468,13 @@ func (Fixture) Marking(label string) (Marking, bool)
 func (Fixture) Principal(name string) (PrincipalSpec, bool)
 
 func (Fixture) Relation(kind, relation string) (Relation, bool)
+
+type Gap struct {
+	What string
+	Why string
+}
+
+func (Gap) String() string
 
 type GroupSpec struct {
 	Name string
@@ -396,6 +540,18 @@ func R(s string) Ref
 
 func Readable(f Fixture, resource Ref) error
 
+type RealWorld struct {
+	// has unexported fields
+}
+
+func (*RealWorld) Decide(ctx context.Context, principal, action string, resource Ref) (Decision, error)
+
+func (*RealWorld) Expressible() bool
+
+func (*RealWorld) Gaps() []Gap
+
+func Realize(ctx context.Context, authorizer iam.Authorizer, env *Env, f Fixture) (*RealWorld, error)
+
 const ReasonDirect ReasonKind = "direct-tuple"
 
 const ReasonInherited ReasonKind = "inherited-tuple"
@@ -439,9 +595,9 @@ type ResourceKind struct {
 	Actions map[string]string
 }
 
-func RunCorpus(t *testing.T, scenarios []Scenario, newRegistry func(t *testing.T) iam.Registry)
+func RunCorpus(t *testing.T, scenarios []Scenario, newAuthority func(t *testing.T) iamtest.Authority)
 
-func RunScenario(t *testing.T, s Scenario, reg iam.Registry)
+func RunScenario(t *testing.T, s Scenario, a iamtest.Authority)
 
 type Scenario struct {
 	ID string
@@ -534,11 +690,105 @@ func Scenarios() []scenario.Scenario
 
 package domain // internal/domain
 
+type All struct{}
+
+func (All) String() string
+
+func (All) Validate() error
+
+func Allow(via Grant, depth int, rev Revision) Decision
+
+type And struct {
+	Terms []Expr
+}
+
+func (And) String() string
+
+func (And) Validate() error
+
 func Canonical(t time.Time) time.Time
+
+type Change struct {
+	Revision Revision
+	TenantID TenantID
+	Kind ChangeKind
+	Container ContainerID
+	Permission Permission
+	Subject Subject
+	RecordedAt time.Time
+}
+
+const ChangeContainerCreated ChangeKind = "container-created"
+
+const ChangeGrantRevoked ChangeKind = "grant-revoked"
+
+const ChangeGrantWritten ChangeKind = "grant-written"
+
+type ChangeKind string
+
+func (ChangeKind) Valid() bool
 
 type Clock interface {
 	Now() time.Time
 }
+
+type Container struct {
+	ID ContainerID
+	TenantID TenantID
+	Kind string
+	Parent ContainerID
+	Label string
+	CreatedAt time.Time
+}
+
+func (Container) IsRoot() bool
+
+type ContainerID string
+
+type ContainerKind struct {
+	Name string
+	Parents []string
+	Nestable bool
+}
+
+func (ContainerKind) AllowsParentKind(kind string) bool
+
+func (ContainerKind) AllowsRoot() bool
+
+func (ContainerKind) ParentKind() (string, bool)
+
+func (ContainerKind) PermittedParentKinds() []string
+
+type ContainerPermits struct {
+	Key Key
+	Principal PrincipalRef
+	Permission Permission
+}
+
+func (ContainerPermits) String() string
+
+func (ContainerPermits) Validate() error
+
+type ContainerSpec struct {
+	TenantID TenantID
+	Kind string
+	Parent ContainerID
+	Label string
+}
+
+func (ContainerSpec) Validate() error
+
+type Decision struct {
+	Allowed bool
+	Reason Reason
+	Via Grant
+	Revision Revision
+	Depth int
+}
+
+func (Decision) String() string
+
+func Deny(rev Revision) Decision
 
 var ErrAgentRunExpired = errors.New("agent run expired")
 
@@ -546,17 +796,31 @@ var ErrCapabilityUnconfigured = errors.New("capability unconfigured")
 
 var ErrConflict = errors.New("conflict")
 
+var ErrContainmentCycle = errors.New("containment cycle")
+
 var ErrInvalidClaims = errors.New("invalid claims")
 
 var ErrInvalidConfig = errors.New("invalid config")
 
+var ErrInvalidContainer = errors.New("invalid container")
+
 var ErrInvalidExternalSubject = errors.New("invalid external subject")
 
+var ErrInvalidGrant = errors.New("invalid grant")
+
 var ErrInvalidPrincipal = errors.New("invalid principal")
+
+var ErrInvalidRequest = errors.New("invalid request")
+
+var ErrInvalidResidual = errors.New("invalid residual")
+
+var ErrInvalidSchema = errors.New("invalid schema")
 
 var ErrIssuerNotRegistered = errors.New("issuer not registered")
 
 var ErrMalformedID = errors.New("malformed id")
+
+var ErrMultipleContainmentParents = errors.New("containment declares more than one parent")
 
 var ErrNotFound = errors.New("not found")
 
@@ -566,9 +830,19 @@ var ErrPrincipalNotFound = errors.New("principal not found")
 
 var ErrResyncRequired = errors.New("resync required")
 
+var ErrSchemaNotRegistered = errors.New("schema not registered")
+
 var ErrUnavailable = errors.New("unavailable")
 
+var ErrUnrenderable = errors.New("residual not renderable by this backend")
+
 func EvaluateCondition(p Principal, bound time.Duration, asOf time.Time) PrincipalCondition
+
+type Expr interface {
+	Validate() error
+	String() string
+	isResidualExpr()
+}
 
 type ExternalSubject struct {
 	Issuer string
@@ -587,6 +861,27 @@ func (*FixedClock) Advance(d time.Duration)
 
 func (*FixedClock) Now() time.Time
 
+type Grant struct {
+	TenantID TenantID
+	Container ContainerID
+	Permission Permission
+	Subject Subject
+	GrantedAt time.Time
+}
+
+func (Grant) IsZero() bool
+
+func (Grant) String() string
+
+type GrantSpec struct {
+	TenantID TenantID
+	Container ContainerID
+	Permission Permission
+	Subject Subject
+}
+
+func (GrantSpec) Validate() error
+
 type Group struct {
 	ID GroupID
 	TenantID TenantID
@@ -604,12 +899,29 @@ const GroupSourceClaim GroupSource = "claim"
 
 const GroupSourceLocal GroupSource = "local"
 
+func GroupSubject(g GroupID) Subject
+
+type Key struct {
+	Qualifier string
+	Column string
+}
+
+func (Key) String() string
+
+func (Key) Validate() error
+
+const MaxContainmentDepth = 32
+
 type Membership struct {
 	GroupID GroupID
 	PrincipalID PrincipalID
 	Source GroupSource
 	AddedAt time.Time
 }
+
+func NamedPrincipal(p PrincipalID) PrincipalRef
+
+func NewContainerID(clock Clock) ContainerID
 
 func NewFixedClock(t time.Time) *FixedClock
 
@@ -619,6 +931,14 @@ func NewPrincipalID(clock Clock) PrincipalID
 
 func NewTenantID(clock Clock) TenantID
 
+type None struct{}
+
+func (None) String() string
+
+func (None) Validate() error
+
+func ParseContainerID(s string) (ContainerID, error)
+
 func ParseExternalSubject(issuer, subject string) (ExternalSubject, error)
 
 func ParseGroupID(s string) (GroupID, error)
@@ -626,6 +946,8 @@ func ParseGroupID(s string) (GroupID, error)
 func ParsePrincipalID(s string) (PrincipalID, error)
 
 func ParseTenantID(s string) (TenantID, error)
+
+type Permission string
 
 type Principal struct {
 	ID PrincipalID
@@ -667,6 +989,18 @@ const PrincipalKindService PrincipalKind = "service"
 
 const PrincipalKindUser PrincipalKind = "user"
 
+type PrincipalRef struct {
+	// has unexported fields
+}
+
+func (PrincipalRef) IsSession() bool
+
+func (PrincipalRef) IsZero() bool
+
+func (PrincipalRef) Named() (PrincipalID, bool)
+
+func (PrincipalRef) String() string
+
 type PrincipalState string
 
 const PrincipalStateDeprovisioned PrincipalState = "deprovisioned"
@@ -679,11 +1013,87 @@ const PrincipalStateUnknown PrincipalState = ""
 
 const PrincipalStateUsable PrincipalState = "usable"
 
+func PrincipalSubject(p PrincipalID) Subject
+
+type Reason string
+
+const ReasonDirect Reason = "direct"
+
+const ReasonInherited Reason = "inherited"
+
+const ReasonNoGrant Reason = "no-grant"
+
+const ReasonUnevaluated Reason = ""
+
+const ReasonUserset Reason = "userset"
+
+type Request struct {
+	TenantID TenantID
+	Principal PrincipalID
+	Permission Permission
+	Container ContainerID
+}
+
+func (Request) Validate() error
+
+type Residual struct {
+	Revision Revision
+	Expr Expr
+}
+
+func (Residual) DeniesEverything() bool
+
+func (Residual) String() string
+
+func (Residual) Validate() error
+
+type Revision uint64
+
+type Schema struct {
+	Name string
+	Version int
+	Kinds []ContainerKind
+	Permissions []Permission
+}
+
+func (Schema) DeclaresPermission(p Permission) bool
+
+func (Schema) Kind(name string) (ContainerKind, bool)
+
+func (Schema) Validate() error
+
+func SessionPrincipal() PrincipalRef
+
+type Subject struct {
+	// has unexported fields
+}
+
+func (Subject) Group() (GroupID, bool)
+
+func (Subject) IsZero() bool
+
+func (Subject) Principal() (PrincipalID, bool)
+
+func (Subject) String() string
+
+func (Subject) Validate() error
+
 type SystemClock struct{}
 
 func (SystemClock) Now() time.Time
 
 type TenantID string
+
+type TenantIs struct {
+	Key Key
+	Tenant TenantID
+}
+
+func (TenantIs) String() string
+
+func (TenantIs) Validate() error
+
+func ValidPermissionName(p Permission) bool
 
 package registry // internal/registry
 
@@ -710,6 +1120,8 @@ type Config struct {
 
 func (Config) Validate() (Config, error)
 
+func LiveForDecision(p domain.Principal, asOf time.Time) bool
+
 type Memory struct {
 	// has unexported fields
 }
@@ -726,9 +1138,13 @@ func (*Memory) Deprovision(ctx context.Context, p domain.PrincipalID) error
 
 func (*Memory) EnsureGroup(ctx context.Context, tenant domain.TenantID, name string) (domain.Group, error)
 
+func (*Memory) GroupByID(ctx context.Context, id domain.GroupID) (domain.Group, error)
+
 func (*Memory) GroupMembers(ctx context.Context, g domain.GroupID, asOf time.Time) ([]domain.PrincipalID, error)
 
 func (*Memory) GroupsOf(ctx context.Context, p domain.PrincipalID, asOf time.Time) ([]domain.Group, error)
+
+func (*Memory) LiveGroupsOf(ctx context.Context, p domain.PrincipalID, asOf time.Time) ([]domain.GroupID, error)
 
 func (*Memory) PrincipalByID(ctx context.Context, id domain.PrincipalID) (domain.Principal, error)
 
@@ -748,10 +1164,12 @@ type Registry interface {
 	PrincipalByID(ctx context.Context, id domain.PrincipalID) (domain.Principal, error)
 	Condition(ctx context.Context, id domain.PrincipalID, asOf time.Time) (domain.PrincipalCondition, error)
 	EnsureGroup(ctx context.Context, tenant domain.TenantID, name string) (domain.Group, error)
+	GroupByID(ctx context.Context, id domain.GroupID) (domain.Group, error)
 	AddGroupMember(ctx context.Context, g domain.GroupID, p domain.PrincipalID) error
 	RemoveGroupMember(ctx context.Context, g domain.GroupID, p domain.PrincipalID) error
 	GroupsOf(ctx context.Context, p domain.PrincipalID, asOf time.Time) ([]domain.Group, error)
 	GroupMembers(ctx context.Context, g domain.GroupID, asOf time.Time) ([]domain.PrincipalID, error)
+	LiveGroupsOf(ctx context.Context, p domain.PrincipalID, asOf time.Time) ([]domain.GroupID, error)
 	DelegateAgentRun(ctx context.Context, parent domain.PrincipalID, spec AgentRunSpec) (domain.Principal, error)
 	CollectExpiredAgentRuns(ctx context.Context, asOf time.Time) (int, error)
 	Deprovision(ctx context.Context, p domain.PrincipalID) error
@@ -811,3 +1229,114 @@ type StubKeySource struct{}
 func (StubKeySource) Invalidate(string)
 
 func (StubKeySource) KeySet(_ context.Context, issuer string) (KeySet, error)
+
+package authz // internal/authz
+
+type Authorizer interface {
+	RegisterSchema(ctx context.Context, s domain.Schema) error
+	CreateContainer(ctx context.Context, spec domain.ContainerSpec) (domain.Container, error)
+	Container(ctx context.Context, tenant domain.TenantID, id domain.ContainerID) (domain.Container, error)
+	Ancestors(ctx context.Context, tenant domain.TenantID, id domain.ContainerID) ([]domain.ContainerID, error)
+	Grant(ctx context.Context, spec domain.GrantSpec) (domain.Revision, error)
+	Revoke(ctx context.Context, spec domain.GrantSpec) (domain.Revision, error)
+	GrantsOn(ctx context.Context, tenant domain.TenantID, container domain.ContainerID) ([]domain.Grant, error)
+	Decide(ctx context.Context, req domain.Request) (domain.Decision, error)
+	Filter(ctx context.Context, req FilterRequest) (domain.Residual, error)
+	Changes(ctx context.Context, tenant domain.TenantID, after domain.Revision, limit int) ([]domain.Change, error)
+	Revision(ctx context.Context, tenant domain.TenantID) (domain.Revision, error)
+}
+
+func BuildResidual(req FilterRequest, rev domain.Revision, permissionDeclared bool) (domain.Residual, error)
+
+type Config struct {
+	Clock domain.Clock
+}
+
+func (Config) Validate() (Config, error)
+
+const DefaultChangeLimit = 100
+
+type FilterRequest struct {
+	TenantID domain.TenantID
+	Principal domain.PrincipalRef
+	Permission domain.Permission
+	Key domain.Key
+	TenantKey domain.Key
+}
+
+func (FilterRequest) Validate() error
+
+const MaxChangeLimit = 1000
+
+type Memory struct {
+	// has unexported fields
+}
+
+func (*Memory) Ancestors(ctx context.Context, tenant domain.TenantID, id domain.ContainerID) ([]domain.ContainerID, error)
+
+func (*Memory) Changes(ctx context.Context, tenant domain.TenantID, after domain.Revision, limit int) ([]domain.Change, error)
+
+func (*Memory) Container(ctx context.Context, tenant domain.TenantID, id domain.ContainerID) (domain.Container, error)
+
+func (*Memory) CreateContainer(ctx context.Context, spec domain.ContainerSpec) (domain.Container, error)
+
+func (*Memory) Decide(ctx context.Context, req domain.Request) (domain.Decision, error)
+
+func (*Memory) Filter(ctx context.Context, req FilterRequest) (domain.Residual, error)
+
+func (*Memory) Grant(ctx context.Context, spec domain.GrantSpec) (domain.Revision, error)
+
+func (*Memory) GrantsOn(ctx context.Context, tenant domain.TenantID, container domain.ContainerID) ([]domain.Grant, error)
+
+func (*Memory) RegisterSchema(ctx context.Context, s domain.Schema) error
+
+func (*Memory) Revision(ctx context.Context, tenant domain.TenantID) (domain.Revision, error)
+
+func (*Memory) Revoke(ctx context.Context, spec domain.GrantSpec) (domain.Revision, error)
+
+func NewMemory(reg registry.Registry, cfg Config) (*Memory, error)
+
+func NormalizeChangeLimit(limit int) int
+
+func PermittedOrNothing(k domain.ContainerKind) string
+
+const PrincipalGUC = "app.principal_id"
+
+package pgauthz // internal/authz/pgauthz
+
+type Authorizer struct {
+	// has unexported fields
+}
+
+func (*Authorizer) Ancestors(ctx context.Context, tenant domain.TenantID, id domain.ContainerID) ([]domain.ContainerID, error)
+
+func (*Authorizer) Changes(ctx context.Context, tenant domain.TenantID, after domain.Revision, limit int) ([]domain.Change, error)
+
+func (*Authorizer) Container(ctx context.Context, tenant domain.TenantID, id domain.ContainerID) (domain.Container, error)
+
+func (*Authorizer) CreateContainer(ctx context.Context, spec domain.ContainerSpec) (domain.Container, error)
+
+func (*Authorizer) Decide(ctx context.Context, req domain.Request) (domain.Decision, error)
+
+func (*Authorizer) Filter(ctx context.Context, req authz.FilterRequest) (domain.Residual, error)
+
+func (*Authorizer) Grant(ctx context.Context, spec domain.GrantSpec) (domain.Revision, error)
+
+func (*Authorizer) GrantsOn(ctx context.Context, tenant domain.TenantID, container domain.ContainerID) ([]domain.Grant, error)
+
+func (*Authorizer) RegisterSchema(ctx context.Context, s domain.Schema) error
+
+func (*Authorizer) Revision(ctx context.Context, tenant domain.TenantID) (domain.Revision, error)
+
+func (*Authorizer) Revoke(ctx context.Context, spec domain.GrantSpec) (domain.Revision, error)
+
+type Fragment struct {
+	SQL string
+	Args []any
+}
+
+func New(pool *pgxpool.Pool, cfg authz.Config) (*Authorizer, error)
+
+func Render(r domain.Residual, firstArg int) (Fragment, error)
+
+func RenderPolicy(r domain.Residual) (string, error)

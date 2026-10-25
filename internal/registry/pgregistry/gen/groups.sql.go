@@ -268,6 +268,50 @@ func (q *Queries) GroupsOfPrincipal(ctx context.Context, principalID domain.Prin
 	return items, nil
 }
 
+const liveGroupsOfPrincipal = `-- name: LiveGroupsOfPrincipal :many
+SELECT lgm.group_id FROM iam.live_group_members lgm
+WHERE lgm.principal_id = $1
+ORDER BY lgm.group_id
+`
+
+// The authorization decision's identity question: which groups may this
+// principal's permissions arrive through, right now.
+//
+// It reads iam.live_group_members and not iam.group_members, and that is
+// the whole reason this statement exists separately from
+// GroupsOfPrincipal above. The view is the artifact a consumer's own
+// statement joins when it renders this module's residual, so answering
+// the Go-side question from the same view means there is exactly one
+// definition of "live membership" in SQL. A second copy of the predicate
+// here would be a second thing to keep in step, and the way it would fail
+// is that a deprovisioned principal keeps reading until somebody notices.
+//
+// Postgres inlines the view, so the probe still lands on
+// iam.group_members' (principal_id, group_id) primary key.
+//
+// The deployment's staleness bound is deliberately absent: the view
+// cannot read configuration, and this module's two decision surfaces have
+// to agree about the same principal. See registry.LiveGroupsOf.
+func (q *Queries) LiveGroupsOfPrincipal(ctx context.Context, principalID domain.PrincipalID) ([]domain.GroupID, error) {
+	rows, err := q.db.Query(ctx, liveGroupsOfPrincipal, principalID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []domain.GroupID
+	for rows.Next() {
+		var group_id domain.GroupID
+		if err := rows.Scan(&group_id); err != nil {
+			return nil, err
+		}
+		items = append(items, group_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const pruneClaimGroupMemberships = `-- name: PruneClaimGroupMemberships :exec
 DELETE FROM iam.group_members
 WHERE principal_id = $1

@@ -192,9 +192,8 @@ func theResearcher() scenario.Scenario {
 			of the two reasons was always the one that survived. This is the
 			scenario the no-deny decision improves rather than costs, and it is
 			worth having one of those written down.`,
-		Governs:   []string{"KGS §10.5", "KGS §11.4", "KGS §8.5 #10", "§8.1 service principals"},
-		Status:    scenario.StatusPending,
-		PendingOn: []scenario.Capability{scenario.CapDecide, scenario.CapTupleStore},
+		Governs: []string{"KGS §10.5", "KGS §11.4", "KGS §8.5 #10", "§8.1 service principals"},
+		Status:  scenario.StatusLive,
 		Fixture: scenario.Fixture{
 			Tenant: "household",
 			Kinds:  agentKinds(),
@@ -326,7 +325,7 @@ func markingAwareModelAccess() scenario.Scenario {
 			own side: this leak channel is worse, not merely unchanged.`,
 		Governs:   []string{"KGS §9.5", "KGS §8.5 #15", "§7.3 typed refusal", "markings as flow labels"},
 		Status:    scenario.StatusPending,
-		PendingOn: []scenario.Capability{scenario.CapDecide, scenario.CapTupleStore},
+		PendingOn: []scenario.Capability{scenario.CapMarkingStore},
 		Fixture: scenario.Fixture{
 			Tenant: "lawfirm",
 			Kinds:  agentKinds(),

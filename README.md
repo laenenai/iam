@@ -9,16 +9,35 @@ answerable **inside a SQL query**.
 Authorization for systems where the answer has to filter ten million rows in
 the same statement as a vector search, not one row at a time.
 
-> **Status: pre-1.0, and incomplete in a way worth reading before you adopt
-> it.** The identity registry is implemented and tested against real Postgres.
-> **The decision API (`Decide`, `Predicate`) is not built yet.** Three open
-> findings are tracked in the design document's §17 — F3 (DAG containment), F4
-> (attribute granularity) and F8 (the audit unit on the predicate path) — and
-> two of them can still change the public API: F3, and F1's resolution which
-> depends on it. The count was eight; four closed by deletion and one resolved
-> when the deny mechanism and the third-party engine were removed on
-> 2026-10-23. The `examples/` corpus marks which use cases work today, which
-> are pending, and which the design currently cannot express at all.
+> **Status: pre-1.0, and smaller than the design document describes — on
+> purpose.** The identity registry and the authorization layer are both
+> implemented and tested against real Postgres, each with a conformance suite
+> a consumer runs against its own wiring.
+>
+> What exists is **membership on containers, inherited down a tree**: a
+> subject — a principal or a group — holds a permission on a container, and
+> everything the container contains inherits it. `Decide` is the point check.
+> A typed *residual* is the filtered-read surface, which a consumer renders
+> into a restrictive row-level-security policy.
+>
+> What that is **not** is a Zanzibar engine. There are no arbitrary relation
+> tuples, no usersets of usersets, no `X from Y`, no union over relations, no
+> roles as objects, and no bottom-up navigational visibility. Four decisions
+> removed most of what that machinery was for: no deny mechanism (2026-10-23),
+> no third-party engine (2026-10-23), containment is a tree (F3, 2026-10-24),
+> and the consumer's model settled on privacy-by-placement (2026-10-25).
+> `internal/authz`'s package doc names each absence as a decision and says
+> what it costs.
+>
+> **`Predicate`'s filtered-read contract is still unbuilt**, because finding
+> F4 is open and it moves the return shape: either the authority hands back a
+> permitted-*attribute* set the consumer applies — pushing part of the trust
+> boundary into consumer code — or `iam` becomes a query rewriter across three
+> query builders. Two open findings are tracked in the design document's §17:
+> F4, and F8 (the audit unit on the filtered-read path). The count was eight;
+> four closed by deletion and two resolved. The `examples/` corpus marks which
+> use cases run against the real module today, which are pending, and which
+> the design cannot express at all.
 
 ## Install
 
@@ -53,6 +72,97 @@ if err != nil {
 groups, err := reg.GroupsOf(ctx, p.ID, time.Now())
 ```
 
+## Authorization: membership on containers, inherited down a tree
+
+A consumer declares its containment tree once, places its resources in
+containers, and stores one scalar column per row naming the container that row
+lives in. That column is the whole of what it adds to its own schema.
+
+```go
+az, err := iam.NewPostgresAuthorizer(pool, iam.AuthorizerConfig{})
+if err != nil {
+	return err
+}
+
+// The declaration. A kind naming two containment parents is refused
+// outright: the closure a decision reads is keyed on the *container*,
+// which is what keeps it bounded by hierarchy depth rather than by how
+// many resources exist.
+if err := az.RegisterSchema(ctx, iam.Schema{
+	Name:        "cogos",
+	Version:     1,
+	Kinds:       []iam.ContainerKind{
+		{Name: "world"},
+		{Name: "scope", Parents: []string{"world"}},
+		{Name: "topic", Parents: []string{"scope"}},
+	},
+	Permissions: []iam.Permission{"read"},
+}); err != nil {
+	return err
+}
+
+// One grant on a container reaches everything inside it, at one row per
+// share rather than one per resource. The subject may be a group, and
+// then a membership change takes effect with no grant rewritten.
+if _, err := az.Grant(ctx, iam.GrantSpec{
+	TenantID:   tenantID,
+	Container:  scope.ID,
+	Permission: "read",
+	Subject:    iam.GroupSubject(household.ID),
+}); err != nil {
+	return err
+}
+
+// The point check.
+d, err := az.Decide(ctx, iam.Request{
+	TenantID:   tenantID,
+	Principal:  p.ID,
+	Permission: "read",
+	Container:  topic.ID,
+})
+// d.Allowed, d.Reason ("inherited"), d.Via (the grant responsible),
+// d.Depth (how many hops up), d.Revision (the state it was computed at).
+```
+
+### The filtered read is a residual, not a string of SQL
+
+`Filter` returns a typed expression, and a per-backend renderer turns it into
+that backend's query language. SQL text never crosses the port, because a
+consumer holding the string would make a second storage backend a breaking
+change for all of them rather than a new renderer here — which is where OPA's
+partial evaluation and Oso's data filtering both landed. Cassandra is the
+known hard case and it is not a translation problem: CQL filters only on a
+partition key and a clustering prefix, so there the containment key has to
+*be* part of the table's key.
+
+```go
+residual, err := az.Filter(ctx, iam.FilterRequest{
+	TenantID:   tenantID,
+	Principal:  iam.SessionPrincipal(), // a policy is evaluated for every principal
+	Permission: "read",
+	Key:        iam.Key{Qualifier: "tenant_quads", Column: "graph_id"},
+})
+using, err := iam.RenderPostgresPolicy(residual)
+// CREATE POLICY quad_read ON tenant_quads AS RESTRICTIVE USING (<using>);
+```
+
+`AS RESTRICTIVE` is not optional. Postgres OR-s permissive policies together
+and AND-s restrictive ones on top, so a permissive authorization policy is
+OR-ed away by any later permissive policy on the same table — which is how a
+tenant predicate written that way became a measured cross-tenant disclosure in
+this project on 2026-10-23. Restrictive composes with `tenancy`'s restrictive
+tenant predicate on the same table: both in the database, neither widenable,
+and a hand-written statement escapes neither.
+
+The failure mode is **zero rows, never an error**. A session with no principal
+context, or a malformed one, matches nothing and raises nothing — so there is
+no existence oracle and no statement broken instead of filtered.
+
+The role that evaluates the policy needs `USAGE` on the `iam` schema and
+`SELECT` on five relations; `RenderPostgresPolicy`'s doc comment lists them
+and flags the one worth looking at twice, because `iam.principals` carries no
+row-level-security policy of its own yet.
+
 ## There is no deny mechanism
 
 This is the thing to know before adopting it, and it is a decision rather than
@@ -60,7 +170,7 @@ a gap. `iam` has two tiers:
 
 | Tier | Mechanism | Survives |
 |---|---|---|
-| **Discretionary** | relation tuples, usersets, inheritance, default-deny | nothing in particular — it is the everyday shareable, revocable layer, and the only thing that decides |
+| **Discretionary** | grants on containers, group subjects, inheritance down the tree, default-deny | nothing in particular — it is the everyday shareable, revocable layer, and the only thing that decides |
 | **Cryptographic** | a key the deployment does not hold (`escrow`) | the administrator, the operator, a subpoena, a stolen backup, every future policy change |
 
 The decision is `discretionary_allows` and nothing else, which is what makes
@@ -75,7 +185,9 @@ So there are exactly **two honest strengths of "no"**:
   actually asked for.
 - **"Nobody may ever see this, whatever rule ever happens"** → a key the
   deployment does not hold. `iam` records one field, the marking's enforcement
-  class; `keyring` holds the wrapping and `escrow` holds the shares.
+  class — and, today, not even that: markings are unbuilt, so a consumer
+  cannot yet ask this module *why* content is unreadable. `keyring` holds the
+  wrapping and `escrow` holds the shares.
 
 There is nothing in between, and a middle option is not coming.
 
@@ -114,6 +226,7 @@ policy-as-code engine.
 
 - `docs/superpowers/specs/` — the design, including §17's findings register
 - [`examples/`](examples) — 18 declarative use cases with READMEs, and `UNEXPRESSIBLE.md` for what the design cannot currently express and what each gap would cost
+- `internal/authz`'s package doc — what the authorization layer is, and every absence named as a decision
 - [`CHARTER.md`](CHARTER.md) · [`SECURITY.md`](SECURITY.md)
 - `api.txt` — the public surface as a golden file, diffed in CI
 

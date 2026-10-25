@@ -529,3 +529,52 @@ func (r *Registry) inTx(ctx context.Context, fn func(q *gen.Queries) error) erro
 	}
 	return nil
 }
+
+// LiveGroupsOf implements registry.Registry.
+//
+// It answers in two steps, and the split is the point rather than an
+// optimization. The principal's own liveness is evaluated in Go against
+// the caller's asOf, by registry.LiveForDecision — the same function the
+// in-memory adapter uses, so the two adapters cannot disagree about what
+// "live for a decision" means. The membership itself comes from
+// iam.live_group_members, the same view a consumer's own statement joins
+// when it renders this module's residual, so there is exactly one
+// definition of live membership in SQL and no second copy to drift.
+//
+// The view applies its own `now()` as well as the Go check applying asOf,
+// which means a caller passing an asOf in the future gets the stricter of
+// the two answers. That asymmetry is deliberate and it only ever denies
+// more; the port documents it.
+func (r *Registry) LiveGroupsOf(ctx context.Context, p domain.PrincipalID, asOf time.Time) ([]domain.GroupID, error) {
+	principal, err := r.q.PrincipalByID(ctx, p)
+	if err != nil {
+		if errors.Is(mapErr(err), domain.ErrNotFound) {
+			// An unknown principal holds nothing, and says so exactly the
+			// way a known principal with no memberships does. A decision
+			// is not an existence oracle.
+			return []domain.GroupID{}, nil
+		}
+		return nil, mapErr(err)
+	}
+	if !registry.LiveForDecision(toPrincipal(principal), asOf) {
+		return []domain.GroupID{}, nil
+	}
+
+	ids, err := r.q.LiveGroupsOfPrincipal(ctx, p)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	if ids == nil {
+		ids = []domain.GroupID{}
+	}
+	return ids, nil
+}
+
+// GroupByID implements registry.Registry.
+func (r *Registry) GroupByID(ctx context.Context, id domain.GroupID) (domain.Group, error) {
+	row, err := r.q.GroupByID(ctx, id)
+	if err != nil {
+		return domain.Group{}, mapErr(err)
+	}
+	return toGroup(row), nil
+}

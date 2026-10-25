@@ -25,6 +25,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/laenenai/tenancy"
 	"github.com/pressly/goose/v3"
 	"github.com/pressly/goose/v3/lock"
 
@@ -80,14 +81,89 @@ type Applied struct {
 	AppliedAt time.Time
 }
 
+// RLSTables names every `iam` table that carries `tenancy`'s tenant
+// isolation policy, in the order Up asserts them.
+//
+// It is the authorization layer's three tables plus its change log. Each
+// one is read inside a consumer's own statement — the closure and the
+// grants by the joinable fragment, the log by a projection — so each one
+// needs a predicate that holds in a statement this module never sees.
+func RLSTables() []string {
+	return []string{
+		"iam.containers",
+		"iam.container_closure",
+		"iam.grants",
+		"iam.authz_changelog",
+	}
+}
+
+// RLSTablesExemptFromPolicy names the tenant-scoped `iam` tables that
+// carry no row-level-security policy, each with the reason — the shape
+// `tenancy.RegistryTablesExemptFromRLS` uses, and for the same argument:
+// an exemption that is implicit looks exactly like an oversight to the
+// next reader, who then "fixes" it.
+//
+// Both entries are a **stated gap rather than a decision**, and the
+// difference matters. `tenancy` exempts its registry tables because a
+// policy there would stop the resolver reading the row that establishes
+// tenant context — a reason that will never change. These two are exempt
+// because the identity registry's adapter does not establish a tenant
+// session context on any statement, so enabling a policy would make every
+// registry read return nothing. Closing the gap means teaching
+// internal/registry/pgregistry to scope its statements, which this
+// increment does not build.
+//
+// What the gap does and does not cost. Tenant scoping of identity is
+// enforced in Go on every read — a group is resolved within a tenant, an
+// external subject is resolved within a tenant — so the gap is not a
+// missing check; it is a missing *backstop* for a hand-written statement
+// that reaches these two tables directly. The authorization tables, which
+// are the ones a consumer's own statement joins, are covered.
+func RLSTablesExemptFromPolicy() map[string]string {
+	return map[string]string{
+		"iam.principals": "the identity registry's adapter establishes no tenant session context, so a policy " +
+			"keyed on tenancy's tenant GUC would make every registry read return zero rows; tenant scoping of " +
+			"identity is enforced in Go on each read instead. See internal/migrate.RLSTablesExemptFromPolicy",
+		"iam.groups": "the identity registry's adapter establishes no tenant session context, so a policy " +
+			"keyed on tenancy's tenant GUC would make every registry read return zero rows; tenant scoping of " +
+			"identity is enforced in Go on each read instead. See internal/migrate.RLSTablesExemptFromPolicy",
+	}
+}
+
 // Up applies every pending migration embedded in migrations.FS to pool, in
-// order. Calling Up again against an already-current database applies
-// nothing and returns nil.
+// order, and then asserts `tenancy`'s tenant isolation policy on the
+// tables in RLSTables. Calling Up again against an already-current
+// database applies no migration, re-asserts the policies, and returns nil.
 //
 // Up takes a Postgres advisory lock (see lockKey) for the duration of the
 // run and releases it before returning, so concurrent callers — goroutines
 // in one process or several separate processes — serialize rather than
 // race.
+//
+// # Why the policy is asserted here rather than written in a migration
+//
+// Two reasons, both learned rather than argued.
+//
+// A tenant predicate written by hand is a second copy of a convention
+// that already exists, and on 2026-10-23 the version of it every module
+// had shipped was measured as a cross-tenant disclosure: a *permissive*
+// tenant policy is OR-ed away by any later permissive policy on the same
+// table, so a tenant seeing its own single row saw two the moment a
+// second policy existed. tenancy.EnableRLS creates the predicate AS
+// RESTRICTIVE with a permissive companion for it to AND against, which is
+// the shape that cannot be widened — and it is one implementation, in one
+// place, rather than per-module SQL that drifts.
+//
+// And EnableRLS is idempotent by design precisely so that it can be
+// re-asserted on every Up: it drops and recreates the policy by name
+// inside one transaction, so it both tolerates a re-run and *repairs* a
+// policy whose predicate has drifted. A CREATE POLICY in a one-shot
+// migration cannot do the second thing, and declarative state asserted
+// exactly once is the trap a reconciler exists to close.
+//
+// The cost is honest and small: Up now does something after goose
+// finishes, so "the schema is what the migrations say" is no longer the
+// whole truth about this database. RLSTables is the rest of it.
 func Up(ctx context.Context, pool *pgxpool.Pool) error {
 	provider, closeDB, err := newProvider(pool)
 	if err != nil {
@@ -97,6 +173,16 @@ func Up(ctx context.Context, pool *pgxpool.Pool) error {
 
 	if _, err := provider.Up(ctx); err != nil {
 		return classify("apply migrations", err)
+	}
+
+	if err := tenancy.EnableRLS(ctx, pool, RLSTables()...); err != nil {
+		// tenancy's own error is already in this project's taxonomy
+		// (ErrUnavailable / ErrInvalidConfig from its domain package) and
+		// already states its reason without forwarding Postgres text, but
+		// it wraps *its* sentinels, not ours — a caller comparing against
+		// iam's ErrInvalidConfig would not match. So it is rewrapped, and
+		// tenancy's message is kept because it names the table.
+		return fmt.Errorf("%w: migrate: assert tenant isolation policy: %w", domain.ErrInvalidConfig, err)
 	}
 	return nil
 }

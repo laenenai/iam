@@ -94,3 +94,19 @@ func NewGroupID(clock Clock) GroupID { return newID[GroupID](clock) }
 
 // ParseGroupID parses s as a GroupID, rejecting malformed input.
 func ParseGroupID(s string) (GroupID, error) { return parseID[GroupID]("group id", s) }
+
+// ContainerID identifies a container: the unit a grant is written on and
+// the unit containment inherits down. It is the scalar containment key
+// finding F1 froze — one column on a consumer's row, naming the container
+// that row lives in — and it is a minted ULID for the same reason every
+// other id here is: a container's identity must not be a function of a
+// consumer's own key, or renaming a folder would rewrite every grant.
+type ContainerID string
+
+// NewContainerID returns a fresh ContainerID minted from clock.
+func NewContainerID(clock Clock) ContainerID { return newID[ContainerID](clock) }
+
+// ParseContainerID parses s as a ContainerID, rejecting malformed input.
+func ParseContainerID(s string) (ContainerID, error) {
+	return parseID[ContainerID]("container id", s)
+}

@@ -85,6 +85,13 @@ var (
 // Otherwise it starts a container once per test binary run via
 // testcontainers-go.
 //
+// It takes testing.TB rather than *testing.T so that a benchmark can have
+// its own migrated database too, with the same teardown. A benchmark that
+// built one by hand would be a second copy of this logic, and the half it
+// would get wrong is the cleanup — which is how a long-lived
+// TEST_DATABASE_URL server accumulates orphaned databases nothing ever
+// drops.
+//
 // Start skips the test under testing.Short() — the single chokepoint for
 // that convention, so every database test inherits it without its author
 // remembering a gate of their own. -short wins even when
@@ -92,7 +99,7 @@ var (
 // since the convention is "no databases in the inner loop", period. The
 // skip happens before any container or database work, so a skipped test
 // pays no setup cost.
-func Start(t *testing.T, opts ...Option) *DB {
+func Start(t testing.TB, opts ...Option) *DB {
 	t.Helper()
 
 	if testing.Short() {
@@ -174,7 +181,7 @@ func openPool(ctx context.Context, serverDSN, dbName string) (*pgxpool.Pool, err
 // a failure here happens during cleanup, after the test's own assertions,
 // and masking the test's real result with a teardown error is worse than a
 // logged leak.
-func dropDatabase(serverDSN, dbName string, t *testing.T) {
+func dropDatabase(serverDSN, dbName string, t testing.TB) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), adminConnectTimeout)
 	defer cancel()
@@ -194,7 +201,7 @@ func dropDatabase(serverDSN, dbName string, t *testing.T) {
 // adminDSN returns a DSN for the server these tests run against:
 // TEST_DATABASE_URL when set, otherwise a container started once per test
 // binary run.
-func adminDSN(ctx context.Context, t *testing.T) string {
+func adminDSN(ctx context.Context, t testing.TB) string {
 	t.Helper()
 	if dsn := os.Getenv("TEST_DATABASE_URL"); dsn != "" {
 		return dsn

@@ -10,6 +10,7 @@ import (
 	"github.com/laenenai/iam"
 	"github.com/laenenai/iam/examples"
 	"github.com/laenenai/iam/examples/scenario"
+	"github.com/laenenai/iam/iamtest"
 )
 
 // updateLedger rewrites examples/pending.txt instead of checking it:
@@ -26,11 +27,19 @@ const (
 	corpusMaxAgentRunTTL = 24 * time.Hour
 )
 
-// newRegistry is the per-scenario factory. The corpus runs against the
-// in-memory registry here; the same call with iam.NewPostgresRegistry is
-// how it runs against the deployment adapter, and the same call from a
-// consumer's own test package is how CAS runs it against its own wiring.
-func newRegistry(t *testing.T) iam.Registry {
+// newAuthority is the per-scenario factory: the identity registry a
+// fixture's principals and groups are materialized against, and the
+// authorizer its containers and grants are written to. The corpus runs
+// against the in-memory adapters here; the same call with
+// iam.NewPostgresRegistry and iam.NewPostgresAuthorizer is how it runs
+// against the deployment adapters, and the same call from a consumer's own
+// test package is how CAS runs it against its own wiring.
+//
+// One factory returns both halves because the authorizer composes the
+// registry rather than keeping its own copy of membership: a decision
+// joins live group membership, so two independently supplied halves would
+// be two different answers to the same question.
+func newAuthority(t *testing.T) iamtest.Authority {
 	t.Helper()
 	reg, err := iam.NewMemoryRegistry(iam.RegistryConfig{
 		StalenessBound: corpusStalenessBound,
@@ -39,11 +48,15 @@ func newRegistry(t *testing.T) iam.Registry {
 	if err != nil {
 		t.Fatalf("NewMemoryRegistry: %v", err)
 	}
-	return reg
+	authorizer, err := iam.NewMemoryAuthorizer(reg, iam.AuthorizerConfig{})
+	if err != nil {
+		t.Fatalf("NewMemoryAuthorizer: %v", err)
+	}
+	return iamtest.Authority{Registry: reg, Authorizer: authorizer}
 }
 
 func TestCorpus(t *testing.T) {
-	scenario.RunCorpus(t, examples.All(), newRegistry)
+	scenario.RunCorpus(t, examples.All(), newAuthority)
 }
 
 // TestLedger keeps examples/pending.txt in step with the corpus. It is the

@@ -155,9 +155,8 @@ func personalInvoice() scenario.Scenario {
 			default for a new episode's facts. The four denials below are now
 			ordinary default-deny, they are the same four denials, and they are
 			liftable by him at any time — which is what he actually wanted.`,
-		Governs:   []string{"KGS §1", "KGS §9.2", "KGS §9.3", "§8.2 form 3", "no-deny anti-goal"},
-		Status:    scenario.StatusPending,
-		PendingOn: []scenario.Capability{scenario.CapDecide, scenario.CapTupleStore},
+		Governs: []string{"KGS §1", "KGS §9.2", "KGS §9.3", "§8.2 form 3", "no-deny anti-goal"},
+		Status:  scenario.StatusLive,
 		Fixture: scenario.Fixture{
 			Tenant: "household",
 			Kinds:  graphKinds(),
@@ -283,9 +282,8 @@ func sameSupplierTwice() scenario.Scenario {
 			absolutes that neither of them could lift. Two per-episode grants do
 			the same job here, because the property that makes dedup safe was
 			never the deny. It was derived existence.`,
-		Governs:   []string{"KGS §1", "KGS §7.3", "KGS §8.5 #1 #2 #4 #5", "KGS §9.2"},
-		Status:    scenario.StatusPending,
-		PendingOn: []scenario.Capability{scenario.CapDecide, scenario.CapTupleStore},
+		Governs: []string{"KGS §1", "KGS §7.3", "KGS §8.5 #1 #2 #4 #5", "KGS §9.2"},
+		Status:  scenario.StatusLive,
 		Fixture: scenario.Fixture{
 			Tenant: "household",
 			Kinds:  graphKinds(),
@@ -390,9 +388,8 @@ func daughtersSchoolDocument() scenario.Scenario {
 			the mandatory tier was carrying: not sharing, not derived existence,
 			but only the case where a container is shared and one thing inside it
 			is not.`,
-		Governs:   []string{"KGS §1", "KGS §7.3", "§8.2 form 3"},
-		Status:    scenario.StatusPending,
-		PendingOn: []scenario.Capability{scenario.CapDecide, scenario.CapTupleStore},
+		Governs: []string{"KGS §1", "KGS §7.3", "§8.2 form 3"},
+		Status:  scenario.StatusLive,
 		Fixture: scenario.Fixture{
 			Tenant: "household",
 			Kinds:  graphKinds(),
@@ -500,7 +497,7 @@ func theWill() scenario.Scenario {
 			now has one entry that survives an administrator and it is this one.`,
 		Governs:   []string{"§7.3 cryptographic tier", "§7 tier table", "§5 decided constraints", "KGS §8.3"},
 		Status:    scenario.StatusPending,
-		PendingOn: []scenario.Capability{scenario.CapDecide, scenario.CapTupleStore},
+		PendingOn: []scenario.Capability{scenario.CapMarkingStore},
 		Fixture: scenario.Fixture{
 			Tenant: "household",
 			Kinds:  graphKinds(),

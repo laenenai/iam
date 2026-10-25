@@ -103,3 +103,90 @@ var ErrIssuerNotRegistered = errors.New("issuer not registered")
 // principals (anti-goal A1), and this is the error it gets if something
 // asks it to verify a user's token anyway.
 var ErrCapabilityUnconfigured = errors.New("capability unconfigured")
+
+// --- The authorization layer ------------------------------------------
+//
+// Eight sentinels, and the shape of the set is itself a statement: seven
+// of them are well-formedness refusals asked before any state is
+// consulted, the eighth reports a stored tree that is not one, and none of
+// them is a denial. A denial is not an error here. Decide
+// returns a Decision whose Allowed is false, because default-deny is the
+// ordinary answer to most questions a consumer asks and an error-shaped
+// deny trains callers to treat refusals as outages.
+
+// ErrInvalidSchema indicates a registered schema is not well formed: no
+// kinds, no permissions, a duplicate or empty name, a kind inside an
+// undeclared kind, or a containment cycle. It is a well-formedness error
+// asked before any state is consulted.
+var ErrInvalidSchema = errors.New("invalid schema")
+
+// ErrMultipleContainmentParents indicates a schema declared a container
+// kind with more than one containment parent, which this module refuses
+// outright.
+//
+// It has its own sentinel, separate from ErrInvalidSchema, because it is
+// not a typo: it is a consumer whose data model is a DAG meeting a module
+// whose closure is a tree, and the caller that hits it needs to branch —
+// to redesign its containment, or to reopen design finding F3 — rather
+// than to fix a field. Design §9.2's ancestry closure is "bounded by
+// hierarchy depth" only under one parent per container; F3's spike
+// measured the alternative at 106,495,540 rows and 10.9 GB where the
+// container-keyed closure was 433,063 rows and 37 MB, and §8.4 used to
+// accept the declaration and hand the consumer the first of those with no
+// error at all.
+var ErrMultipleContainmentParents = errors.New("containment declares more than one parent")
+
+// ErrSchemaNotRegistered indicates no schema in this process declares the
+// container kind or permission the call names. It is fail-closed on
+// purpose: a consumer that has not registered its schema cannot create a
+// container or write a grant, so a deployment that forgot the
+// registration call fails at its first write rather than at its first
+// decision.
+var ErrSchemaNotRegistered = errors.New("schema not registered")
+
+// ErrInvalidContainer indicates a container spec does not describe a
+// creatable container: no tenant, no kind, a kind the tenant's schema
+// does not declare, or a parent that is in another tenant or is of the
+// wrong kind for the declared edge.
+var ErrInvalidContainer = errors.New("invalid container")
+
+// ErrInvalidGrant indicates a grant spec does not describe a writable
+// grant: no tenant, no container, no permission, or a subject naming
+// neither a principal nor a group.
+var ErrInvalidGrant = errors.New("invalid grant")
+
+// ErrInvalidRequest indicates a decision request is not answerable: no
+// tenant, no principal, no permission, or no container. It is distinct
+// from a denial, which is a Decision and not an error.
+var ErrInvalidRequest = errors.New("invalid request")
+
+// ErrContainmentCycle indicates the stored containment graph does not
+// terminate: a container's parent chain either revisits a container or
+// runs deeper than domain.MaxContainmentDepth. It should be unreachable —
+// the tree is enforced by a single parent column and by a cycle check on
+// every create — and it exists because the alternative to an error here
+// is an authorization decision that never returns.
+var ErrContainmentCycle = errors.New("containment cycle")
+
+// ErrInvalidResidual indicates a residual, or a node of one, is not well
+// formed: a key that is not a plain column name, a tenant term naming no
+// tenant, an authorization term naming no principal or no permission, or a
+// residual with no expression at all.
+//
+// It is a refusal and never a degraded render. The two things a renderer
+// could otherwise do with a malformed term are to match nothing, which
+// domain.None already says explicitly, or to match everything — and the
+// second is the whole authorization layer failing open on a zero value.
+var ErrInvalidResidual = errors.New("invalid residual")
+
+// ErrUnrenderable indicates a backend's renderer cannot express a residual
+// in that backend's query language. It is not a defect in the residual.
+//
+// The known case is CQL: Cassandra can filter only on a partition key and
+// a prefix of the clustering columns, so "this row's container is one the
+// principal may read" is renderable there only if the containment key is
+// part of the table's key — a data-modelling constraint on the consumer
+// rather than a translation problem. Every render path returns an error so
+// that such a backend can refuse honestly instead of emitting something
+// that filters less than it claims.
+var ErrUnrenderable = errors.New("residual not renderable by this backend")

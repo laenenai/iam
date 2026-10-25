@@ -60,6 +60,23 @@ tripwire will not say so, and whoever lands it has to remember U1 and U4 by
 hand. The capability constant `CapAttributePredicate` exists and names the
 right thing; nothing pends on it.
 
+**And the other half of that hole has now been paid for once.** The
+tripwire also used to read only the facade's own section of `api.txt`,
+which meant it could not see a capability that arrived as a method on a
+port the facade re-exports by alias. That is exactly how `Decide` arrived,
+and fourteen pending scenarios stayed pending with nothing failing. It now
+reads `internal/authz` and `internal/domain` as well. Neither fix helps a
+scenario that is `unexpressible`, so the paragraph above still stands.
+
+**U3 and U5 do not reach the real module at all, and the refusals are the
+point.** `scenario.Realize` translates a fixture into real containers and
+grants, and it refuses both of these: U3's fact has three containment
+paths where `iam` takes one parent per container, and U5's containment edge
+is a predicate over data where a container's parent is set at creation.
+Those refusals are typed (`ErrNotTranslatable`) and printed when the corpus
+runs, so what this directory asserts about the design is now also asserted
+against the implementation.
+
 ## Two pairs worth reading together
 
 **U3 against [D7](../discretionary/).** The same requirement — find a deep

@@ -19,9 +19,18 @@ it used to read "a mandatory control that can be defeated".
 (`keyring`) or share custody (`escrow`). Tenant/pool routing and connection
 handling (`tenancy`). Audit storage (`audit`). Any consumer's resource model —
 those are *registered*, never built in. A third-party authorization engine:
-`iam` owns its tuples and closures in Postgres, because `Predicate` has to
-return a fragment the consumer joins and an engine that answers over its own
-store cannot produce one (design §10).
+`iam` owns its grants and closures in Postgres, because the filtered-read
+answer has to be something the consumer applies inside its own query and an
+engine that answers over its own store cannot produce one (design §10).
+
+Refined 2026-10-25, when that answer was built: what `iam` returns is a typed
+**residual**, not a fragment, and a per-backend renderer turns it into SQL.
+The boundary moves accordingly — **a backend's query language belongs in a
+renderer beside its adapter, never across the port.** SQL text across the port
+would give every consumer a dependency on the string, so a second storage
+backend becomes a breaking change for all of them rather than a new renderer
+here. `iam` may hold a renderer per backend it supports; it may not hold a
+consumer's query builder.
 
 ## Enforced boundary
 
@@ -36,8 +45,8 @@ A module is created when a **second** consumer needs it, not in anticipation.
 
 | Consumer | State |
 |---|---|
-| cas | pending — grants become tuples; its denials have no mechanism and need a per-denial decision (design §12) |
-| kgs | pending — phase 0 dependency |
+| cas | pending — grants become grants on containers, one per share rather than one per resource; its denials have no mechanism and need a per-denial decision (design §12). Its columnar case still has no answer: finding F4 is open, so nothing here restricts a field |
+| kgs / cogos | pending — privacy by placement in its named-graph tree maps directly onto containers, and the rule it needs ("which graphs may this principal read") is a restrictive policy over the rendered residual. Its phase-0 dependency on the *full* projection protocol is not met: the change log and its cursor exist, and nothing is built on them |
 | acre | pending — no code yet; adopts from birth |
 
 ## Design

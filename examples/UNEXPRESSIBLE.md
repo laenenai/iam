@@ -522,12 +522,18 @@ One item this file asks for rather than applies:
 And two this file asks for because of U3's withdrawal:
 
 7. **The single-path assumption should be enforced where it is made, not
-   assumed where it is relied on.** *Asked, and §15 now carries it.* With F3
-   closed on the strength of "every specified consumer's containment is a
-   tree", nothing in §8.4's schema registration rejects a consumer that
-   declares otherwise — it would get an ancestry closure sized by resource
-   cardinality and no error. The corpus already owns the check
-   (`scenario.Paths`, `scenario.DirectPath`), so this is wiring.
+   assumed where it is relied on.** *Asked, and **landed**.* The ask was
+   that §8.4's schema registration reject a consumer declaring multi-path
+   containment rather than silently handing it an ancestry closure sized by
+   resource cardinality. It now does: a schema giving a container kind two
+   or more containment parents is refused with
+   `iam.ErrMultipleContainmentParents`, and the refusal carries F3's own
+   measurement — 106,495,540 rows and 10.9 GB keyed on the resource against
+   433,063 rows and 37 MB keyed on the container. The corpus's own check
+   (`scenario.Paths`, `scenario.DirectPath`) is what
+   `scenario.Realize` applies before it writes a single container, so a
+   multi-path fixture is refused on the corpus's side too — which is why
+   U3's scenario cannot reach the real module and says so when it runs.
 
 8. **`scenario.Visible` should stop being built on `DirectPath`.** *Asked,
    not applied.* The oracle computes a principal's navigable set by taking
@@ -539,3 +545,67 @@ And two this file asks for because of U3's withdrawal:
    again, and it is implementation work with a design question in it rather
    than a documentation change, so it is named here instead of being done
    quietly.
+
+And two this file did not expect, found by running the corpus against the
+real module rather than against its own oracle. Neither is a requirement
+the design cannot express, so neither is a scenario here; both are
+`iam.Authorizer` being narrower than §8.2 as the corpus writes it, and
+they are recorded here because this is where the module's gaps are kept.
+
+9. **`iam.ContainerKind` could not declare a kind nested inside itself.**
+   *Found 2026-10-25. **Resolved 2026-10-25**, by being built.* A kind
+   declared at most one parent kind, was refused if it named itself as its
+   parent, and two parent kinds were refused as finding F3's DAG. Together
+   those meant a `folder` inside a `folder` with a `folder` at the root had
+   no declaration at all — an ordinary Drive hierarchy, which is design
+   goal 4's own example, and the shape of both D2 and D7 as well as of any
+   consumer with user-created nesting.
+
+   What closed it is `ContainerKind.Nestable`: recursion declared as a flag
+   rather than as a self-reference. The syntax does not offer the choice
+   on purpose, because `Parents: ["tenant", "folder"]` on kind `folder`
+   reads equally as "in a tenant *or* in a folder" and "in a tenant *and*
+   in a folder", and only the second is the DAG F3 refuses — so `Parents`
+   stays the one kind above, `Nestable` is the recursion, and a kind
+   naming itself in `Parents` is now refused with a message pointing at
+   the flag. `AllowsRoot`, `AllowsParentKind` and `PermittedParentKinds`
+   are what a caller reads instead of reasoning about the fields.
+
+   It is recorded here rather than deleted because the route matters: the
+   corpus found this by being run against the real module instead of
+   against its own oracle, which is the whole argument for the
+   differential in `scenario/harness.go`. `scenario.Realize` declared a
+   container kind per containment depth to work around it for one commit;
+   it now declares each fixture kind as itself, with `Nestable` read off
+   the containment graph.
+
+   Two shapes are still refused by the translation, and only one of them
+   is a finding. Two *distinct* kinds above one kind is a kind-level DAG
+   and `ErrMultipleContainmentParents` is the right answer to it. A kind
+   that is both a root and declared inside another kind has no declaration
+   either, since `AllowsRoot` is "declares no parent" — the containment is
+   still a tree, so that is a real limit rather than F3, and no fixture
+   here is that shape. Both are refused with `ErrNotTranslatable` and a
+   message that says which of the two it is.
+
+10. **`iam` inherits every permission down the whole container tree, where
+    §8.2's form 3 is declared per relation.** *Found 2026-10-25. Not a
+    gap: a decision, with its cost named in `internal/authz`'s package
+    doc.* There is one containment closure and no per-permission
+    inheritance, so a grant on a container reaches every descendant for
+    every permission. The corpus's Drive schema says something narrower:
+    `viewer` and `editor` inherit from the parent and `owner` does not, so
+    a folder's owner is declared not to own the documents inside it.
+
+    No expectation row in the corpus distinguishes the two, because no row
+    asks a non-inheriting permission about a nested object — and that is
+    luck rather than design, so it is guarded rather than relied on.
+    `scenario.Realize`'s `checkInheritanceDeclared` refuses to report an
+    allow that `iam`'s closure carried further than the fixture's schema
+    says the relation travels: the first row that would distinguish the
+    two models fails loudly, naming both of them, instead of quietly
+    agreeing. A divergence between the model a consumer reads in a schema
+    and the model the module evaluates is the most expensive kind of
+    authorization bug there is, and the only acceptable version of
+    "nothing exercises it yet" is one that fails the moment something
+    does.
