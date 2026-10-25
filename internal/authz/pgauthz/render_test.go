@@ -65,9 +65,9 @@ func TestThePolicyRenderingHasNoCastOnThePrincipal(t *testing.T) {
 	// reason tenancy records for its own: a module rename must not be able
 	// to move it, because a policy that no longer matches does not fail —
 	// it stops filtering.
-	for _, fragment := range []string{"laenenai", "iam/internal", "github.com"} {
-		if strings.Contains(authz.PrincipalGUC, fragment) {
-			t.Errorf("PrincipalGUC = %q contains %q, so a module path rename could move it", authz.PrincipalGUC, fragment)
+	for _, modulePath := range []string{"laenenai", "iam/internal", "github.com"} {
+		if strings.Contains(authz.PrincipalGUC, modulePath) {
+			t.Errorf("PrincipalGUC = %q contains %q, so a module path rename could move it", authz.PrincipalGUC, modulePath)
 		}
 	}
 	if authz.PrincipalGUC != "app.principal_id" {
