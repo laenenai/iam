@@ -57,7 +57,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"strings"
 	"sync"
 
 	"github.com/jackc/pgx/v5"
@@ -243,10 +242,17 @@ func (a *Authorizer) CreateContainer(ctx context.Context, spec domain.ContainerS
 		return domain.Container{}, fmt.Errorf("%w: no registered schema declares container kind %q", domain.ErrSchemaNotRegistered, spec.Kind)
 	}
 	if spec.Parent == "" && !kind.AllowsRoot() {
-		return domain.Container{}, fmt.Errorf("%w: kind %q is declared inside %s, so it cannot be a root",
-			domain.ErrInvalidContainer, spec.Kind, strings.Join(kind.PermittedParentKinds(), " or "))
+		return domain.Container{}, fmt.Errorf("%w: kind %q may live in %s, so it cannot be a root",
+			domain.ErrInvalidContainer, spec.Kind, authz.PermittedOrNothing(kind))
+	}
+	if spec.Parent != "" && !wellFormedContainer(spec.Parent) {
+		return domain.Container{}, notFoundContainer(spec.Parent)
 	}
 
+	// Minted after every refusal above, so a rejected call does not burn
+	// an id. Nothing breaks if one is burned — ids are not a scarce
+	// resource and nothing is sequential — but an id that exists in no row
+	// is a thing a reader of the logs has to rule out.
 	now := domain.Canonical(a.cfg.Clock.Now())
 	container := domain.Container{
 		ID:        domain.NewContainerID(a.cfg.Clock),
@@ -255,10 +261,6 @@ func (a *Authorizer) CreateContainer(ctx context.Context, spec domain.ContainerS
 		Parent:    spec.Parent,
 		Label:     spec.Label,
 		CreatedAt: now,
-	}
-
-	if spec.Parent != "" && !wellFormedContainer(spec.Parent) {
-		return domain.Container{}, notFoundContainer(spec.Parent)
 	}
 
 	err := a.write(ctx, spec.TenantID, func(q *gen.Queries) error {
@@ -270,7 +272,7 @@ func (a *Authorizer) CreateContainer(ctx context.Context, spec domain.ContainerS
 					// policy has already made it unreadable, so this
 					// error is the same one either way. Telling the two
 					// apart would be a cross-tenant existence oracle.
-					return fmt.Errorf("%w: container %s", domain.ErrNotFound, spec.Parent)
+					return notFoundContainer(spec.Parent)
 				}
 				return mapErr(err)
 			}

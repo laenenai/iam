@@ -144,8 +144,8 @@ func (m *Memory) CreateContainer(ctx context.Context, spec domain.ContainerSpec)
 
 	switch {
 	case spec.Parent == "" && !kind.AllowsRoot():
-		return domain.Container{}, fmt.Errorf("%w: kind %q is declared inside %s, so it cannot be a root",
-			domain.ErrInvalidContainer, spec.Kind, strings.Join(kind.PermittedParentKinds(), " or "))
+		return domain.Container{}, fmt.Errorf("%w: kind %q may live in %s, so it cannot be a root",
+			domain.ErrInvalidContainer, spec.Kind, PermittedOrNothing(kind))
 	case spec.Parent != "":
 		parent, ok := m.containers[spec.Parent]
 		if !ok || parent.TenantID != spec.TenantID {
