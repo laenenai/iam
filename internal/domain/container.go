@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -205,8 +206,9 @@ func (s Schema) Validate() error {
 
 	seenPermission := make(map[Permission]struct{}, len(s.Permissions))
 	for _, p := range s.Permissions {
-		if strings.TrimSpace(string(p)) == "" {
-			return fmt.Errorf("%w: schema %q declares an empty permission", ErrInvalidSchema, s.Name)
+		if !ValidPermissionName(p) {
+			return fmt.Errorf("%w: schema %q declares permission %q, which is not a plain name (%s)",
+				ErrInvalidSchema, s.Name, p, permissionNameRule)
 		}
 		if _, dup := seenPermission[p]; dup {
 			return fmt.Errorf("%w: schema %q declares permission %q twice", ErrInvalidSchema, s.Name, p)
@@ -296,6 +298,29 @@ func (k ContainerKind) ParentKind() (string, bool) {
 		return k.Parents[0], true
 	}
 	return "", false
+}
+
+// permissionNamePattern is the shape a permission name must have, and
+// permissionNameRule says it in words for the error message.
+//
+// It is narrower than "any non-empty string", and the narrowing is not
+// tidiness. A permission is written as a literal into the text of a
+// row-level-security policy when a consumer renders the residual for one —
+// that is the deployment shape `cogos` chose — so a permission containing
+// a quote would be a permission that either cannot be rendered or, in a
+// renderer that forgot to quote, is an injection into policy text. Refusing
+// it at registration means no residual can ever carry one, which is a
+// cheaper guarantee than a correct quoting function nobody can forget to
+// call.
+var (
+	permissionNamePattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.:-]{0,63}$`)
+	permissionNameRule    = "a letter, digit or underscore followed by up to 63 of those plus . : and -"
+)
+
+// ValidPermissionName reports whether p is a permission name this module
+// will accept. See permissionNamePattern for why the set is restricted.
+func ValidPermissionName(p Permission) bool {
+	return permissionNamePattern.MatchString(string(p))
 }
 
 // MaxContainmentDepth bounds how deep a containment tree may go. Anti-goal

@@ -409,14 +409,8 @@ func (q *Queries) HeadRevision(ctx context.Context, tenantID domain.TenantID) (i
 	return revision, err
 }
 
-const insertClosure = `-- name: InsertClosure :exec
+const insertClosureFromParent = `-- name: InsertClosureFromParent :exec
 INSERT INTO iam.container_closure (tenant_id, container_id, ancestor_id, depth)
-SELECT
-    $1 AS tenant_id,
-    $2 AS container_id,
-    $2 AS ancestor_id,
-    0 AS depth
-UNION ALL
 SELECT
     $1 AS tenant_id,
     $2 AS container_id,
@@ -426,26 +420,52 @@ FROM iam.container_closure cc
 WHERE cc.container_id = $3
 `
 
-type InsertClosureParams struct {
+type InsertClosureFromParentParams struct {
 	TenantID    domain.TenantID
 	ContainerID domain.ContainerID
 	ParentID    domain.ContainerID
 }
 
-// The whole of closure maintenance, in one statement, at container
-// creation.
+// The rest of closure maintenance: copy the parent's own closure down one
+// level. The work is proportional to the *depth* of the tree and never to how
+// many resources live in it, which is the whole reason the closure is keyed
+// on the container.
 //
-// The first branch is the reflexive row: a container contains itself at
-// depth 0, which is what lets a decision ask one question instead of two
-// (see db/migrations/00003_authorization.sql). The second copies the
-// parent's own closure down one level — so the work is proportional to the
-// *depth* of the tree, never to how many resources live in it, which is the
-// whole reason the closure is keyed on the container.
+// It is a separate statement from InsertClosureSelf, rather than one
+// statement with a nullable parent, and the reason is worth recording because
+// the combined version was written first. A nullable parent parameter
+// compared against iam.ulid — a DOMAIN over text with a format CHECK — makes
+// the empty string a domain-constraint violation rather than a comparison
+// that matches nothing, so creating a root container would raise. The ways
+// out were to compare as text, which gives up the index on a table that
+// grows with containers times depth, or this: the caller runs the second
+// statement only when there is a parent, and the parameter is never null.
+func (q *Queries) InsertClosureFromParent(ctx context.Context, arg InsertClosureFromParentParams) error {
+	_, err := q.db.Exec(ctx, insertClosureFromParent, arg.TenantID, arg.ContainerID, arg.ParentID)
+	return err
+}
+
+const insertClosureSelf = `-- name: InsertClosureSelf :exec
+INSERT INTO iam.container_closure (tenant_id, container_id, ancestor_id, depth)
+VALUES ($1, $2, $2, 0)
+`
+
+type InsertClosureSelfParams struct {
+	TenantID    domain.TenantID
+	ContainerID domain.ContainerID
+}
+
+// The reflexive closure row: a container contains itself at depth 0.
 //
-// A root container has no parent, the second branch selects nothing, and
-// the statement writes exactly one row.
-func (q *Queries) InsertClosure(ctx context.Context, arg InsertClosureParams) error {
-	_, err := q.db.Exec(ctx, insertClosure, arg.TenantID, arg.ContainerID, arg.ParentID)
+// It is not padding. Without it a decision is a union of two questions —
+// "is there a grant on this container" OR "is there a grant on one of its
+// ancestors" — and the residual a consumer ANDs into its own policy becomes
+// two EXISTS clauses that have to stay in step with each other inside
+// somebody else's policy text. With it, "the container itself" is depth 0
+// and the whole decision is one join against one table. It costs one row per
+// container.
+func (q *Queries) InsertClosureSelf(ctx context.Context, arg InsertClosureSelfParams) error {
+	_, err := q.db.Exec(ctx, insertClosureSelf, arg.TenantID, arg.ContainerID)
 	return err
 }
 

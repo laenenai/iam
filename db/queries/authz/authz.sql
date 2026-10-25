@@ -32,33 +32,42 @@ RETURNING *;
 SELECT * FROM iam.containers
 WHERE id = sqlc.arg(id) AND tenant_id = sqlc.arg(tenant_id);
 
--- name: InsertClosure :exec
--- The whole of closure maintenance, in one statement, at container
--- creation.
+-- name: InsertClosureSelf :exec
+-- The reflexive closure row: a container contains itself at depth 0.
 --
--- The first branch is the reflexive row: a container contains itself at
--- depth 0, which is what lets a decision ask one question instead of two
--- (see db/migrations/00003_authorization.sql). The second copies the
--- parent's own closure down one level — so the work is proportional to the
--- *depth* of the tree, never to how many resources live in it, which is the
--- whole reason the closure is keyed on the container.
---
--- A root container has no parent, the second branch selects nothing, and
--- the statement writes exactly one row.
+-- It is not padding. Without it a decision is a union of two questions —
+-- "is there a grant on this container" OR "is there a grant on one of its
+-- ancestors" — and the residual a consumer ANDs into its own policy becomes
+-- two EXISTS clauses that have to stay in step with each other inside
+-- somebody else's policy text. With it, "the container itself" is depth 0
+-- and the whole decision is one join against one table. It costs one row per
+-- container.
 INSERT INTO iam.container_closure (tenant_id, container_id, ancestor_id, depth)
-SELECT
-    sqlc.arg(tenant_id) AS tenant_id,
-    sqlc.arg(container_id) AS container_id,
-    sqlc.arg(container_id) AS ancestor_id,
-    0 AS depth
-UNION ALL
+VALUES (sqlc.arg(tenant_id), sqlc.arg(container_id), sqlc.arg(container_id), 0);
+
+-- name: InsertClosureFromParent :exec
+-- The rest of closure maintenance: copy the parent's own closure down one
+-- level. The work is proportional to the *depth* of the tree and never to how
+-- many resources live in it, which is the whole reason the closure is keyed
+-- on the container.
+--
+-- It is a separate statement from InsertClosureSelf, rather than one
+-- statement with a nullable parent, and the reason is worth recording because
+-- the combined version was written first. A nullable parent parameter
+-- compared against iam.ulid — a DOMAIN over text with a format CHECK — makes
+-- the empty string a domain-constraint violation rather than a comparison
+-- that matches nothing, so creating a root container would raise. The ways
+-- out were to compare as text, which gives up the index on a table that
+-- grows with containers times depth, or this: the caller runs the second
+-- statement only when there is a parent, and the parameter is never null.
+INSERT INTO iam.container_closure (tenant_id, container_id, ancestor_id, depth)
 SELECT
     sqlc.arg(tenant_id) AS tenant_id,
     sqlc.arg(container_id) AS container_id,
     cc.ancestor_id AS ancestor_id,
     cc.depth + 1 AS depth
 FROM iam.container_closure cc
-WHERE cc.container_id = sqlc.narg(parent_id);
+WHERE cc.container_id = sqlc.arg(parent_id);
 
 -- name: Ancestors :many
 -- The closure read back, nearest first: the container itself at depth 0,

@@ -478,15 +478,7 @@ func (m *Memory) Filter(ctx context.Context, req FilterRequest) (domain.Residual
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	rev := m.revisionLocked(req.TenantID)
-	if !m.permissionDeclaredLocked(req.Permission) {
-		// None, not an error: the failure mode a consumer's policy must
-		// have is zero rows. An error here would break the consumer's
-		// statement and would distinguish "undeclared permission" from
-		// "no rows", which is information about the schema.
-		return denyEverything(rev), nil
-	}
-	return buildResidual(req, rev)
+	return BuildResidual(req, m.revisionLocked(req.TenantID), m.permissionDeclaredLocked(req.Permission))
 }
 
 // Changes implements Authorizer.
@@ -497,7 +489,7 @@ func (m *Memory) Changes(ctx context.Context, tenant domain.TenantID, after doma
 	if tenant == "" {
 		return nil, fmt.Errorf("%w: empty tenant id", domain.ErrInvalidRequest)
 	}
-	limit = normalizeChangeLimit(limit)
+	limit = NormalizeChangeLimit(limit)
 
 	m.mu.RLock()
 	defer m.mu.RUnlock()

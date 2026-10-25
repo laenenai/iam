@@ -376,10 +376,10 @@ const DefaultChangeLimit = 100
 // an old cursor pages rather than materializing an unbounded slice.
 const MaxChangeLimit = 1000
 
-// normalizeChangeLimit applies the two bounds above. It is shared so both
+// NormalizeChangeLimit applies the two bounds above. It is shared so both
 // adapters page identically; a suite that asserted a page size would
 // otherwise be asserting one adapter's arithmetic.
-func normalizeChangeLimit(limit int) int {
+func NormalizeChangeLimit(limit int) int {
 	switch {
 	case limit <= 0:
 		return DefaultChangeLimit
@@ -390,13 +390,23 @@ func normalizeChangeLimit(limit int) int {
 	}
 }
 
-// buildResidual assembles the residual for a validated request. It is
+// BuildResidual assembles the residual for a validated request. It is
 // shared by both adapters, so the expression a consumer gets does not
 // depend on which adapter produced it — the whole point of a typed
-// residual is that it is the same value everywhere, and two adapters
-// each assembling their own would have defeated it at the first
-// divergence.
-func buildResidual(req FilterRequest, rev domain.Revision) (domain.Residual, error) {
+// residual is that it is the same value everywhere, and two adapters each
+// assembling their own would have defeated it at the first divergence.
+//
+// permissionDeclared is the caller's answer to "does any registered schema
+// declare this permission", which only the adapter holding the schemas can
+// answer. When it is false the residual is domain.None: not an error,
+// because the failure mode a consumer's policy must have is zero rows, and
+// an error would both break the consumer's statement and distinguish an
+// undeclared permission from an empty result, which is information about
+// the schema.
+func BuildResidual(req FilterRequest, rev domain.Revision, permissionDeclared bool) (domain.Residual, error) {
+	if !permissionDeclared {
+		return domain.Residual{Revision: rev, Expr: domain.None{}}, nil
+	}
 	terms := make([]domain.Expr, 0, 2)
 	if req.TenantKey != (domain.Key{}) {
 		terms = append(terms, domain.TenantIs{Key: req.TenantKey, Tenant: req.TenantID})
@@ -418,12 +428,4 @@ func buildResidual(req FilterRequest, rev domain.Revision) (domain.Residual, err
 		return domain.Residual{}, err
 	}
 	return residual, nil
-}
-
-// denyEverything is the residual for a request this layer can answer but
-// cannot satisfy — an undeclared permission, most often. It carries the
-// revision it was computed at, because "nothing, as of revision N" is a
-// different and more useful statement than "nothing".
-func denyEverything(rev domain.Revision) domain.Residual {
-	return domain.Residual{Revision: rev, Expr: domain.None{}}
 }
