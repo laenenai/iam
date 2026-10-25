@@ -308,16 +308,24 @@ oracle on every row, first run, which is the strongest statement this
 corpus has ever been able to make.
 
 Two things that differential found are worth knowing even though no row
-exposes them. `iam.ContainerKind` cannot declare a kind nested inside
+exposes either. `iam.ContainerKind` could not declare a kind nested inside
 itself, so a `folder` inside a `folder` with a `folder` at the root — D2
-and D7, an ordinary Drive hierarchy — has no declaration; the translation
-synthesizes a container kind per containment depth to get round it. And
-`iam` inherits *every* permission down the whole container tree, where
-§8.2's form 3 is declared per relation, so this corpus's `owner` is
-declared not to reach the documents inside a folder and `iam` would let it.
-No expectation row asks a non-inheriting permission about a nested object,
-so nothing distinguishes the two today; `scenario/realapi.go` fails the row
-that first does rather than leaving it to be discovered.
+and D7, which is design goal 4's own Drive hierarchy — had no declaration
+at all. That is **fixed**: `ContainerKind.Nestable` declares the recursion
+as a flag, because a kind listed among its own parents cannot be told
+apart from the two-parent declaration finding F3 refuses. It is
+UNEXPRESSIBLE.md item 9, recorded as resolved rather than deleted, because
+being run against the real module instead of its own oracle is how the
+corpus found it.
+
+The other one stands. `iam` inherits *every* permission down the whole
+container tree, where §8.2's form 3 is declared per relation, so this
+corpus's `owner` is declared not to reach the documents inside a folder
+and `iam` would let it. That is a deliberate reduction with its cost named
+in `internal/authz`'s package doc, and no expectation row distinguishes
+the two models today — which is luck, so it is guarded:
+`scenario/realapi.go` fails the first row that would, naming both models,
+rather than leaving the divergence to be discovered by a consumer.
 
 **Still the corpus's own, not `iam`'s:** every structural claim. Markings
 and their enforcement class are not stored by this module at all, so

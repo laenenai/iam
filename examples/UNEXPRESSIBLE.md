@@ -552,31 +552,60 @@ the design cannot express, so neither is a scenario here; both are
 `iam.Authorizer` being narrower than §8.2 as the corpus writes it, and
 they are recorded here because this is where the module's gaps are kept.
 
-9. **`iam.ContainerKind` cannot declare a kind nested inside itself.**
-   *Found 2026-10-25, not fixed.* A kind declares at most one parent kind,
-   is refused if it names itself as its parent, and at write time is
-   refused both as a root whose kind declares a parent and as a child whose
-   kind declares none. Together those mean a `folder` inside a `folder`
-   with a `folder` at the root has no declaration at all — and that is an
-   ordinary Drive hierarchy, not exotica: D2 and D7 are both this shape,
-   and so is any consumer with user-created nesting. The corpus works
-   round it by synthesizing a container kind per containment depth
-   (`scenario.Realize`), which costs nothing a decision can see and is
-   plainly a workaround. A consumer cannot do the same without knowing
-   every object's depth in advance.
+9. **`iam.ContainerKind` could not declare a kind nested inside itself.**
+   *Found 2026-10-25. **Resolved 2026-10-25**, by being built.* A kind
+   declared at most one parent kind, was refused if it named itself as its
+   parent, and two parent kinds were refused as finding F3's DAG. Together
+   those meant a `folder` inside a `folder` with a `folder` at the root had
+   no declaration at all — an ordinary Drive hierarchy, which is design
+   goal 4's own example, and the shape of both D2 and D7 as well as of any
+   consumer with user-created nesting.
+
+   What closed it is `ContainerKind.Nestable`: recursion declared as a flag
+   rather than as a self-reference. The syntax does not offer the choice
+   on purpose, because `Parents: ["tenant", "folder"]` on kind `folder`
+   reads equally as "in a tenant *or* in a folder" and "in a tenant *and*
+   in a folder", and only the second is the DAG F3 refuses — so `Parents`
+   stays the one kind above, `Nestable` is the recursion, and a kind
+   naming itself in `Parents` is now refused with a message pointing at
+   the flag. `AllowsRoot`, `AllowsParentKind` and `PermittedParentKinds`
+   are what a caller reads instead of reasoning about the fields.
+
+   It is recorded here rather than deleted because the route matters: the
+   corpus found this by being run against the real module instead of
+   against its own oracle, which is the whole argument for the
+   differential in `scenario/harness.go`. `scenario.Realize` declared a
+   container kind per containment depth to work around it for one commit;
+   it now declares each fixture kind as itself, with `Nestable` read off
+   the containment graph.
+
+   Two shapes are still refused by the translation, and only one of them
+   is a finding. Two *distinct* kinds above one kind is a kind-level DAG
+   and `ErrMultipleContainmentParents` is the right answer to it. A kind
+   that is both a root and declared inside another kind has no declaration
+   either, since `AllowsRoot` is "declares no parent" — the containment is
+   still a tree, so that is a real limit rather than F3, and no fixture
+   here is that shape. Both are refused with `ErrNotTranslatable` and a
+   message that says which of the two it is.
 
 10. **`iam` inherits every permission down the whole container tree, where
-    §8.2's form 3 is declared per relation.** *Found 2026-10-25, not
-    fixed.* There is one containment closure and no per-permission
+    §8.2's form 3 is declared per relation.** *Found 2026-10-25. Not a
+    gap: a decision, with its cost named in `internal/authz`'s package
+    doc.* There is one containment closure and no per-permission
     inheritance, so a grant on a container reaches every descendant for
     every permission. The corpus's Drive schema says something narrower:
     `viewer` and `editor` inherit from the parent and `owner` does not, so
-    a folder's owner is declared not to own the documents inside it. No
-    expectation row in the corpus distinguishes the two, because no row
-    asks a non-inheriting permission about a nested object — which is
-    luck rather than design. `scenario.Realize` refuses to report an allow
-    that `iam`'s closure carried further than the fixture's schema says
-    the relation travels, so the row that first distinguishes them fails
-    loudly instead of quietly agreeing. A divergence between the model a
-    consumer reads in a schema and the model the module evaluates is the
-    most expensive kind of authorization bug there is.
+    a folder's owner is declared not to own the documents inside it.
+
+    No expectation row in the corpus distinguishes the two, because no row
+    asks a non-inheriting permission about a nested object — and that is
+    luck rather than design, so it is guarded rather than relied on.
+    `scenario.Realize`'s `checkInheritanceDeclared` refuses to report an
+    allow that `iam`'s closure carried further than the fixture's schema
+    says the relation travels: the first row that would distinguish the
+    two models fails loudly, naming both of them, instead of quietly
+    agreeing. A divergence between the model a consumer reads in a schema
+    and the model the module evaluates is the most expensive kind of
+    authorization bug there is, and the only acceptable version of
+    "nothing exercises it yet" is one that fails the moment something
+    does.

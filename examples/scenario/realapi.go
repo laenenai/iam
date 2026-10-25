@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/laenenai/iam"
@@ -80,26 +79,37 @@ func (g Gap) String() string { return g.What + ": " + g.Why }
 // works exactly as far as this layer's groups do, and where it stops is
 // recorded as a Gap rather than papered over: see Gaps.
 //
-// # Where the container *kinds* come from, and why they carry a depth
+// # Where the container *kinds* come from
 //
-// They are synthesized per containment depth — `folder@0`, `folder@1` —
-// rather than taken from the fixture's resource kinds, and the reason is a
-// real limit worth stating. `iam.ContainerKind` declares at most one
-// parent *kind*, refuses a kind that names itself as its own parent, and
-// refuses at write time both a root container whose kind declares a parent
-// and a parented container whose kind declares none. Those three rules
-// together mean a kind nested inside itself cannot be declared at all: a
-// `folder` containing a `folder`, with a `folder` at the root, has no
-// declaration in this schema language. D2 and D7 are exactly that shape,
-// and they are ordinary Drive-shaped hierarchies rather than exotica.
+// A **container kind is a fixture kind**, declared under its own name,
+// with `Parents` set to the one kind the fixture puts above it and
+// `Nestable` set when the fixture puts an object of that kind inside
+// another of the same kind. All three are read off `Fixture.Containment`
+// rather than declared a second time, so a fixture cannot say one thing in
+// its graph and another in its schema.
 //
-// Depth-indexed kinds are a corpus-side workaround for that, and they cost
-// nothing a decision can see: `Decide` never reads a kind, grants name
-// containers by id, and the closure is the parent chain. What they do cost
-// is that `ErrMultipleContainmentParents` can no longer fire here, since
-// every synthesized kind has one parent by construction — so the
-// single-parent property is checked by this file instead, against the
-// fixture, before any kind is synthesized.
+// This used to synthesize a kind per containment depth — `folder@0`,
+// `folder@1` — and the reason is worth keeping in the record although it
+// is gone. `iam.ContainerKind` had no way to declare a kind nested inside
+// itself: a self-reference in `Parents` was refused, and two parent kinds
+// were refused as finding F3's DAG, so a `folder` containing a `folder`
+// with a `folder` at the root had no declaration at all. That is design
+// goal 4's own Drive hierarchy, and D2 and D7 are both it. Running this
+// corpus against the real module is what found it, and
+// `ContainerKind.Nestable` closed it — recursion declared as a flag rather
+// than as a self-reference, because `Parents: ["tenant", "folder"]` on
+// kind `folder` reads equally as "in a tenant *or* in a folder" and "in a
+// tenant *and* in a folder", and only the second is the DAG. See
+// UNEXPRESSIBLE.md item 9.
+//
+// Two shapes are still refused here, and both are refusals rather than
+// things to work around. Two *distinct* kinds above one kind is a
+// kind-level DAG — "a document lives in a folder or in a workspace" —
+// which is what `ErrMultipleContainmentParents` exists for. And a kind
+// that is both a root and declared inside another kind has no declaration
+// either, because `AllowsRoot` is "declares no parent": that one is a real
+// limit rather than F3, it is named where it is refused, and no fixture in
+// this corpus is that shape.
 type RealWorld struct {
 	authorizer iam.Authorizer
 	env        *Env
@@ -172,7 +182,7 @@ func Realize(ctx context.Context, authorizer iam.Authorizer, env *Env, f Fixture
 		w.principalNames[id] = spec.Name
 	}
 
-	objects, depths, err := w.placeObjects(f)
+	objects, err := w.placeObjects(f)
 	if err != nil {
 		return nil, err
 	}
@@ -185,10 +195,10 @@ func Realize(ctx context.Context, authorizer iam.Authorizer, env *Env, f Fixture
 		// nothing to register and the world is legitimately empty.
 		return w, nil
 	}
-	if err := w.registerSchema(ctx, f, objects, depths); err != nil {
+	if err := w.registerSchema(ctx, f, objects); err != nil {
 		return nil, err
 	}
-	if err := w.createContainers(ctx, objects, depths); err != nil {
+	if err := w.createContainers(ctx, objects); err != nil {
 		return nil, err
 	}
 	if err := w.resolveUsersets(ctx, f); err != nil {
@@ -201,14 +211,17 @@ func Realize(ctx context.Context, authorizer iam.Authorizer, env *Env, f Fixture
 }
 
 // placeObjects returns every object that needs a container, in creation
-// order (parents before children), together with its containment depth. It
-// is where the single-parent tree is enforced against the fixture, which
-// has to happen here because the synthesized kinds below cannot express a
-// second parent and so cannot be refused for one.
-func (w *RealWorld) placeObjects(f Fixture) ([]Ref, map[Ref]int, error) {
+// order: shallowest first, so a container's parent exists before it does.
+//
+// It is also where containment is checked against the fixture rather than
+// against the schema. One *container* with two parents is finding F3 and
+// has no shape in this layer at all, and DirectPath is the function that
+// refuses it — the kind declarations below cannot, because they are about
+// kinds and this is about objects.
+func (w *RealWorld) placeObjects(f Fixture) ([]Ref, error) {
 	for _, e := range f.Containment {
 		if e.Kind != EdgeExplicit {
-			return nil, nil, fmt.Errorf("%w: the containment edge %s < %s is a predicate over data (%q) and not a "+
+			return nil, fmt.Errorf("%w: the containment edge %s < %s is a predicate over data (%q) and not a "+
 				"stored parent. A container's parent is set at creation here, so an edge whose membership changes "+
 				"when ordinary data changes has nothing to be — see U5",
 				ErrNotTranslatable, e.Child, e.Parent, e.Predicate)
@@ -220,7 +233,7 @@ func (w *RealWorld) placeObjects(f Fixture) ([]Ref, map[Ref]int, error) {
 	for _, o := range objects {
 		path, err := DirectPath(f, o)
 		if err != nil {
-			return nil, nil, fmt.Errorf("%w: %w", ErrNotTranslatable, err)
+			return nil, fmt.Errorf("%w: %w", ErrNotTranslatable, err)
 		}
 		depths[o] = len(path)
 		if len(path) > 0 {
@@ -234,37 +247,80 @@ func (w *RealWorld) placeObjects(f Fixture) ([]Ref, map[Ref]int, error) {
 		}
 		return objects[i].String() < objects[j].String()
 	})
-	return objects, depths, nil
+	return objects, nil
 }
 
-// containerKind is the synthesized kind name for an object at a depth. See
-// RealWorld's doc for why the depth is in the name.
-func containerKind(r Ref, depth int) string { return r.Kind + "@" + strconv.Itoa(depth) }
+// kindShape is what a fixture's containment graph says about one kind:
+// which kinds sit above it, whether it nests inside itself, and whether
+// any object of it is a root. It is read off the graph rather than
+// declared, so the schema a fixture registers cannot contradict the
+// containment it also declares.
+type kindShape struct {
+	// above are the distinct *other* kinds that contain this one. More
+	// than one is a kind-level DAG.
+	above map[string]bool
+	// nestable records that some object of this kind lives inside another
+	// object of the same kind.
+	nestable bool
+	// root records that some object of this kind has no parent.
+	root bool
+}
 
-// registerSchema declares the synthesized container kinds and every
+// registerSchema declares one container kind per fixture kind and every
 // relation name the fixture uses as a permission.
-func (w *RealWorld) registerSchema(ctx context.Context, f Fixture, objects []Ref, depths map[Ref]int) error {
-	parentOf := make(map[string]string, len(objects))
+func (w *RealWorld) registerSchema(ctx context.Context, f Fixture, objects []Ref) error {
+	shapes := make(map[string]*kindShape, len(objects))
+	shapeOf := func(name string) *kindShape {
+		if s, ok := shapes[name]; ok {
+			return s
+		}
+		s := &kindShape{above: make(map[string]bool, 1)}
+		shapes[name] = s
+		return s
+	}
 	for _, o := range objects {
-		kind := containerKind(o, depths[o])
-		var parent string
-		if p, ok := w.parents[o]; ok {
-			parent = containerKind(p, depths[p])
+		shape := shapeOf(o.Kind)
+		parent, parented := w.parents[o]
+		switch {
+		case !parented:
+			shape.root = true
+		case parent.Kind == o.Kind:
+			shape.nestable = true
+		default:
+			shape.above[parent.Kind] = true
+			shapeOf(parent.Kind)
 		}
-		if previous, seen := parentOf[kind]; seen && previous != parent {
-			return fmt.Errorf("%w: objects of fixture kind %q at containment depth %d sit under two different "+
-				"kinds (%q and %q), so no single container kind describes them. Containment here is a tree of "+
-				"kinds as well as of containers",
-				ErrNotTranslatable, o.Kind, depths[o], previous, parent)
-		}
-		parentOf[kind] = parent
 	}
 
-	kinds := make([]iam.ContainerKind, 0, len(parentOf))
-	for name, parent := range parentOf {
-		kind := iam.ContainerKind{Name: name}
-		if parent != "" {
-			kind.Parents = []string{parent}
+	kinds := make([]iam.ContainerKind, 0, len(shapes))
+	for name, shape := range shapes {
+		kind := iam.ContainerKind{Name: name, Nestable: shape.nestable}
+		switch len(shape.above) {
+		case 0:
+		case 1:
+			for parent := range shape.above {
+				kind.Parents = []string{parent}
+			}
+		default:
+			parents := make([]string, 0, len(shape.above))
+			for parent := range shape.above {
+				parents = append(parents, parent)
+			}
+			sort.Strings(parents)
+			return fmt.Errorf("%w: the fixture puts objects of kind %q inside two different kinds (%s), which is a "+
+				"containment DAG at the level of kinds rather than of containers. One parent kind per kind is "+
+				"finding F3's own refusal (iam.ErrMultipleContainmentParents), and it is a refusal rather than a "+
+				"limitation: the closure a decision reads is keyed on the container, which is what keeps it "+
+				"bounded by depth instead of by resource count",
+				ErrNotTranslatable, name, strings.Join(parents, ", "))
+		}
+		if shape.root && len(kind.Parents) == 1 {
+			return fmt.Errorf("%w: the fixture has objects of kind %q both at the root and inside a %q, and "+
+				"iam.ContainerKind cannot declare that: AllowsRoot is `declares no parent`, so a kind is either "+
+				"a root kind or a contained one. This is a real limit rather than finding F3 — it is not a DAG, "+
+				"the containment is still a tree — and no fixture in this corpus is this shape, so it is reported "+
+				"here rather than worked around",
+				ErrNotTranslatable, name, kind.Parents[0])
 		}
 		kinds = append(kinds, kind)
 	}
@@ -326,12 +382,14 @@ func permissionsOf(f Fixture) ([]iam.Permission, error) {
 	return out, nil
 }
 
-// createContainers mints one container per object, parents first.
-func (w *RealWorld) createContainers(ctx context.Context, objects []Ref, depths map[Ref]int) error {
+// createContainers mints one container per object, parents first. The
+// ordering is why placeObjects returns a depth at all: a container's parent
+// has to exist before it does, and nothing else here reads the number.
+func (w *RealWorld) createContainers(ctx context.Context, objects []Ref) error {
 	for _, o := range objects {
 		spec := iam.ContainerSpec{
 			TenantID: w.env.Tenant,
-			Kind:     containerKind(o, depths[o]),
+			Kind:     o.Kind,
 			Label:    o.String(),
 		}
 		if p, ok := w.parents[o]; ok {

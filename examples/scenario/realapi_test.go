@@ -229,18 +229,19 @@ func TestEveryCompositionFormSurvivesTheTranslation(t *testing.T) {
 	}
 }
 
-// TestAKindNestedInsideItselfTranslates pins the workaround for a real
-// limit in `iam.ContainerKind`, and is the reason container kinds carry a
-// containment depth.
+// TestAKindNestedInsideItselfTranslates is an ordinary Drive hierarchy —
+// a folder inside a folder, with a folder at the root — and it is here
+// because it was once impossible.
 //
-// A `ContainerKind` declares at most one parent kind, is refused if it
-// names itself as its own parent, and is refused at write time both as a
-// root whose kind declares a parent and as a child whose kind declares
-// none. Together those rules mean a folder inside a folder, with a folder
-// at the root, has no declaration at all — and that is an ordinary Drive
-// hierarchy rather than exotica: D2 and D7 are both this shape. The
-// translation synthesizes a kind per depth so those two scenarios can be
-// answered, and this test is what fails if that stops working.
+// `iam.ContainerKind` declares one parent kind and refuses two as finding
+// F3's DAG, and it refused a kind naming itself, so this shape had no
+// declaration at all: design goal 4's own example, with nothing to
+// register. The corpus found that by trying to run against the real
+// module, and `ContainerKind.Nestable` closed it — recursion declared as
+// a flag, because `Parents: ["tenant", "folder"]` on kind `folder` cannot
+// be told apart from the two-parent declaration F3 refuses. D2 and D7 are
+// both this shape; this test is the smallest version of them, and it
+// replaces one that pinned a depth-suffixed workaround instead.
 func TestAKindNestedInsideItselfTranslates(t *testing.T) {
 	t.Parallel()
 
@@ -393,5 +394,83 @@ func TestRealizeRefusesAPredicateDefinedEdge(t *testing.T) {
 	_, err = scenario.Realize(context.Background(), authorizer, env, f)
 	if !errors.Is(err, scenario.ErrNotTranslatable) {
 		t.Fatalf("Realize over a predicate-defined edge error = %v, want it to wrap ErrNotTranslatable", err)
+	}
+}
+
+// TestRealizeRefusesAKindLevelDAG: one parent kind per kind. A fixture
+// where `document` sits inside a `folder` in one place and inside a `role`
+// in another declares a DAG at the level of kinds even though every
+// container still has exactly one parent, and that is the declaration
+// `iam.ErrMultipleContainmentParents` exists to refuse.
+//
+// It is worth having its own test because it is the one refusal here that
+// is a *refusal* rather than a limit: the closure a decision reads is
+// keyed on the container, and F3's spike measured what keying it on the
+// resource costs instead.
+func TestRealizeRefusesAKindLevelDAG(t *testing.T) {
+	t.Parallel()
+
+	f := scenario.Fixture{
+		Tenant:     "acme",
+		Kinds:      driveShaped(),
+		Principals: []scenario.PrincipalSpec{user("user:a")},
+		Containment: []scenario.Edge{
+			scenario.E("document:x", "folder:f"),
+			scenario.E("document:y", "role:r"),
+		},
+		Tuples: []scenario.Tuple{scenario.T("folder:f", "viewer", scenario.P("user:a"))},
+	}
+	reg, authorizer := newAuthority(t)
+	env, err := scenario.Materialize(context.Background(), reg, f, iam.SystemClock{})
+	if err != nil {
+		t.Fatalf("Materialize: %v", err)
+	}
+	_, err = scenario.Realize(context.Background(), authorizer, env, f)
+	if !errors.Is(err, scenario.ErrNotTranslatable) {
+		t.Fatalf("Realize over a kind-level DAG error = %v, want it to wrap ErrNotTranslatable", err)
+	}
+	if !strings.Contains(err.Error(), "two different kinds") {
+		t.Fatalf("the refusal does not say what was wrong with the declaration: %v", err)
+	}
+}
+
+// TestRealizeRefusesAKindThatIsBothRootAndContained is the one limit left
+// in the kind declaration, and it is reported rather than worked around.
+//
+// `AllowsRoot` is "declares no parent", so a kind is either a root kind or
+// a contained one. A fixture with a `document` inside a folder *and* a
+// `document` at the root cannot be declared, and the containment is still
+// a perfectly good tree — so this is not finding F3 and the refusal says
+// so. No fixture in the corpus is this shape; if one ever is, it will fail
+// here with a message that names the limit instead of surfacing as a
+// confusing CreateContainer error.
+func TestRealizeRefusesAKindThatIsBothRootAndContained(t *testing.T) {
+	t.Parallel()
+
+	f := scenario.Fixture{
+		Tenant:     "acme",
+		Kinds:      driveShaped(),
+		Principals: []scenario.PrincipalSpec{user("user:a")},
+		Containment: []scenario.Edge{
+			scenario.E("document:x", "folder:f"),
+		},
+		Tuples: []scenario.Tuple{
+			scenario.T("folder:f", "viewer", scenario.P("user:a")),
+			// document:loose has no containment edge, so it is a root
+			// document beside a contained one.
+			scenario.T("document:loose", "viewer", scenario.P("user:a")),
+		},
+	}
+	reg, authorizer := newAuthority(t)
+	env, err := scenario.Materialize(context.Background(), reg, f, iam.SystemClock{})
+	if err != nil {
+		t.Fatalf("Materialize: %v", err)
+	}
+	_, err = scenario.Realize(context.Background(), authorizer, env, f)
+	if !errors.Is(err, scenario.ErrNotTranslatable) {
+		t.Fatalf("Realize error = %v, want it to wrap ErrNotTranslatable", err)
+	}
+	if !strings.Contains(err.Error(), "AllowsRoot") {
+		t.Fatalf("the refusal does not name the rule it runs into: %v", err)
 	}
 }
