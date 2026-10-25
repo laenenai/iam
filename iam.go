@@ -20,10 +20,13 @@
 // from this file is a constructor no consumer outside this module can
 // call, which is a facade that hides what the module is for.
 //
-// There is no `Open` yet. It arrives with the decision API, which this
-// increment deliberately does not build (design §14: the identity registry
-// is the one workstream independent of the open `Predicate` questions).
-// Until then the registry constructors below are the entry points.
+// There is no `Open` yet, and that is now a smaller gap than it reads.
+// `Open(ctx, Config)` would hand a consumer one value wiring the registry
+// and the authorizer together over one pool; what exists instead is the
+// two constructors, because a deployment that wants only identity should
+// not be made to configure a staleness bound *and* an authorization layer,
+// and because `Open` is the right shape only once design §11's second
+// deployment shape — the service — settles what Config has to carry.
 //
 // api.txt is this surface as a golden file, diffed in CI, so growing it is
 // a reviewed diff.
@@ -35,6 +38,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/laenenai/iam/internal/authz"
+	"github.com/laenenai/iam/internal/authz/pgauthz"
 	"github.com/laenenai/iam/internal/domain"
 	"github.com/laenenai/iam/internal/idp"
 	"github.com/laenenai/iam/internal/migrate"
@@ -328,3 +333,326 @@ func NewGroupID(clock Clock) GroupID { return domain.NewGroupID(clock) }
 
 // ParseGroupID parses s as a GroupID, rejecting malformed input.
 func ParseGroupID(s string) (GroupID, error) { return domain.ParseGroupID(s) }
+
+// --- The authorization layer --------------------------------------------
+//
+// Membership on containers, inherited down a tree. A subject — a principal
+// or a group — holds a permission on a container, and everything the
+// container contains inherits it. Default-deny: every refusal is a grant
+// nobody wrote.
+//
+// internal/authz's package doc carries the whole argument for why this is
+// so much smaller than design §8.2 describes, and names each absence as a
+// decision: no deny mechanism, no relation algebra, no `visible_below`, no
+// attribute granularity, no persisted schema versioning, and `Predicate`'s
+// filtered-read contract left unbuilt while finding F4 is open. Read it
+// before concluding something is missing.
+
+// The authorization port and the values it moves. RunAuthorizerSuite in
+// the iamtest package is the authoritative description of this contract's
+// edge-case behaviour; the interface below is only its shape.
+type (
+	// Authorizer is the authorization port: containers and containment as
+	// a tree, grants as membership, the point decision, the residual a
+	// consumer applies to its own rows, and the change log a separated
+	// deployment resumes from.
+	Authorizer = authz.Authorizer
+	// AuthorizerConfig is the deployment policy an authorizer adapter is
+	// built with.
+	AuthorizerConfig = authz.Config
+	// FilterRequest asks for the residual a consumer should apply to its
+	// own rows: which of these rows may this principal <permission>.
+	FilterRequest = authz.FilterRequest
+	// Fragment is rendered Postgres SQL together with the parameters it
+	// binds. It is the renderer's output, never the port's: SQL text does
+	// not cross Authorizer, so that a second storage backend is a new
+	// renderer rather than a breaking change for every consumer.
+	Fragment = pgauthz.Fragment
+)
+
+// Containers, grants and schemas.
+type (
+	// Container is one node of a containment tree. It has exactly one
+	// parent, and that single field is design §9.2's single-path
+	// invariant.
+	Container = domain.Container
+	// ContainerSpec is one container to create.
+	ContainerSpec = domain.ContainerSpec
+	// ContainerKind is one node of a consumer's declared containment
+	// tree. Its Parents field is a slice only so that a two-parent
+	// declaration is representable and can therefore be refused.
+	ContainerKind = domain.ContainerKind
+	// Schema is one consumer's registered model: its container kinds and
+	// its permission vocabulary.
+	Schema = domain.Schema
+	// Permission is one thing a subject may do, named by the consumer
+	// that registered it.
+	Permission = domain.Permission
+	// Subject is who a grant is written to: one principal, or one group.
+	// It has exactly two states because it has exactly two unexported
+	// fields.
+	Subject = domain.Subject
+	// Grant is the only rule shape this layer has: a subject holds a
+	// permission on a container.
+	Grant = domain.Grant
+	// GrantSpec is one grant to write or revoke.
+	GrantSpec = domain.GrantSpec
+)
+
+// The decision and what it carries.
+type (
+	// Request is one point decision to take, with the resource named by
+	// the container it lives in.
+	Request = domain.Request
+	// Decision is one answer from Decide: the verdict, the outermost form
+	// that fired, the grant responsible, how many containment hops away
+	// it was, and the revision it was computed against.
+	Decision = domain.Decision
+	// Reason names why a decision came out the way it did.
+	Reason = domain.Reason
+)
+
+// The revision and the change log.
+type (
+	// Revision is the authorization state an answer was computed against:
+	// gapless, monotonic, and per tenant. It is this design's zookie, and
+	// it exists before anything reads it because a Decision that grew the
+	// field later would be a breaking change at every call site.
+	Revision = domain.Revision
+	// Change is one entry of the change log: the unit a consumer on
+	// another store replays to maintain its own projection.
+	Change = domain.Change
+	// ChangeKind names what a logged change was.
+	ChangeKind = domain.ChangeKind
+)
+
+// The residual: a typed expression, not SQL. A backend-specific renderer
+// turns it into that backend's query language, which is why SQL text never
+// crosses the port — see internal/domain's residual documentation, and its
+// note on Cassandra, where the containment key has to be part of the
+// table's own key and no renderer can fix that.
+type (
+	// Residual is what the authority returns for a filtered read: the
+	// expression to apply, and the revision it reflects.
+	Residual = domain.Residual
+	// Expr is one node of a residual. Its method set includes an
+	// unexported method, so the node types are closed and a renderer's
+	// type switch over them is exhaustive by construction.
+	Expr = domain.Expr
+	// Key names a consumer's own column: the scalar containment key
+	// finding F1 froze, or its tenant column.
+	Key = domain.Key
+	// PrincipalRef names whose permissions a residual term is about: one
+	// known principal, or whichever principal the evaluating session
+	// names.
+	PrincipalRef = domain.PrincipalRef
+	// None matches no rows. It is the fail-closed residual, and it is a
+	// node rather than an error because the failure mode a consumer needs
+	// is zero rows and never a raised exception.
+	None = domain.None
+	// All matches every row. Never produced by this module's authority.
+	All = domain.All
+	// And is the conjunction of its terms, and the only combinator.
+	And = domain.And
+	// TenantIs restricts rows to one tenant by the consumer's own tenant
+	// column.
+	TenantIs = domain.TenantIs
+	// ContainerPermits is the authorization term: this row's container
+	// key names a container on which this principal holds this
+	// permission, directly or through a group, here or on any ancestor.
+	ContainerPermits = domain.ContainerPermits
+)
+
+// ContainerID identifies a container: the unit a grant is written on, the
+// unit containment inherits down, and the one column a consumer adds to
+// its own rows.
+type ContainerID = domain.ContainerID
+
+// Decision reasons. The zero value is ReasonUnevaluated and it denies.
+const (
+	ReasonUnevaluated = domain.ReasonUnevaluated
+	ReasonNoGrant     = domain.ReasonNoGrant
+	ReasonDirect      = domain.ReasonDirect
+	ReasonUserset     = domain.ReasonUserset
+	ReasonInherited   = domain.ReasonInherited
+)
+
+// Change kinds.
+const (
+	ChangeContainerCreated = domain.ChangeContainerCreated
+	ChangeGrantWritten     = domain.ChangeGrantWritten
+	ChangeGrantRevoked     = domain.ChangeGrantRevoked
+)
+
+// Authorization-layer constants a consumer has to be able to name.
+const (
+	// PrincipalGUC is the Postgres session variable a residual rendered
+	// into a row-level-security policy reads the deciding principal from.
+	// A consumer establishes it the way it establishes the tenant:
+	// SELECT set_config('app.principal_id', $1, true) inside its
+	// transaction. A statement that establishes neither matches no rows
+	// and raises nothing.
+	PrincipalGUC = authz.PrincipalGUC
+	// DefaultChangeLimit is the page size Changes uses for a
+	// non-positive limit.
+	DefaultChangeLimit = authz.DefaultChangeLimit
+	// MaxChangeLimit caps a page of changes, so a projection catching up
+	// from an old cursor pages rather than materializing everything.
+	MaxChangeLimit = authz.MaxChangeLimit
+	// MaxContainmentDepth bounds a containment tree. Anti-goal A2 budgets
+	// depth 6; this is far looser and exists so that a corrupted tree
+	// terminates an ancestry walk with an error rather than running
+	// forever inside a decision.
+	MaxContainmentDepth = domain.MaxContainmentDepth
+)
+
+// Authorization-layer sentinel errors. None of them is a denial: a denial
+// is a Decision whose Allowed is false, because default-deny is the
+// ordinary answer and an error-shaped deny trains callers to treat a
+// refusal as an outage.
+var (
+	// ErrInvalidSchema indicates a registered schema is not well formed.
+	ErrInvalidSchema = domain.ErrInvalidSchema
+	// ErrMultipleContainmentParents indicates a schema declared a
+	// container kind with more than one containment parent, which this
+	// module refuses outright. It has its own sentinel because the caller
+	// that hits it has to redesign its containment or reopen design
+	// finding F3, rather than fix a field.
+	ErrMultipleContainmentParents = domain.ErrMultipleContainmentParents
+	// ErrSchemaNotRegistered indicates no schema in this process declares
+	// the container kind or permission the call names.
+	ErrSchemaNotRegistered = domain.ErrSchemaNotRegistered
+	// ErrInvalidContainer indicates a container spec does not describe a
+	// creatable container.
+	ErrInvalidContainer = domain.ErrInvalidContainer
+	// ErrInvalidGrant indicates a grant spec does not describe a writable
+	// grant.
+	ErrInvalidGrant = domain.ErrInvalidGrant
+	// ErrInvalidRequest indicates a decision or filter request is not
+	// answerable.
+	ErrInvalidRequest = domain.ErrInvalidRequest
+	// ErrContainmentCycle indicates the stored containment graph does not
+	// terminate. It should be unreachable, and it exists because the
+	// alternative to an error is a decision that never returns.
+	ErrContainmentCycle = domain.ErrContainmentCycle
+	// ErrInvalidResidual indicates a residual, or a node of one, is not
+	// well formed.
+	ErrInvalidResidual = domain.ErrInvalidResidual
+	// ErrUnrenderable indicates a backend's renderer cannot express a
+	// residual in that backend's query language. It is not a defect in
+	// the residual: CQL, for one, can filter only on a partition key and
+	// a clustering prefix.
+	ErrUnrenderable = domain.ErrUnrenderable
+)
+
+// NewMemoryAuthorizer returns an in-memory Authorizer over reg, configured
+// by cfg. It is a real adapter rather than a mock — it enforces the
+// single-parent tree, walks the containment closure, composes reg's own
+// membership, and passes iamtest.RunAuthorizerSuite unchanged — so a
+// consumer's tests of its own authorization code can run with no database.
+// Its state lives only for the life of the value, so it is not a
+// deployment option.
+//
+// It takes a Registry because the group side of a decision is the
+// registry's membership rather than a copy of it. A second copy is a copy
+// that goes stale, and the way it fails is that a deprovisioned principal
+// keeps reading until somebody syncs.
+func NewMemoryAuthorizer(reg Registry, cfg AuthorizerConfig) (Authorizer, error) {
+	return authz.NewMemory(reg, cfg)
+}
+
+// NewPostgresAuthorizer returns the deployment Authorizer over pool,
+// configured by cfg. The caller owns pool's lifetime and must have applied
+// this module's migrations (MigrateUp), which is also what asserts the
+// row-level-security policy its statements depend on.
+//
+// It needs no Registry: the group side of a decision is resolved inside
+// the same SQL statement, through the registry's own
+// iam.live_group_members view, which is what makes deprovisioning stop a
+// decision in the statement that records it.
+func NewPostgresAuthorizer(pool *pgxpool.Pool, cfg AuthorizerConfig) (Authorizer, error) {
+	return pgauthz.New(pool, cfg)
+}
+
+// PrincipalSubject returns the subject naming one principal.
+func PrincipalSubject(p PrincipalID) Subject { return domain.PrincipalSubject(p) }
+
+// GroupSubject returns the subject naming one group — design §8.2's
+// userset, and the form that makes a membership change take effect with no
+// grant rewritten.
+func GroupSubject(g GroupID) Subject { return domain.GroupSubject(g) }
+
+// NamedPrincipal returns a residual reference to one known principal, for
+// a residual joined into a single query.
+func NamedPrincipal(p PrincipalID) PrincipalRef { return domain.NamedPrincipal(p) }
+
+// SessionPrincipal returns a residual reference to whichever principal the
+// evaluating session names — the form a row-level-security policy needs,
+// because a policy is created once and evaluated for every principal.
+func SessionPrincipal() PrincipalRef { return domain.SessionPrincipal() }
+
+// NewContainerID returns a fresh ContainerID minted from clock.
+func NewContainerID(clock Clock) ContainerID { return domain.NewContainerID(clock) }
+
+// ParseContainerID parses s as a ContainerID, rejecting malformed input.
+func ParseContainerID(s string) (ContainerID, error) { return domain.ParseContainerID(s) }
+
+// ValidPermissionName reports whether p is a permission name this module
+// will accept in a schema. The set is restricted — a letter, digit or
+// underscore followed by up to 63 of those plus `.`, `:` and `-` — because
+// a permission is written as a literal into row-level-security policy text
+// when a consumer renders a residual for one.
+func ValidPermissionName(p Permission) bool { return domain.ValidPermissionName(p) }
+
+// RenderPostgres renders a residual for use inside an ordinary Postgres
+// query, numbering its placeholders from firstArg. Pass
+// len(existingArgs)+1: the residual is ANDed into a statement the consumer
+// already wrote, which already has parameters.
+//
+// A residual that can match nothing renders as `false` with no arguments.
+func RenderPostgres(r Residual, firstArg int) (Fragment, error) {
+	return pgauthz.Render(r, firstArg)
+}
+
+// RenderPostgresPolicy renders a residual as a parameterless boolean
+// expression, for the USING clause of a row-level-security policy. This is
+// the mechanism a consumer enforcing privacy by placement actually wants:
+//
+//	CREATE POLICY graph_read ON tenant_quads AS RESTRICTIVE
+//	    USING (<this expression>);
+//
+// AS RESTRICTIVE is not optional, and the reason is a measured one. Postgres
+// OR-s permissive policies together and AND-s restrictive ones on top, so a
+// permissive authorization policy is OR-ed away by any later permissive
+// policy on the same table — which is how a tenant predicate written that
+// way became a cross-tenant disclosure in this project on 2026-10-23. A
+// restrictive policy ANDs, so it composes with `tenancy`'s restrictive
+// tenant predicate on the same table and neither can be widened: both are
+// in the database, and a hand-written statement cannot escape either.
+//
+// The residual must be built with SessionPrincipal and without a
+// TenantKey. A policy is created once and evaluated for every principal and
+// every tenant, so a literal for either would pin it to one; the principal
+// comes from PrincipalGUC and the tenant is already `tenancy`'s half.
+func RenderPostgresPolicy(r Residual) (string, error) {
+	return pgauthz.RenderPolicy(r)
+}
+
+// RLSTables names every `iam` table carrying `tenancy`'s tenant isolation
+// policy. MigrateUp asserts it on each of them, idempotently, on every run.
+//
+// It is exported so a consumer can include this module's schema in its own
+// CI sweep — tenancy.AssertRLSCoverage over the `iam` schema — without
+// hardcoding the list.
+func RLSTables() []string { return migrate.RLSTables() }
+
+// RLSTablesExemptFromPolicy names the tenant-scoped `iam` tables that
+// carry no policy, each with the reason.
+//
+// Both entries are a stated gap rather than a decision: the identity
+// registry's adapter establishes no tenant session context, so a policy on
+// its tables would make every registry read return zero rows. Tenant
+// scoping of identity is enforced in Go on each read, so what is missing
+// is the database-level backstop and not the check. It is exported because
+// a consumer sweeping this schema needs to know which absences are known.
+func RLSTablesExemptFromPolicy() map[string]string { return migrate.RLSTablesExemptFromPolicy() }

@@ -46,6 +46,8 @@ var apiPackages = []string{
 	"internal/domain",
 	"internal/registry",
 	"internal/idp",
+	"internal/authz",
+	"internal/authz/pgauthz",
 }
 
 const apiHeader = `# Public API of github.com/laenenai/iam, as a golden file.
