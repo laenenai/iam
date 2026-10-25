@@ -57,6 +57,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"sync"
 
 	"github.com/jackc/pgx/v5"
@@ -175,6 +176,60 @@ func (a *Authorizer) inTenantTx(ctx context.Context, tenant domain.TenantID, opt
 	return mapErr(tx.Commit(ctx))
 }
 
+// Every caller-supplied id this adapter binds is checked for being a
+// well-formed ULID first: malformed or empty is **not found** for a lookup
+// and **deny** for a decision, which are the same answers an id that does
+// not exist gets — and that sameness is what keeps the pair from being an
+// existence oracle.
+//
+// # These guards are belt-and-braces, and the measurement that says so
+//
+// They were written on the belief that they were load-bearing: `iam.ulid`
+// is a DOMAIN over text with a format CHECK, Postgres infers an untyped
+// parameter's type from the column it is compared to, so a malformed id
+// reaching a comparison should raise a domain violation where the in-memory
+// adapter's map lookup merely misses — a divergence in which this adapter
+// turns a denial into an error, which is the wrong direction for an
+// authorization layer to fail in.
+//
+// That belief is false, and the test written to prove it disproved it
+// instead: see AMalformedIdIsNotRaisedByAComparisonAndIsRaisedByAWrite. For
+// `domain_column = $1` Postgres resolves `text = text` and coerces the
+// domain *down* to its base type, so the parameter is never coerced *up*
+// into the domain, no CHECK runs, and the comparison simply does not match.
+// There was no divergence to fix.
+//
+// The guards stay anyway, for one reason that is not inertia: the
+// conformance suite states "a malformed id denies" as a *contract*, and an
+// adapter should enforce its own contract rather than inherit it from an
+// operator-resolution rule nobody chose and a future statement could
+// unknowingly opt out of — a single `::iam.ulid` cast added later would do
+// it. They also save a round trip, which is the smaller reason.
+//
+// A **write** is the other half and there the coercion is real: inserting a
+// malformed id does raise. That is why the write paths resolve the
+// container and the subject before binding them, so a malformed one becomes
+// "not found" rather than a constraint violation the caller has to
+// interpret.
+
+// wellFormedContainer reports whether id can be bound as a container id.
+func wellFormedContainer(id domain.ContainerID) bool {
+	_, err := domain.ParseContainerID(string(id))
+	return err == nil
+}
+
+// wellFormedPrincipal reports whether id can be bound as a principal id.
+func wellFormedPrincipal(id domain.PrincipalID) bool {
+	_, err := domain.ParsePrincipalID(string(id))
+	return err == nil
+}
+
+// notFoundContainer is the one answer a container lookup gives for an id
+// that is malformed, absent, or another tenant's.
+func notFoundContainer(id domain.ContainerID) error {
+	return fmt.Errorf("%w: container %s", domain.ErrNotFound, id)
+}
+
 // CreateContainer implements authz.Authorizer.
 func (a *Authorizer) CreateContainer(ctx context.Context, spec domain.ContainerSpec) (domain.Container, error) {
 	if err := ctx.Err(); err != nil {
@@ -187,12 +242,9 @@ func (a *Authorizer) CreateContainer(ctx context.Context, spec domain.ContainerS
 	if !ok {
 		return domain.Container{}, fmt.Errorf("%w: no registered schema declares container kind %q", domain.ErrSchemaNotRegistered, spec.Kind)
 	}
-	parentKind, declaresParent := kind.ParentKind()
-	switch {
-	case spec.Parent == "" && declaresParent:
-		return domain.Container{}, fmt.Errorf("%w: kind %q is declared inside %q, so it cannot be a root", domain.ErrInvalidContainer, spec.Kind, parentKind)
-	case spec.Parent != "" && !declaresParent:
-		return domain.Container{}, fmt.Errorf("%w: kind %q is declared as a root kind, so it cannot be placed inside a container", domain.ErrInvalidContainer, spec.Kind)
+	if spec.Parent == "" && !kind.AllowsRoot() {
+		return domain.Container{}, fmt.Errorf("%w: kind %q is declared inside %s, so it cannot be a root",
+			domain.ErrInvalidContainer, spec.Kind, strings.Join(kind.PermittedParentKinds(), " or "))
 	}
 
 	now := domain.Canonical(a.cfg.Clock.Now())
@@ -203,6 +255,10 @@ func (a *Authorizer) CreateContainer(ctx context.Context, spec domain.ContainerS
 		Parent:    spec.Parent,
 		Label:     spec.Label,
 		CreatedAt: now,
+	}
+
+	if spec.Parent != "" && !wellFormedContainer(spec.Parent) {
+		return domain.Container{}, notFoundContainer(spec.Parent)
 	}
 
 	err := a.write(ctx, spec.TenantID, func(q *gen.Queries) error {
@@ -218,9 +274,9 @@ func (a *Authorizer) CreateContainer(ctx context.Context, spec domain.ContainerS
 				}
 				return mapErr(err)
 			}
-			if parent.Kind != parentKind {
-				return fmt.Errorf("%w: kind %q is declared inside %q, but container %s is a %q",
-					domain.ErrInvalidContainer, spec.Kind, parentKind, spec.Parent, parent.Kind)
+			if !kind.AllowsParentKind(parent.Kind) {
+				return fmt.Errorf("%w: kind %q may live in %s, but container %s is a %q",
+					domain.ErrInvalidContainer, spec.Kind, authz.PermittedOrNothing(kind), spec.Parent, parent.Kind)
 			}
 		}
 
@@ -270,15 +326,15 @@ func (a *Authorizer) CreateContainer(ctx context.Context, spec domain.ContainerS
 
 // Container implements authz.Authorizer.
 func (a *Authorizer) Container(ctx context.Context, tenant domain.TenantID, id domain.ContainerID) (domain.Container, error) {
-	if id == "" {
-		return domain.Container{}, fmt.Errorf("%w: container %s", domain.ErrNotFound, id)
+	if !wellFormedContainer(id) {
+		return domain.Container{}, notFoundContainer(id)
 	}
 	var out domain.Container
 	err := a.read(ctx, tenant, func(q *gen.Queries) error {
 		row, err := q.ContainerByID(ctx, gen.ContainerByIDParams{ID: id, TenantID: tenant})
 		if err != nil {
 			if errors.Is(mapErr(err), domain.ErrNotFound) {
-				return fmt.Errorf("%w: container %s", domain.ErrNotFound, id)
+				return notFoundContainer(id)
 			}
 			return mapErr(err)
 		}
@@ -293,6 +349,9 @@ func (a *Authorizer) Container(ctx context.Context, tenant domain.TenantID, id d
 
 // Ancestors implements authz.Authorizer.
 func (a *Authorizer) Ancestors(ctx context.Context, tenant domain.TenantID, id domain.ContainerID) ([]domain.ContainerID, error) {
+	if !wellFormedContainer(id) {
+		return nil, notFoundContainer(id)
+	}
 	var out []domain.ContainerID
 	err := a.read(ctx, tenant, func(q *gen.Queries) error {
 		// The closure read back. The container's own reflexive row is in
@@ -304,7 +363,7 @@ func (a *Authorizer) Ancestors(ctx context.Context, tenant domain.TenantID, id d
 			return mapErr(err)
 		}
 		if len(ids) == 0 {
-			return fmt.Errorf("%w: container %s", domain.ErrNotFound, id)
+			return notFoundContainer(id)
 		}
 		out = ids
 		return nil
@@ -326,6 +385,12 @@ func (a *Authorizer) Grant(ctx context.Context, spec domain.GrantSpec) (domain.R
 	if !a.schemas.declaresPermission(spec.Permission) {
 		return 0, fmt.Errorf("%w: no registered schema declares permission %q; a misspelled permission is a grant that silently never fires", domain.ErrSchemaNotRegistered, spec.Permission)
 	}
+	if !wellFormedContainer(spec.Container) {
+		return 0, notFoundContainer(spec.Container)
+	}
+	if err := a.wellFormedSubject(spec); err != nil {
+		return 0, err
+	}
 
 	now := domain.Canonical(a.cfg.Clock.Now())
 	principal, group := splitSubject(spec.Subject)
@@ -334,7 +399,7 @@ func (a *Authorizer) Grant(ctx context.Context, spec domain.GrantSpec) (domain.R
 	err := a.write(ctx, spec.TenantID, func(q *gen.Queries) error {
 		if _, err := q.ContainerByID(ctx, gen.ContainerByIDParams{ID: spec.Container, TenantID: spec.TenantID}); err != nil {
 			if errors.Is(mapErr(err), domain.ErrNotFound) {
-				return fmt.Errorf("%w: container %s", domain.ErrNotFound, spec.Container)
+				return notFoundContainer(spec.Container)
 			}
 			return mapErr(err)
 		}
@@ -375,6 +440,25 @@ func (a *Authorizer) Grant(ctx context.Context, spec domain.GrantSpec) (domain.R
 		return 0, err
 	}
 	return rev, nil
+}
+
+// wellFormedSubject reports whether the spec's subject can be bound,
+// returning the not-found answer a malformed id gets.
+func (a *Authorizer) wellFormedSubject(spec domain.GrantSpec) error {
+	if p, ok := spec.Subject.Principal(); ok {
+		if !wellFormedPrincipal(p) {
+			return fmt.Errorf("%w: grant names principal %s", domain.ErrNotFound, p)
+		}
+		return nil
+	}
+	g, ok := spec.Subject.Group()
+	if !ok {
+		return fmt.Errorf("%w: a grant must name a principal or a group", domain.ErrInvalidGrant)
+	}
+	if _, err := domain.ParseGroupID(string(g)); err != nil {
+		return fmt.Errorf("%w: grant names group %s", domain.ErrNotFound, g)
+	}
+	return nil
 }
 
 // checkSubject refuses a grant whose subject does not exist in this
@@ -420,6 +504,21 @@ func (a *Authorizer) Revoke(ctx context.Context, spec domain.GrantSpec) (domain.
 	principal, group := splitSubject(spec.Subject)
 
 	var rev domain.Revision
+	if !wellFormedContainer(spec.Container) || a.wellFormedSubject(spec) != nil {
+		// A malformed id matches no grant, and revoking a grant that is
+		// not there is not an error. So this reports the head rather than
+		// refusing: a revocation that cannot have applied must not look
+		// like a revocation that failed, or a caller retries forever.
+		if err := a.read(ctx, spec.TenantID, func(q *gen.Queries) error {
+			var err error
+			rev, err = a.headRevision(ctx, q, spec.TenantID)
+			return err
+		}); err != nil {
+			return 0, err
+		}
+		return rev, nil
+	}
+
 	err := a.write(ctx, spec.TenantID, func(q *gen.Queries) error {
 		rows, err := q.DeleteGrant(ctx, gen.DeleteGrantParams{
 			TenantID:    spec.TenantID,
@@ -453,11 +552,14 @@ func (a *Authorizer) Revoke(ctx context.Context, spec domain.GrantSpec) (domain.
 
 // GrantsOn implements authz.Authorizer.
 func (a *Authorizer) GrantsOn(ctx context.Context, tenant domain.TenantID, container domain.ContainerID) ([]domain.Grant, error) {
+	if !wellFormedContainer(container) {
+		return nil, notFoundContainer(container)
+	}
 	var out []domain.Grant
 	err := a.read(ctx, tenant, func(q *gen.Queries) error {
 		if _, err := q.ContainerByID(ctx, gen.ContainerByIDParams{ID: container, TenantID: tenant}); err != nil {
 			if errors.Is(mapErr(err), domain.ErrNotFound) {
-				return fmt.Errorf("%w: container %s", domain.ErrNotFound, container)
+				return notFoundContainer(container)
 			}
 			return mapErr(err)
 		}
@@ -490,11 +592,21 @@ func (a *Authorizer) Decide(ctx context.Context, req domain.Request) (domain.Dec
 		return domain.Decision{}, err
 	}
 
+	malformed := !wellFormedContainer(req.Container) || !wellFormedPrincipal(req.Principal)
+
 	var decision domain.Decision
 	err := a.read(ctx, req.TenantID, func(q *gen.Queries) error {
 		rev, err := a.headRevision(ctx, q, req.TenantID)
 		if err != nil {
 			return err
+		}
+		if malformed {
+			// A malformed container or principal id denies, exactly as an
+			// id that does not exist denies. It still carries the
+			// revision, because a deny that could not say what state it
+			// was computed against is a different and weaker answer.
+			decision = domain.Deny(rev)
+			return nil
 		}
 		rows, err := q.Decide(ctx, gen.DecideParams{
 			Permission:  req.Permission,

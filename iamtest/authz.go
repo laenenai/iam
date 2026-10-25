@@ -48,6 +48,10 @@ const (
 	kindRoot   = "iamtest-root"
 	kindMiddle = "iamtest-middle"
 	kindLeaf   = "iamtest-leaf"
+	// kindFolder nests in itself, which is design goal 4's own Google
+	// Drive hierarchy and the one shape a tree of fixed-depth kinds
+	// cannot express.
+	kindFolder = "iamtest-folder"
 )
 
 // The suite's permissions. Two, because one cannot show that a grant of
@@ -68,6 +72,7 @@ func suiteSchema() iam.Schema {
 			{Name: kindRoot},
 			{Name: kindMiddle, Parents: []string{kindRoot}},
 			{Name: kindLeaf, Parents: []string{kindMiddle}},
+			{Name: kindFolder, Parents: []string{kindRoot}, Nestable: true},
 		},
 		Permissions: []iam.Permission{permRead, permWrite},
 	}
@@ -244,6 +249,63 @@ func RunAuthorizerSuite(t *testing.T, newAuthority func(t *testing.T) Authority)
 		// declaration says it lives in a middle.
 		if _, err := a.Authorizer.CreateContainer(ctx, iam.ContainerSpec{TenantID: tenant, Kind: kindLeaf, Parent: root.ID}); !errors.Is(err, iam.ErrInvalidContainer) {
 			t.Errorf("creating a leaf inside a root returned %v, want ErrInvalidContainer: the declared edge is leaf-in-middle", err)
+		}
+	})
+
+	// ANestableKindIsAFolderInsideAFolder. Design goal 4 is
+	// "Google-Drive-shaped sharing: containers, inheritance, groups,
+	// roles, link sharing", and a Drive hierarchy is a folder inside a
+	// folder to arbitrary depth. A declaration of fixed-depth kinds cannot
+	// express it: the folder kind would need either two parent kinds —
+	// which is the declaration finding F3 refuses — or a self-reference,
+	// which cannot be told apart from that. So recursion is its own flag,
+	// and this subtest is the shape it exists for.
+	//
+	// It was found by the use-case corpus rather than by design: D2
+	// ("several levels of nested containers, still one tuple") and D7 had
+	// to synthesize a container kind per containment depth to be
+	// expressible at all, which a consumer cannot do without knowing every
+	// object's depth before it creates anything.
+	t.Run("ANestableKindIsAFolderInsideAFolder", func(t *testing.T) {
+		a := newAuthority(t)
+		ctx := context.Background()
+		tenant := newTenant()
+		mustRegister(t, a, suiteSchema())
+
+		root := mustContainer(t, a, tenant, kindRoot, "")
+		top := mustContainer(t, a, tenant, kindFolder, root.ID)
+		mid := mustContainer(t, a, tenant, kindFolder, top.ID)
+		deep := mustContainer(t, a, tenant, kindFolder, mid.ID)
+
+		got, err := a.Authorizer.Ancestors(ctx, tenant, deep.ID)
+		if err != nil {
+			t.Fatalf("Ancestors(deep): %v", err)
+		}
+		want := []iam.ContainerID{deep.ID, mid.ID, top.ID, root.ID}
+		if !slices.Equal(got, want) {
+			t.Fatalf("Ancestors through three nested folders = %v, want %v", got, want)
+		}
+
+		// One grant at the top still reaches the bottom, which is the
+		// property the nesting exists to preserve.
+		anne := mustPrincipal(t, a, tenant, "anne")
+		mustGrant(t, a, iam.GrantSpec{
+			TenantID: tenant, Container: top.ID, Permission: permRead, Subject: iam.PrincipalSubject(anne),
+		})
+		assertDecision(t, a, iam.Request{TenantID: tenant, Principal: anne, Permission: permRead, Container: deep.ID},
+			true, iam.ReasonInherited, 2, "one grant on the top folder reaches two levels of nesting below it")
+
+		// A nestable kind that declares a parent is still not a root: a
+		// container placed outside its declared container inherits nothing
+		// and is reachable by no grant anybody would think to write.
+		if _, err := a.Authorizer.CreateContainer(ctx, iam.ContainerSpec{TenantID: tenant, Kind: kindFolder}); !errors.Is(err, iam.ErrInvalidContainer) {
+			t.Errorf("creating a nestable folder with no parent returned %v, want ErrInvalidContainer: its "+
+				"declaration says it lives in a %s or in a folder", err, kindRoot)
+		}
+		// And nesting does not make it accept any kind at all.
+		middle := mustContainer(t, a, tenant, kindMiddle, root.ID)
+		if _, err := a.Authorizer.CreateContainer(ctx, iam.ContainerSpec{TenantID: tenant, Kind: kindFolder, Parent: middle.ID}); !errors.Is(err, iam.ErrInvalidContainer) {
+			t.Errorf("creating a folder inside a %s returned %v, want ErrInvalidContainer", kindMiddle, err)
 		}
 	})
 
@@ -534,6 +596,119 @@ func RunAuthorizerSuite(t *testing.T, newAuthority func(t *testing.T) Authority)
 		if _, err := a.Authorizer.Decide(ctx, iam.Request{TenantID: tenant, Permission: permRead, Container: root.ID}); !errors.Is(err, iam.ErrInvalidRequest) {
 			t.Errorf("Decide with no principal returned %v, want ErrInvalidRequest", err)
 		}
+	})
+
+	// AMalformedIDDeniesRatherThanErroring. This one is in the suite
+	// because it was a real divergence between the two adapters, found in
+	// review rather than by a test, and the direction of the divergence is
+	// what makes it a security defect and not a wart.
+	//
+	// `iam.ulid` is a Postgres DOMAIN over text with a format CHECK, and
+	// Postgres infers an untyped parameter's type from the column it is
+	// compared to — so the Postgres adapter, binding a malformed id, raised
+	// a domain-constraint violation where the in-memory adapter looked the
+	// same id up in a map, found nothing, and denied. A caller that treats
+	// an error as "retry", or that swallows one, then has an authorization
+	// layer whose behaviour on a typo depends on which adapter it is
+	// talking to.
+	//
+	// So a malformed id is the same answer as an id that does not exist:
+	// not found for a lookup, deny for a decision. That is also what keeps
+	// the pair from being an existence oracle — a caller cannot learn that
+	// an id is *well formed but absent* as distinct from nonsense.
+	t.Run("AMalformedIDDeniesRatherThanErroring", func(t *testing.T) {
+		a := newAuthority(t)
+		ctx := context.Background()
+		tenant := newTenant()
+		mustRegister(t, a, suiteSchema())
+
+		root := mustContainer(t, a, tenant, kindRoot, "")
+		anne := mustPrincipal(t, a, tenant, "anne")
+		mustGrant(t, a, iam.GrantSpec{
+			TenantID: tenant, Container: root.ID, Permission: permRead, Subject: iam.PrincipalSubject(anne),
+		})
+
+		// Not a ULID in any of the ways an id arrives wrong: empty, too
+		// short, the wrong alphabet, and something that looks like an
+		// injection attempt.
+		malformed := []string{"", "nope", "not-a-ulid", "01ARZ3NDEKTSV4RRFFQ69G5FA", "'; DROP TABLE iam.grants; --"}
+
+		for _, bad := range malformed {
+			d, err := a.Authorizer.Decide(ctx, iam.Request{
+				TenantID: tenant, Principal: anne, Permission: permRead, Container: iam.ContainerID(bad),
+			})
+			if bad == "" {
+				// An empty container is a malformed *request* rather than
+				// a question about the world, and that one is an error.
+				if !errors.Is(err, iam.ErrInvalidRequest) {
+					t.Errorf("Decide with an empty container returned %v, want ErrInvalidRequest", err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Decide with container %q returned an error: %v\nA malformed id must deny, exactly as "+
+						"an id that does not exist denies: a caller whose behaviour on a typo depends on the adapter "+
+						"has an authorization layer that fails in different directions", bad, err)
+				} else if d.Allowed {
+					t.Errorf("Decide with container %q allowed", bad)
+				}
+			}
+
+			d, err = a.Authorizer.Decide(ctx, iam.Request{
+				TenantID: tenant, Principal: iam.PrincipalID(bad), Permission: permRead, Container: root.ID,
+			})
+			if bad == "" {
+				if !errors.Is(err, iam.ErrInvalidRequest) {
+					t.Errorf("Decide with an empty principal returned %v, want ErrInvalidRequest", err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Decide with principal %q returned an error: %v", bad, err)
+				} else if d.Allowed {
+					t.Errorf("Decide with principal %q allowed", bad)
+				}
+			}
+
+			// The lookups give one answer too.
+			if _, err := a.Authorizer.Container(ctx, tenant, iam.ContainerID(bad)); !errors.Is(err, iam.ErrNotFound) {
+				t.Errorf("Container(%q) returned %v, want ErrNotFound", bad, err)
+			}
+			if _, err := a.Authorizer.Ancestors(ctx, tenant, iam.ContainerID(bad)); !errors.Is(err, iam.ErrNotFound) {
+				t.Errorf("Ancestors(%q) returned %v, want ErrNotFound", bad, err)
+			}
+			if _, err := a.Authorizer.GrantsOn(ctx, tenant, iam.ContainerID(bad)); !errors.Is(err, iam.ErrNotFound) {
+				t.Errorf("GrantsOn(%q) returned %v, want ErrNotFound", bad, err)
+			}
+		}
+
+		// A grant naming a malformed subject or container is refused, and
+		// refused the same way a grant naming one that does not exist is.
+		for _, bad := range malformed[1:] {
+			err := mustGrantErr(t, a, iam.GrantSpec{
+				TenantID: tenant, Container: root.ID, Permission: permRead, Subject: iam.PrincipalSubject(iam.PrincipalID(bad)),
+			})
+			if !errors.Is(err, iam.ErrNotFound) {
+				t.Errorf("Grant to malformed principal %q returned %v, want ErrNotFound", bad, err)
+			}
+			err = mustGrantErr(t, a, iam.GrantSpec{
+				TenantID: tenant, Container: iam.ContainerID(bad), Permission: permRead, Subject: iam.PrincipalSubject(anne),
+			})
+			if !errors.Is(err, iam.ErrNotFound) {
+				t.Errorf("Grant on malformed container %q returned %v, want ErrNotFound", bad, err)
+			}
+
+			// And revoking one is not an error at all, because a
+			// revocation that cannot have applied must not look like a
+			// revocation that failed — a caller would retry forever.
+			if _, err := a.Authorizer.Revoke(ctx, iam.GrantSpec{
+				TenantID: tenant, Container: iam.ContainerID(bad), Permission: permRead, Subject: iam.PrincipalSubject(anne),
+			}); err != nil {
+				t.Errorf("Revoke on malformed container %q returned %v, want nil", bad, err)
+			}
+		}
+
+		// The real grant is untouched by all of that.
+		assertAllowed(t, a, iam.Request{TenantID: tenant, Principal: anne, Permission: permRead, Container: root.ID},
+			"the grant that was actually written")
 	})
 
 	// CrossTenantReachIsRefused. No decision reads another tenant's rules

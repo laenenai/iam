@@ -748,9 +748,16 @@ type ContainerID string
 type ContainerKind struct {
 	Name string
 	Parents []string
+	Nestable bool
 }
 
+func (ContainerKind) AllowsParentKind(kind string) bool
+
+func (ContainerKind) AllowsRoot() bool
+
 func (ContainerKind) ParentKind() (string, bool)
+
+func (ContainerKind) PermittedParentKinds() []string
 
 type ContainerPermits struct {
 	Key Key
@@ -1290,6 +1297,8 @@ func (*Memory) Revoke(ctx context.Context, spec domain.GrantSpec) (domain.Revisi
 func NewMemory(reg registry.Registry, cfg Config) (*Memory, error)
 
 func NormalizeChangeLimit(limit int) int
+
+func PermittedOrNothing(k domain.ContainerKind) string
 
 const PrincipalGUC = "app.principal_id"
 

@@ -249,6 +249,53 @@ func TestTheDatabaseRefusesWhatGoWouldHaveCaught(t *testing.T) {
 		}
 	})
 
+	t.Run("AMalformedIdIsNotRaisedByAComparisonAndIsRaisedByAWrite", func(t *testing.T) {
+		// This subtest exists because it falsified the reason the
+		// adapter's well-formedness guards were first written, and the
+		// corrected measurement is worth more than the guards were.
+		//
+		// The assumption was: `iam.ulid` is a DOMAIN over text with a
+		// format CHECK, Postgres infers an untyped parameter's type from
+		// the column it is compared to, therefore a malformed id reaching
+		// a comparison raises a domain violation where the in-memory
+		// adapter's map lookup would simply miss — a divergence in which
+		// the Postgres adapter turns a denial into an error.
+		//
+		// Measured: it does not. For `domain_column = $1` Postgres
+		// resolves the operator as `text = text` and coerces the domain
+		// *down* to its base type, which needs no check, so the parameter
+		// is never coerced *up* into the domain and the comparison simply
+		// does not match. There was no divergence. The guards stay
+		// because the conformance suite states "a malformed id denies" as
+		// a contract and an adapter should enforce its own contract rather
+		// than inherit it from an operator-resolution rule nobody chose —
+		// but they are belt-and-braces, and their doc comment now says so.
+		var found bool
+		if err := pool.QueryRow(ctx, `
+			SELECT EXISTS (SELECT 1 FROM iam.containers WHERE id = $1)`, "not-a-ulid").Scan(&found); err != nil {
+			t.Fatalf("a comparison against iam.containers.id with a malformed parameter raised %v.\n"+
+				"If Postgres has started coercing the parameter up into the iam.ulid domain, the guards in this "+
+				"adapter are load-bearing after all and every statement that binds a caller-supplied id needs "+
+				"one — including any added later", err)
+		}
+		if found {
+			t.Error("a malformed id matched a container")
+		}
+
+		// A *write*, by contrast, does coerce into the domain, and does
+		// raise. That is the half that makes the write paths' checks
+		// load-bearing: they refuse before binding, so a malformed
+		// subject id becomes "not found" rather than a constraint
+		// violation the caller has to interpret.
+		_, err := pool.Exec(ctx, `
+			INSERT INTO iam.containers (id, tenant_id, kind) VALUES ($1, $2, $3)`,
+			"not-a-ulid", string(tenantA), kindTenantRoot)
+		if err == nil {
+			t.Error("a malformed id was stored in iam.containers. The iam.ulid domain exists so that a malformed " +
+				"id is a database-level error rather than a silently stored bad value")
+		}
+	})
+
 	t.Run("TheRevisionIsUniquePerTenant", func(t *testing.T) {
 		// Two tenants may hold the same revision number; one tenant may
 		// not hold it twice. That is the primary key, and it is what makes

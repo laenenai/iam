@@ -35,7 +35,10 @@
 //   - **Containment is a tree** (F3, closed 2026-10-24). One parent per
 //     container, one container per resource, and the containment key is a
 //     scalar. Both specified consumers' containment is a tree, so §9.2's
-//     "its containment path", singular, has a referent.
+//     "its containment path", singular, has a referent. A tree is not the
+//     same as a fixed-depth one: domain.ContainerKind.Nestable declares
+//     recursion, because design goal 4's Drive hierarchy is a folder inside
+//     a folder and a declaration of fixed-depth kinds cannot say so.
 //   - **The consumer settled its model** (2026-10-25). Privacy comes from
 //     *placement* in a four-tier named-graph tree, and the rule it needs
 //     is "which graphs may this principal read", enforced as a
@@ -54,12 +57,14 @@
 //     filters rows and says nothing about columns, and a consumer needing
 //     column-granular restriction has to make the sensitive field its own
 //     container-bearing resource, which is CAS's own cheapest answer.
+//
 //   - **Arbitrary relation algebra.** No usersets of usersets (a group's
 //     members are principals, never other groups), no `X from Y`, no
 //     computed relations, no union over relations on the same object,
 //     no roles as first-class objects with relations of their own. §8.2's
 //     four composition forms reduce to two plus the closure, because
 //     membership and inheritance is what both consumers asked for.
+//
 //   - **Bottom-up navigational visibility** (§8.2's `visible_below`).
 //     Nothing here answers "which containers may this principal see the
 //     existence of". F3's spike measured both readings of it and killed
@@ -68,6 +73,7 @@
 //     was exactly `{tenant, graph}` for every multi-path resource. The
 //     surviving candidate, anchoring the relation on the grant rather
 //     than on the object, is unbuilt.
+//
 //   - **Re-parenting a container, and deleting one.** A container's parent
 //     is set at creation. Moving a subtree rewrites the closure rows for
 //     everything below it — bounded by subtree size, which is small, so
@@ -76,6 +82,7 @@
 //     database refuses a delete that would orphan children (ON DELETE
 //     RESTRICT) rather than guessing what happens to the grants on the
 //     subtree.
+//
 //   - **Persisted, versioned schemas.** RegisterSchema validates a
 //     declaration and remembers it in this process. §8.4's explicit
 //     schema migration and its computed access delta between two versions
@@ -85,6 +92,26 @@
 //     created, and agree about every decision, because the tree a
 //     decision reads is enforced by the schema's single parent column in
 //     the database rather than by the declaration.
+//
+//   - **A permission that does not inherit.** Every permission inherits
+//     down the whole tree, and a consumer cannot declare one that stops.
+//     §8.2's third form is per relation — `viewer from parent`, declared on
+//     the relations that should inherit and omitted on those that should
+//     not — so a model in which a folder's owner is deliberately *not* the
+//     owner of the documents inside it is expressible there and not here.
+//     This layer would allow it.
+//
+//     That is a reduction and not an oversight, and the use-case corpus is
+//     what found it: no scenario in it distinguishes the two, which is luck
+//     rather than evidence, so the corpus now fails the first row that would
+//     rather than letting a declaration and an evaluator disagree quietly.
+//     Neither consumer needs the distinction — "which graphs may this
+//     principal read" inherits all the way down by construction, and a
+//     fileset's owner owning its documents is what CAS wants — and a
+//     consumer that does need it has one answer available today: put the
+//     resource in a container the grant does not reach, which is the same
+//     answer §7.2 gives for privacy inside a shared container.
+//
 //   - **Markings and the enforcement class** (§8.3). `Decide` never reads
 //     one by design — the cryptographic tier is not part of the decision
 //     — and this layer stores none at all, so a consumer cannot yet ask

@@ -72,6 +72,88 @@ func TestSchemaValidateRefusesASecondContainmentParent(t *testing.T) {
 	}
 }
 
+// TestANestableKindDeclaresRecursionExplicitly. A self-reference in
+// Parents is refused rather than read as recursion, because `Parents:
+// ["tenant", "folder"]` on kind "folder" has two readings — a folder lives
+// in a tenant *or* in a folder, or a folder lives in a tenant *and* in a
+// folder — and the second is exactly the DAG declaration F3 exists to
+// refuse. The syntax does not offer the choice.
+func TestANestableKindDeclaresRecursionExplicitly(t *testing.T) {
+	t.Parallel()
+
+	nested := domain.Schema{
+		Name:        "drive",
+		Version:     1,
+		Kinds:       []domain.ContainerKind{{Name: "tenant"}, {Name: "folder", Parents: []string{"tenant"}, Nestable: true}},
+		Permissions: []domain.Permission{"read"},
+	}
+	if err := nested.Validate(); err != nil {
+		t.Fatalf("an ordinary Drive hierarchy — a folder in a tenant or in a folder — was refused: %v", err)
+	}
+	folder, _ := nested.Kind("folder")
+	if !folder.AllowsParentKind("folder") {
+		t.Error("a nestable folder may not live in a folder")
+	}
+	if !folder.AllowsParentKind("tenant") {
+		t.Error("a nestable folder may not live in its declared parent kind")
+	}
+	if folder.AllowsParentKind("document") {
+		t.Error("a nestable folder may live in an undeclared kind, so nesting widened more than it was asked to")
+	}
+	if folder.AllowsRoot() {
+		t.Error("a nestable folder that declares a parent may be a root; a container placed outside its declared " +
+			"container inherits nothing and is reachable by no grant anybody would think to write")
+	}
+
+	// A nestable kind with no declared parent must be able to be a root,
+	// or nothing of that kind could ever exist.
+	topLevel := domain.Schema{
+		Name:        "drive",
+		Version:     1,
+		Kinds:       []domain.ContainerKind{{Name: "folder", Nestable: true}},
+		Permissions: []domain.Permission{"read"},
+	}
+	if err := topLevel.Validate(); err != nil {
+		t.Fatalf("a nestable root kind was refused: %v", err)
+	}
+	only, _ := topLevel.Kind("folder")
+	if !only.AllowsRoot() {
+		t.Error("a nestable kind with no declared parent cannot be a root, so nothing of that kind could exist")
+	}
+
+	// The self-reference is refused, and the refusal points at Nestable
+	// rather than only saying no.
+	self := domain.Schema{
+		Name:        "drive",
+		Version:     1,
+		Kinds:       []domain.ContainerKind{{Name: "folder", Parents: []string{"folder"}}},
+		Permissions: []domain.Permission{"read"},
+	}
+	err := self.Validate()
+	if !errors.Is(err, domain.ErrInvalidSchema) {
+		t.Fatalf("a kind naming itself in Parents returned %v, want ErrInvalidSchema", err)
+	}
+	if !strings.Contains(err.Error(), "Nestable") {
+		t.Errorf("the refusal does not mention Nestable, so a caller is told no without being told how: %s", err)
+	}
+
+	// And two distinct parent kinds are still the F3 refusal, nestable or
+	// not: that is the reading this flag exists to keep unambiguous.
+	both := domain.Schema{
+		Name:    "drive",
+		Version: 1,
+		Kinds: []domain.ContainerKind{
+			{Name: "tenant"},
+			{Name: "shared"},
+			{Name: "folder", Parents: []string{"tenant", "shared"}, Nestable: true},
+		},
+		Permissions: []domain.Permission{"read"},
+	}
+	if err := both.Validate(); !errors.Is(err, domain.ErrMultipleContainmentParents) {
+		t.Fatalf("a nestable kind with two declared parents returned %v, want ErrMultipleContainmentParents", err)
+	}
+}
+
 func TestSchemaValidateRefusesWhatIsNotWellFormed(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

@@ -142,12 +142,10 @@ func (m *Memory) CreateContainer(ctx context.Context, spec domain.ContainerSpec)
 		return domain.Container{}, fmt.Errorf("%w: no registered schema declares container kind %q", domain.ErrSchemaNotRegistered, spec.Kind)
 	}
 
-	parentKind, declaresParent := kind.ParentKind()
 	switch {
-	case spec.Parent == "" && declaresParent:
-		return domain.Container{}, fmt.Errorf("%w: kind %q is declared inside %q, so it cannot be a root", domain.ErrInvalidContainer, spec.Kind, parentKind)
-	case spec.Parent != "" && !declaresParent:
-		return domain.Container{}, fmt.Errorf("%w: kind %q is declared as a root kind, so it cannot be placed inside a container", domain.ErrInvalidContainer, spec.Kind)
+	case spec.Parent == "" && !kind.AllowsRoot():
+		return domain.Container{}, fmt.Errorf("%w: kind %q is declared inside %s, so it cannot be a root",
+			domain.ErrInvalidContainer, spec.Kind, strings.Join(kind.PermittedParentKinds(), " or "))
 	case spec.Parent != "":
 		parent, ok := m.containers[spec.Parent]
 		if !ok || parent.TenantID != spec.TenantID {
@@ -156,9 +154,9 @@ func (m *Memory) CreateContainer(ctx context.Context, spec domain.ContainerSpec)
 			// space.
 			return domain.Container{}, fmt.Errorf("%w: container %s", domain.ErrNotFound, spec.Parent)
 		}
-		if parent.Kind != parentKind {
-			return domain.Container{}, fmt.Errorf("%w: kind %q is declared inside %q, but container %s is a %q",
-				domain.ErrInvalidContainer, spec.Kind, parentKind, spec.Parent, parent.Kind)
+		if !kind.AllowsParentKind(parent.Kind) {
+			return domain.Container{}, fmt.Errorf("%w: kind %q may live in %s, but container %s is a %q",
+				domain.ErrInvalidContainer, spec.Kind, PermittedOrNothing(kind), spec.Parent, parent.Kind)
 		}
 	}
 
@@ -368,6 +366,18 @@ func (m *Memory) GrantsOn(ctx context.Context, tenant domain.TenantID, container
 	}
 	sortGrants(out)
 	return out, nil
+}
+
+// PermittedOrNothing renders what a kind may live in, for an error a
+// caller has to act on. A kind that may live in nothing at all is a root
+// kind somebody tried to nest, and saying "nothing" is clearer than an
+// empty list.
+func PermittedOrNothing(k domain.ContainerKind) string {
+	permitted := k.PermittedParentKinds()
+	if len(permitted) == 0 {
+		return "nothing — it is a root kind"
+	}
+	return strings.Join(permitted, " or ")
 }
 
 // sortGrants puts grants in the order both adapters return them:

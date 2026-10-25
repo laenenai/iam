@@ -36,10 +36,39 @@ type ContainerKind struct {
 	// (design §8.4), so this string is the whole of what `iam` knows
 	// about a consumer's model.
 	Name string
-	// Parents names the kinds a container of this kind may live in. An
-	// empty Parents declares a root kind. Exactly one entry declares a
-	// containment edge. Two or more is refused.
+	// Parents names the kind a container of this kind lives in. An empty
+	// Parents declares a root kind; one entry declares a containment
+	// edge; **two or more is refused** — see Schema.Validate and
+	// ErrMultipleContainmentParents.
+	//
+	// It is a slice rather than an optional string precisely so that the
+	// refused declaration is representable. Modelling it as one string
+	// would have made the refusal unexpressible and the invariant
+	// unenforced, which is the state finding F3's spike found §8.4 in.
 	Parents []string
+	// Nestable declares that a container of this kind may also live in
+	// another container of the same kind: a folder inside a folder.
+	//
+	// It is a separate flag rather than the kind naming itself in
+	// Parents, and the separation is the whole point. `Parents:
+	// ["tenant", "folder"]` on kind "folder" has two readings — a folder
+	// lives in a tenant *or* in a folder, or a folder lives in a tenant
+	// *and* in a folder — and the second is exactly the DAG declaration
+	// F3 exists to refuse. There is no way to tell them apart from the
+	// syntax, so the syntax does not offer the choice: Parents is the one
+	// kind above, and Nestable is recursion, declared.
+	//
+	// Without it, an ordinary Google-Drive hierarchy — design goal 4's
+	// own example — had no declaration at all: a folder in a folder needs
+	// either two parent kinds or a self-reference, and both were refused.
+	// The use-case corpus had to synthesize a container kind per
+	// containment depth to work around it, which a consumer cannot do
+	// without knowing every object's depth before it creates anything.
+	//
+	// A nestable kind with no Parents is a root kind that also nests: the
+	// outermost folder has no parent, and every other folder lives in
+	// one.
+	Nestable bool
 }
 
 // Schema is one consumer's registered model: the container kinds that
@@ -229,7 +258,10 @@ func (s Schema) Validate() error {
 		}
 		for _, parent := range k.Parents {
 			if parent == k.Name {
-				return fmt.Errorf("%w: schema %q declares kind %q as its own containment parent", ErrInvalidSchema, s.Name, k.Name)
+				return fmt.Errorf("%w: schema %q names kind %q as its own containment parent; recursive nesting is "+
+					"declared with Nestable rather than by self-reference, because a kind listed among its own "+
+					"parents cannot be told apart from the two-parent declaration finding F3 refuses",
+					ErrInvalidSchema, s.Name, k.Name)
 			}
 			if _, ok := byName[parent]; !ok {
 				return fmt.Errorf("%w: schema %q declares kind %q inside undeclared kind %q", ErrInvalidSchema, s.Name, k.Name, parent)
@@ -289,15 +321,52 @@ func (s Schema) DeclaresPermission(p Permission) bool {
 	return slices.Contains(s.Permissions, p)
 }
 
-// ParentKind returns the kind a container of this kind must live in, and
-// whether it has one. It returns one kind rather than a set because
-// Validate has already refused every declaration for which the question
-// has more than one answer.
+// ParentKind returns the kind above this one, and whether it has one. It
+// returns one kind rather than a set because Validate has already refused
+// every declaration for which the question has more than one answer.
+//
+// It says nothing about Nestable: a nestable kind may also live in its own
+// kind, which AllowsParentKind reports and this does not.
 func (k ContainerKind) ParentKind() (string, bool) {
 	if len(k.Parents) == 1 {
 		return k.Parents[0], true
 	}
 	return "", false
+}
+
+// AllowsRoot reports whether a container of this kind may be created with
+// no parent.
+//
+// A kind with no declared parent must be a root, or nothing of that kind
+// could exist. A nestable kind with no declared parent must also be able
+// to be one, for the same reason: the outermost folder has nothing above
+// it. A kind that declares a parent may not be a root, because a container
+// placed outside its declared container inherits nothing and is reachable
+// by no grant anybody would think to write.
+func (k ContainerKind) AllowsRoot() bool { return len(k.Parents) == 0 }
+
+// AllowsParentKind reports whether a container of this kind may live in a
+// container of the named kind: its declared parent kind, or its own kind
+// when it is nestable.
+func (k ContainerKind) AllowsParentKind(kind string) bool {
+	if k.Nestable && kind == k.Name {
+		return true
+	}
+	parent, declared := k.ParentKind()
+	return declared && kind == parent
+}
+
+// PermittedParentKinds returns the kinds a container of this kind may live
+// in, for an error message that has to say what was permitted.
+func (k ContainerKind) PermittedParentKinds() []string {
+	out := make([]string, 0, 2)
+	if parent, declared := k.ParentKind(); declared {
+		out = append(out, parent)
+	}
+	if k.Nestable {
+		out = append(out, k.Name)
+	}
+	return out
 }
 
 // permissionNamePattern is the shape a permission name must have, and
