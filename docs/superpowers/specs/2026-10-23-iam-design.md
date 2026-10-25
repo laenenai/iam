@@ -855,6 +855,33 @@ violation.
 
 ### 9.3 Staleness is asymmetric, and reversing it is the whole risk
 
+> **Amended 2026-10-25: in the shape that is built, there is no staleness to
+> be asymmetric about — and the mechanism that will need this section again
+> is in place rather than deferred.**
+>
+> The embedded deployment has no projection. The closures are the authority
+> and they live in the consumer's own Postgres, so a grant and a revocation
+> both take effect in the consumer's next statement and neither has a path to
+> lag on. This section's hazard is a property of a *separated* authority, and
+> §11's seam note says when that returns.
+>
+> What is built now, and built now precisely because adding it later is a
+> breaking change at every call site: an append-only change log whose
+> **revision** is gapless, assigned in commit order under a per-tenant
+> advisory lock, and carried on every `Decision` and every residual. Not from
+> a sequence — a sequence allocates its number before the transaction commits,
+> so a reader can observe revision 5 while 4 is still in flight and a cursor
+> stored at 5 skips 4 forever. That is this section's hazard in its purest
+> form, and §17 already records it as `DefaultChangelogHorizonOffset = 0`. A
+> revocation is logged as its own kind rather than as an absence, for this
+> section's reason: a projection that misses a grant is an outage and one that
+> misses a revocation is a disclosure.
+>
+> No semantics are built on the revision yet. There is no "decide at revision
+> R", no declared bound, no fail-closed threshold. It is a value that exists,
+> is monotonic, and is documented as the token a separated deployment will
+> require.
+
 A stale grant is a disclosure. A stale denial is an outage. They are not
 symmetric and must not share a path.
 
@@ -1073,6 +1100,28 @@ cannot be resolved is not written.
 - **Service**: `iamd` serves the module's API (gRPC with a REST/JSON gateway,
   mirroring CAS and kgs) and runs the closure workers. Projections still live
   in each pool's database, so the service is control-plane only.
+
+  > **The seam, marked 2026-10-25 and deliberately not crossed.** The embedded
+  > shape is the one that is built, and everything cheap about it comes from
+  > one property: the closures are in the same Postgres the consumer queries,
+  > so the consumer *joins the authority* and nothing propagates. A revocation
+  > takes effect in the consumer's next statement; a deprovisioning takes
+  > effect in the statement that records it.
+  >
+  > The service shape breaks exactly that. The closures would live in the
+  > consumer's pool while the authority lives in the service, which makes them
+  > a **projection** again — and then §9.3's asymmetric staleness, §9.4's
+  > differential audit and §16.5's divergence tolerance all come back, none of
+  > them answered. Two things are already in place so that this is a build
+  > rather than a redesign: the **change log** with its gapless per-tenant
+  > cursor, which is what a projection resumes from, and the **revision** on
+  > every answer, which is the only thing that can distinguish "lagging within
+  > a declared bound" from "diverged". Neither has semantics built on it yet,
+  > and building them is what the service shape costs.
+  >
+  > The same seam is what makes another storage backend possible at all: a
+  > consumer on a store that is not this Postgres is the service shape by
+  > another name, and it projects from the same log.
 
 Identical semantics, conformance-tested against both. A household deployment
 runs CAS + kgs + iam in one binary against one Postgres.
