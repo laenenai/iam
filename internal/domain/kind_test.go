@@ -68,3 +68,11 @@ func TestDefaultKinds(t *testing.T) {
 		}
 	}
 }
+
+func TestSubjectKindNamesAreReserved(t *testing.T) {
+	for _, name := range []string{"user", "agent", "group"} {
+		if err := (KindSpec{Name: name}).Validate(); !errors.Is(err, ErrInvalidKind) {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+}

@@ -18,6 +18,10 @@ func (k KindSpec) Validate() error {
 	if !validSlug(k.Name) {
 		return fmt.Errorf("%w: name %q", ErrInvalidKind, k.Name)
 	}
+	switch k.Name {
+	case string(SubjectUser), string(SubjectAgent), string(SubjectGroup):
+		return fmt.Errorf("%w: %q is a reserved subject kind", ErrInvalidKind, k.Name)
+	}
 	if k.Name == RootKind {
 		if !k.ContainsAny {
 			return fmt.Errorf("%w: root must accept any child kind", ErrInvalidKind)
