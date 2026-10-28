@@ -1,0 +1,1054 @@
+# Public API of github.com/laenenai/iam, as a golden file.
+#
+# Regenerate with: go test . -run TestAPIGolden -update-api
+#
+# "package iam" is the facade a consumer imports and "package iamtest" is the
+# conformance suite it runs against its own wiring. The internal packages are
+# listed too, because the facade re-exports their types as aliases: a change to
+# one of those signatures changes what a consumer sees, even though the import
+# path itself is private. Growing this file is a reviewed diff.
+
+package iam // .
+
+type AccessibleCountRequest = core.AccessibleCountRequest
+
+type AccessibleCountResult = core.AccessibleCountResult
+
+type Actor = domain.Actor
+
+type ActorRole = domain.ActorRole
+
+type AddGroupMemberRequest = core.AddGroupMemberRequest
+
+const Admin = domain.Admin
+
+const CanComment = domain.CanComment
+
+const CanDelete = domain.CanDelete
+
+const CanEdit = domain.CanEdit
+
+const CanShare = domain.CanShare
+
+const CanView = domain.CanView
+
+type CheckRequest = core.CheckRequest
+
+type Clock = domain.Clock
+
+const Commenter = domain.Commenter
+
+type Config = core.Config
+
+type CreateGroupRequest = core.CreateGroupRequest
+
+type CreateTenantRequest = core.CreateTenantRequest
+
+type DeactivatePrincipalRequest = core.DeactivatePrincipalRequest
+
+type DeactivationSource = domain.DeactivationSource
+
+type Decision = core.Decision
+
+func DefaultKinds() []KindSpec
+
+type DeleteGroupRequest = core.DeleteGroupRequest
+
+type DeleteNodeRequest = core.DeleteNodeRequest
+
+type DeletePrincipalRequest = core.DeletePrincipalRequest
+
+type DeleteSubtreeRequest = core.DeleteSubtreeRequest
+
+const Editor = domain.Editor
+
+var ErrConflict = domain.ErrConflict
+
+var ErrForbidden = domain.ErrForbidden
+
+var ErrIDGeneration = domain.ErrIDGeneration
+
+var ErrInvalidActor = domain.ErrInvalidActor
+
+var ErrInvalidKind = domain.ErrInvalidKind
+
+var ErrInvalidRelation = domain.ErrInvalidRelation
+
+var ErrInvalidSubject = domain.ErrInvalidSubject
+
+var ErrInvalidTenant = domain.ErrInvalidTenant
+
+var ErrInvalidURN = domain.ErrInvalidURN
+
+var ErrModelNotProjected = domain.ErrModelNotProjected
+
+var ErrNotFound = domain.ErrNotFound
+
+var ErrStale = domain.ErrStale
+
+var ErrUnauthorized = domain.ErrUnauthorized
+
+var ErrUnknownEvent = domain.ErrUnknownEvent
+
+var ErrUnsupported = domain.ErrUnsupported
+
+type Event = domain.Event
+
+type FixedClock = domain.FixedClock
+
+type Grant = domain.Grant
+
+type GrantID = domain.GrantID
+
+type GrantIssued = domain.GrantIssued
+
+type GrantRequest = core.GrantRequest
+
+type GrantResult = core.GrantResult
+
+type GrantRevoked = domain.GrantRevoked
+
+type Group = domain.Group
+
+type GroupAdminChanged = domain.GroupAdminChanged
+
+type GroupCreated = domain.GroupCreated
+
+type GroupDeleted = domain.GroupDeleted
+
+type GroupResult = core.GroupResult
+
+type IAM = core.IAM
+
+type KindRegistered = domain.KindRegistered
+
+type KindSpec = domain.KindSpec
+
+type LinkPrincipalRequest = core.LinkPrincipalRequest
+
+type ListObjectsRequest = core.ListObjectsRequest
+
+type ListObjectsResult = core.ListObjectsResult
+
+type ListSubjectsRequest = core.ListSubjectsRequest
+
+type ListSubjectsResult = core.ListSubjectsResult
+
+const Member = domain.Member
+
+type MemberAdded = domain.MemberAdded
+
+type MemberRemoved = domain.MemberRemoved
+
+type ModelPublished = domain.ModelPublished
+
+func NewGrantID(clock Clock) (GrantID, error)
+
+func NewGroupSubject(tenant TenantID, id string) (Subject, error)
+
+func NewMemory(ctx context.Context, cfg Config) (*IAM, error)
+
+func NewNodeURN(tenant TenantID, kind, id string) (URN, error)
+
+func NewSubjectURN(tenant TenantID, kind SubjectKind, id string) (URN, error)
+
+func NewUserSubject(tenant TenantID, id string) (Subject, error)
+
+type Node = domain.Node
+
+type NodeDeleted = domain.NodeDeleted
+
+type NodeRegistered = domain.NodeRegistered
+
+type NodeResult = core.NodeResult
+
+const Owner = domain.Owner
+
+const Parent = domain.Parent
+
+func ParseSubject(urn URN) (Subject, error)
+
+func ParseTenantID(s string) (TenantID, error)
+
+func ParseURN(s string) (URN, error)
+
+type Principal = domain.Principal
+
+type PrincipalDeactivated = domain.PrincipalDeactivated
+
+type PrincipalDeleted = domain.PrincipalDeleted
+
+type PrincipalLinked = domain.PrincipalLinked
+
+type PrincipalReactivated = domain.PrincipalReactivated
+
+type PrincipalResult = core.PrincipalResult
+
+type PublishModelRequest = core.PublishModelRequest
+
+type ReactivatePrincipalRequest = core.ReactivatePrincipalRequest
+
+type Reason = domain.Reason
+
+const ReasonDirect = domain.ReasonDirect
+
+const ReasonInherited = domain.ReasonInherited
+
+const ReasonNoGrant = domain.ReasonNoGrant
+
+const ReasonUserset = domain.ReasonUserset
+
+type RegisterKindRequest = core.RegisterKindRequest
+
+type RegisterNodeRequest = core.RegisterNodeRequest
+
+type Relation = domain.Relation
+
+type RemoveGroupMemberRequest = core.RemoveGroupMemberRequest
+
+type Revision = domain.Revision
+
+type RevokeRequest = core.RevokeRequest
+
+const RoleAgent = domain.RoleAgent
+
+const RoleAuditor = domain.RoleAuditor
+
+const RoleDeploymentAdmin = domain.RoleDeploymentAdmin
+
+const RoleIdentityAdapter = domain.RoleIdentityAdapter
+
+const RoleTenantAdmin = domain.RoleTenantAdmin
+
+const RoleUser = domain.RoleUser
+
+const RootKind = domain.RootKind
+
+type SetGroupAdminRequest = core.SetGroupAdminRequest
+
+const SourceGlobal = domain.SourceGlobal
+
+const SourceTenant = domain.SourceTenant
+
+type Subject = domain.Subject
+
+const SubjectAgent = domain.SubjectAgent
+
+type SubjectGrant = core.SubjectGrant
+
+const SubjectGroup = domain.SubjectGroup
+
+type SubjectKind = domain.SubjectKind
+
+const SubjectUser = domain.SubjectUser
+
+type SystemClock = domain.SystemClock
+
+type Tenant = core.Tenant
+
+type TenantID = domain.TenantID
+
+type URN = domain.URN
+
+const Viewer = domain.Viewer
+
+package iamtest // iamtest
+
+func RunSuite(t *testing.T, newIAM func(t *testing.T) *iam.IAM)
+
+package domain // internal/domain
+
+type Actor struct {
+	ID string
+	Subject Subject
+	Tenant TenantID
+	Role ActorRole
+}
+
+func (Actor) Validate() error
+
+type ActorRole string
+
+const Admin Relation = "admin"
+
+const CanComment Relation = "can_comment"
+
+const CanDelete Relation = "can_delete"
+
+const CanEdit Relation = "can_edit"
+
+const CanShare Relation = "can_share"
+
+const CanView Relation = "can_view"
+
+type Clock interface {
+	Now() time.Time
+}
+
+const Commenter Relation = "commenter"
+
+type DeactivationSource string
+
+func DefaultKinds() []KindSpec
+
+const Editor Relation = "editor"
+
+var ErrConflict = errors.New("iam: conflict")
+
+var ErrForbidden = errors.New("iam: forbidden")
+
+var ErrIDGeneration = errors.New("iam: id generation failed")
+
+var ErrInvalidActor = errors.New("iam: invalid actor")
+
+var ErrInvalidKind = errors.New("iam: invalid kind")
+
+var ErrInvalidRelation = errors.New("iam: invalid relation")
+
+var ErrInvalidSubject = errors.New("iam: invalid subject")
+
+var ErrInvalidTenant = errors.New("iam: invalid tenant")
+
+var ErrInvalidURN = errors.New("iam: invalid urn")
+
+var ErrModelNotProjected = errors.New("iam: model not projected")
+
+var ErrNotFound = errors.New("iam: not found")
+
+var ErrStale = errors.New("iam: stale")
+
+var ErrUnauthorized = errors.New("iam: unauthorized")
+
+var ErrUnknownEvent = errors.New("iam: unknown event")
+
+var ErrUnsupported = errors.New("iam: unsupported")
+
+type Event interface {
+	EventType() string
+	Stream() string
+}
+
+type FixedClock struct {
+	// has unexported fields
+}
+
+func (*FixedClock) Advance(d time.Duration)
+
+func (FixedClock) Now() time.Time
+
+type Grant struct {
+	ID GrantID
+	Tenant TenantID
+	Object URN
+	Subject Subject
+	Relation Relation
+	GrantedBy string
+	GrantedAt time.Time
+	Live bool
+}
+
+func (Grant) Validate() error
+
+type GrantID string
+
+type GrantIssued struct {
+	GrantID GrantID
+	Object URN
+	Subject Subject
+	Relation Relation
+	GrantedBy string
+	Reason string
+}
+
+func (GrantIssued) EventType() string
+
+func (GrantIssued) Stream() string
+
+type GrantRevoked struct {
+	GrantID GrantID
+	Object URN
+	RevokedBy string
+	Reason string
+}
+
+func (GrantRevoked) EventType() string
+
+func (GrantRevoked) Stream() string
+
+type Group struct {
+	URN URN
+	Tenant TenantID
+	Name string
+	Admin Subject
+	Live bool
+	CreatedAt time.Time
+}
+
+func (Group) Validate() error
+
+type GroupAdminChanged struct {
+	Group URN
+	Admin Subject
+	ChangedBy string
+}
+
+func (GroupAdminChanged) EventType() string
+
+func (GroupAdminChanged) Stream() string
+
+type GroupCreated struct {
+	Group URN
+	Name string
+	Admin Subject
+	CreatedBy string
+}
+
+func (GroupCreated) EventType() string
+
+func (GroupCreated) Stream() string
+
+type GroupDeleted struct {
+	Group URN
+	Reason string
+}
+
+func (GroupDeleted) EventType() string
+
+func (GroupDeleted) Stream() string
+
+type KindRegistered struct {
+	Version int
+	Kind KindSpec
+}
+
+func (KindRegistered) EventType() string
+
+func (KindRegistered) Stream() string
+
+type KindSpec struct {
+	Name string
+	Contains []string
+	ContainsAny bool
+	Relations []Relation
+}
+
+func (KindSpec) Validate() error
+
+const Member Relation = "member"
+
+type MemberAdded struct {
+	Group URN
+	Member Subject
+	AddedBy string
+}
+
+func (MemberAdded) EventType() string
+
+func (MemberAdded) Stream() string
+
+type MemberRemoved struct {
+	Group URN
+	Member Subject
+	RemovedBy string
+}
+
+func (MemberRemoved) EventType() string
+
+func (MemberRemoved) Stream() string
+
+type ModelPublished struct {
+	Version int
+}
+
+func (ModelPublished) EventType() string
+
+func (ModelPublished) Stream() string
+
+func NewGrantID(clock Clock) (GrantID, error)
+
+func NewGroupSubject(tenant TenantID, id string) (Subject, error)
+
+func NewNodeURN(tenant TenantID, kind, id string) (URN, error)
+
+func NewSubjectURN(tenant TenantID, kind SubjectKind, id string) (URN, error)
+
+func NewUserSubject(tenant TenantID, id string) (Subject, error)
+
+type Node struct {
+	URN URN
+	Tenant TenantID
+	Kind string
+	Parent URN
+	Live bool
+	CreatedAt time.Time
+	CreatedBy string
+}
+
+func (Node) Validate() error
+
+type NodeDeleted struct {
+	URN URN
+	Reason string
+}
+
+func (NodeDeleted) EventType() string
+
+func (NodeDeleted) Stream() string
+
+type NodeRegistered struct {
+	URN URN
+	Kind string
+	Parent URN
+	CreatedBy string
+}
+
+func (NodeRegistered) EventType() string
+
+func (NodeRegistered) Stream() string
+
+const Owner Relation = "owner"
+
+const Parent Relation = "parent"
+
+func ParseSubject(u URN) (Subject, error)
+
+func ParseTenantID(s string) (TenantID, error)
+
+func ParseURN(s string) (URN, error)
+
+type Principal struct {
+	URN URN
+	Tenant TenantID
+	Issuer string
+	ExternalID string
+	Kind SubjectKind
+	GlobalLive bool
+	TenantLive bool
+	Live bool
+	Deleted bool
+	LinkedAt time.Time
+}
+
+func (Principal) EffectiveLive() bool
+
+func (Principal) Validate() error
+
+type PrincipalDeactivated struct {
+	Subject Subject
+	Source DeactivationSource
+	Reason string
+}
+
+func (PrincipalDeactivated) EventType() string
+
+func (PrincipalDeactivated) Stream() string
+
+type PrincipalDeleted struct {
+	Subject Subject
+	Reason string
+}
+
+func (PrincipalDeleted) EventType() string
+
+func (PrincipalDeleted) Stream() string
+
+type PrincipalLinked struct {
+	Issuer string
+	ExternalID string
+	Subject Subject
+}
+
+func (PrincipalLinked) EventType() string
+
+func (PrincipalLinked) Stream() string
+
+type PrincipalReactivated struct {
+	Subject Subject
+	Source DeactivationSource
+	Reason string
+}
+
+func (PrincipalReactivated) EventType() string
+
+func (PrincipalReactivated) Stream() string
+
+type Reason string
+
+const ReasonDirect Reason = "direct"
+
+const ReasonInherited Reason = "inherited"
+
+const ReasonNoGrant Reason = "no_grant"
+
+const ReasonUserset Reason = "userset"
+
+type Relation string
+
+func (Relation) IsBase() bool
+
+func (Relation) IsGrantable() bool
+
+func (Relation) Rank() int
+
+type Revision uint64
+
+const RoleAgent ActorRole = "agent"
+
+const RoleAuditor ActorRole = "auditor"
+
+const RoleDeploymentAdmin ActorRole = "deployment_admin"
+
+const RoleIdentityAdapter ActorRole = "identity_adapter"
+
+const RoleTenantAdmin ActorRole = "tenant_admin"
+
+const RoleUser ActorRole = "user"
+
+const RootKind = "root"
+
+const SourceGlobal DeactivationSource = "global"
+
+const SourceTenant DeactivationSource = "tenant"
+
+type Subject struct {
+	URN URN
+	Kind SubjectKind
+}
+
+func (Subject) String() string
+
+func (Subject) Validate() error
+
+const SubjectAgent SubjectKind = "agent"
+
+const SubjectGroup SubjectKind = "group"
+
+type SubjectKind string
+
+const SubjectUser SubjectKind = "user"
+
+type SystemClock struct{}
+
+func (SystemClock) Now() time.Time
+
+type TenantID string
+
+func (TenantID) String() string
+
+type URN string
+
+func (URN) ID() string
+
+func (URN) Kind() string
+
+func (URN) String() string
+
+func (URN) Tenant() TenantID
+
+const Viewer Relation = "viewer"
+
+package eventlog // internal/eventlog
+
+type Envelope struct {
+	Actor string
+	Command string
+	CorrelationID string
+	CausationID string
+	ModelVersion int
+	OccurredAt time.Time
+	Event domain.Event
+}
+
+var ErrInvalidEnvelope = errors.New("eventlog: invalid envelope")
+
+var ErrInvalidWorkspace = errors.New("eventlog: invalid workspace")
+
+type EventLog interface {
+	Append(ctx context.Context, ws Workspace, envelopes ...Envelope) (domain.Revision, error)
+	Read(ctx context.Context, ws Workspace, from domain.Revision, limit int) ([]Recorded, error)
+	Head(ctx context.Context, ws Workspace) (domain.Revision, error)
+}
+
+type Memory struct {
+	// has unexported fields
+}
+
+func (*Memory) Append(ctx context.Context, ws Workspace, envelopes ...Envelope) (domain.Revision, error)
+
+func (*Memory) Head(ctx context.Context, ws Workspace) (domain.Revision, error)
+
+func (*Memory) Read(ctx context.Context, ws Workspace, from domain.Revision, limit int) ([]Recorded, error)
+
+func NewMemory(clock domain.Clock) *Memory
+
+const PlatformWorkspace Workspace = "_platform"
+
+type Recorded struct {
+	Workspace Workspace
+	Revision domain.Revision
+	Envelope Envelope
+	RecordedAt time.Time
+}
+
+func TenantWorkspace(tenant domain.TenantID) Workspace
+
+type Workspace string
+
+package engine // internal/engine
+
+type Engine interface {
+	Write(ctx context.Context, tuples ...Tuple) error
+	Delete(ctx context.Context, tuples ...Tuple) error
+	Check(ctx context.Context, subject domain.Subject, relation domain.Relation, object domain.URN) (bool, domain.Reason, error)
+}
+
+type Memory struct {
+	// has unexported fields
+}
+
+func (*Memory) Check(ctx context.Context, subject domain.Subject, relation domain.Relation, object domain.URN) (bool, domain.Reason, error)
+
+func (*Memory) Delete(ctx context.Context, tuples ...Tuple) error
+
+func (*Memory) Write(ctx context.Context, tuples ...Tuple) error
+
+func NewMemory() *Memory
+
+type Tuple struct {
+	Object domain.URN
+	Relation domain.Relation
+	Subject domain.URN
+	Userset bool
+}
+
+package projector // internal/projector
+
+type MemoryStore struct {
+	// has unexported fields
+}
+
+func (*MemoryStore) AddPendingKind(kind domain.KindSpec)
+
+func (*MemoryStore) Grant(tenant domain.TenantID, id domain.GrantID) (domain.Grant, bool)
+
+func (*MemoryStore) GrantsForObject(tenant domain.TenantID, object domain.URN) []domain.Grant
+
+func (*MemoryStore) GrantsForSubject(tenant domain.TenantID, subject domain.Subject) []domain.Grant
+
+func (*MemoryStore) Group(tenant domain.TenantID, urn domain.URN) (domain.Group, bool)
+
+func (*MemoryStore) GroupMembers(tenant domain.TenantID, group domain.URN) []domain.Subject
+
+func (*MemoryStore) GroupsForAdmin(tenant domain.TenantID, admin domain.Subject) []domain.Group
+
+func (*MemoryStore) GroupsForMember(tenant domain.TenantID, member domain.Subject) []domain.Group
+
+func (*MemoryStore) Kind(name string) (domain.KindSpec, bool)
+
+func (*MemoryStore) Live(tenant domain.TenantID, subject domain.Subject) bool
+
+func (*MemoryStore) ModelVersion() int
+
+func (*MemoryStore) Node(tenant domain.TenantID, urn domain.URN) (domain.Node, bool)
+
+func (*MemoryStore) Nodes(tenant domain.TenantID) []domain.Node
+
+func (*MemoryStore) PendingKind(name string) (domain.KindSpec, bool)
+
+func (*MemoryStore) PendingKinds() []domain.KindSpec
+
+func (*MemoryStore) Principal(tenant domain.TenantID, subject domain.Subject) (domain.Principal, bool)
+
+func (*MemoryStore) PublishKinds(version int)
+
+func (*MemoryStore) SetGrant(grant domain.Grant)
+
+func (*MemoryStore) SetGroup(group domain.Group)
+
+func (*MemoryStore) SetGroupMember(tenant domain.TenantID, group domain.URN, member domain.Subject, live bool)
+
+func (*MemoryStore) SetNode(node domain.Node)
+
+func (*MemoryStore) SetPrincipal(principal domain.Principal)
+
+func New(log eventlog.EventLog, store Store, eng engine.Engine, clock domain.Clock) *Projector
+
+func NewMemoryStore() *MemoryStore
+
+type Projector struct {
+	// has unexported fields
+}
+
+func (*Projector) Applied(ws eventlog.Workspace) domain.Revision
+
+func (*Projector) AppliedAt(ws eventlog.Workspace) time.Time
+
+func (*Projector) Project(ctx context.Context, ws eventlog.Workspace) error
+
+type Store interface {
+	SetNode(domain.Node)
+	Node(tenant domain.TenantID, urn domain.URN) (domain.Node, bool)
+	Nodes(tenant domain.TenantID) []domain.Node
+	SetGrant(domain.Grant)
+	Grant(tenant domain.TenantID, id domain.GrantID) (domain.Grant, bool)
+	GrantsForObject(tenant domain.TenantID, object domain.URN) []domain.Grant
+	GrantsForSubject(tenant domain.TenantID, subject domain.Subject) []domain.Grant
+	GroupsForMember(tenant domain.TenantID, member domain.Subject) []domain.Group
+	GroupsForAdmin(tenant domain.TenantID, admin domain.Subject) []domain.Group
+	SetGroup(domain.Group)
+	Group(tenant domain.TenantID, urn domain.URN) (domain.Group, bool)
+	SetGroupMember(tenant domain.TenantID, group domain.URN, member domain.Subject, live bool)
+	GroupMembers(tenant domain.TenantID, group domain.URN) []domain.Subject
+	SetPrincipal(domain.Principal)
+	Principal(tenant domain.TenantID, subject domain.Subject) (domain.Principal, bool)
+	Live(tenant domain.TenantID, subject domain.Subject) bool
+	AddPendingKind(domain.KindSpec)
+	PendingKind(name string) (domain.KindSpec, bool)
+	PendingKinds() []domain.KindSpec
+	PublishKinds(version int)
+	Kind(name string) (domain.KindSpec, bool)
+	ModelVersion() int
+}
+
+package core // internal/core
+
+type AccessibleCountRequest struct {
+	Tenant domain.TenantID
+	Subject domain.Subject
+	Relation domain.Relation
+	Kind string
+}
+
+type AccessibleCountResult struct {
+	Count int
+	Revision domain.Revision
+}
+
+type AddGroupMemberRequest struct {
+	Tenant domain.TenantID
+	Group domain.URN
+	Member domain.Subject
+}
+
+type CheckRequest struct {
+	Tenant domain.TenantID
+	Subject domain.Subject
+	Object domain.URN
+	Relation domain.Relation
+}
+
+type Config struct {
+	Staleness time.Duration
+	Clock domain.Clock
+}
+
+type CreateGroupRequest struct {
+	Tenant domain.TenantID
+	GroupID string
+	Name string
+}
+
+type CreateTenantRequest struct {
+	Tenant domain.TenantID
+	RootID string
+	FirstOwner domain.Subject
+}
+
+type DeactivatePrincipalRequest struct {
+	Tenant domain.TenantID
+	Subject domain.Subject
+	Source domain.DeactivationSource
+	Reason string
+}
+
+type Decision struct {
+	Allowed bool
+	Reason domain.Reason
+	Revision domain.Revision
+}
+
+type DeleteGroupRequest struct {
+	Tenant domain.TenantID
+	Group domain.URN
+	Reason string
+}
+
+type DeleteNodeRequest struct {
+	Tenant domain.TenantID
+	URN domain.URN
+	Reason string
+}
+
+type DeletePrincipalRequest struct {
+	Tenant domain.TenantID
+	Subject domain.Subject
+	Reason string
+}
+
+type DeleteSubtreeRequest struct {
+	Tenant domain.TenantID
+	URN domain.URN
+	Reason string
+}
+
+type GrantRequest struct {
+	Tenant domain.TenantID
+	Object domain.URN
+	Subject domain.Subject
+	Relation domain.Relation
+	Reason string
+}
+
+type GrantResult struct {
+	GrantID domain.GrantID
+	Revision domain.Revision
+}
+
+type GroupResult struct {
+	Group domain.Group
+	Revision domain.Revision
+}
+
+type IAM struct {
+	// has unexported fields
+}
+
+func (*IAM) AccessibleCount(ctx context.Context, actor domain.Actor, req AccessibleCountRequest) (AccessibleCountResult, error)
+
+func (*IAM) AddGroupMember(ctx context.Context, actor domain.Actor, req AddGroupMemberRequest) (domain.Revision, error)
+
+func (*IAM) Check(ctx context.Context, actor domain.Actor, req CheckRequest) (Decision, error)
+
+func (*IAM) CreateGroup(ctx context.Context, actor domain.Actor, req CreateGroupRequest) (GroupResult, error)
+
+func (*IAM) CreateTenant(ctx context.Context, actor domain.Actor, req CreateTenantRequest) (Tenant, error)
+
+func (*IAM) DeactivatePrincipal(ctx context.Context, actor domain.Actor, req DeactivatePrincipalRequest) (domain.Revision, error)
+
+func (*IAM) DeleteGroup(ctx context.Context, actor domain.Actor, req DeleteGroupRequest) (domain.Revision, error)
+
+func (*IAM) DeleteNode(ctx context.Context, actor domain.Actor, req DeleteNodeRequest) error
+
+func (*IAM) DeletePrincipal(ctx context.Context, actor domain.Actor, req DeletePrincipalRequest) (domain.Revision, error)
+
+func (*IAM) DeleteSubtree(ctx context.Context, actor domain.Actor, req DeleteSubtreeRequest) error
+
+func (*IAM) Grant(ctx context.Context, actor domain.Actor, req GrantRequest) (GrantResult, error)
+
+func (*IAM) LinkPrincipal(ctx context.Context, actor domain.Actor, req LinkPrincipalRequest) (PrincipalResult, error)
+
+func (*IAM) ListObjects(ctx context.Context, actor domain.Actor, req ListObjectsRequest) (ListObjectsResult, error)
+
+func (*IAM) ListSubjects(ctx context.Context, actor domain.Actor, req ListSubjectsRequest) (ListSubjectsResult, error)
+
+func (*IAM) PublishModel(ctx context.Context, actor domain.Actor, req PublishModelRequest) error
+
+func (*IAM) ReactivatePrincipal(ctx context.Context, actor domain.Actor, req ReactivatePrincipalRequest) (domain.Revision, error)
+
+func (*IAM) RegisterKind(ctx context.Context, actor domain.Actor, req RegisterKindRequest) error
+
+func (*IAM) RegisterNode(ctx context.Context, actor domain.Actor, req RegisterNodeRequest) (NodeResult, error)
+
+func (*IAM) RemoveGroupMember(ctx context.Context, actor domain.Actor, req RemoveGroupMemberRequest) (domain.Revision, error)
+
+func (*IAM) Revoke(ctx context.Context, actor domain.Actor, req RevokeRequest) (domain.Revision, error)
+
+func (*IAM) SetGroupAdmin(ctx context.Context, actor domain.Actor, req SetGroupAdminRequest) (domain.Revision, error)
+
+type LinkPrincipalRequest struct {
+	Tenant domain.TenantID
+	Issuer string
+	ExternalID string
+	Subject domain.Subject
+}
+
+type ListObjectsRequest struct {
+	Tenant domain.TenantID
+	Subject domain.Subject
+	Relation domain.Relation
+	Kind string
+}
+
+type ListObjectsResult struct {
+	Objects []domain.URN
+	Revision domain.Revision
+}
+
+type ListSubjectsRequest struct {
+	Tenant domain.TenantID
+	Object domain.URN
+	Relation domain.Relation
+}
+
+type ListSubjectsResult struct {
+	Grants []SubjectGrant
+	Revision domain.Revision
+}
+
+func NewMemory(ctx context.Context, cfg Config) (*IAM, error)
+
+type NodeResult struct {
+	Node domain.Node
+	Revision domain.Revision
+}
+
+type PrincipalResult struct {
+	Principal domain.Principal
+	Revision domain.Revision
+}
+
+type PublishModelRequest struct {
+	Version int
+}
+
+type ReactivatePrincipalRequest struct {
+	Tenant domain.TenantID
+	Subject domain.Subject
+	Source domain.DeactivationSource
+	Reason string
+}
+
+type RegisterKindRequest struct {
+	Kind domain.KindSpec
+}
+
+type RegisterNodeRequest struct {
+	Tenant domain.TenantID
+	URN domain.URN
+	Parent domain.URN
+}
+
+type RemoveGroupMemberRequest struct {
+	Tenant domain.TenantID
+	Group domain.URN
+	Member domain.Subject
+}
+
+type RevokeRequest struct {
+	Tenant domain.TenantID
+	GrantID domain.GrantID
+	Reason string
+}
+
+type SetGroupAdminRequest struct {
+	Tenant domain.TenantID
+	Group domain.URN
+	Admin domain.Subject
+}
+
+type SubjectGrant struct {
+	Subject domain.Subject
+	ViaGroup domain.URN
+	GrantID domain.GrantID
+	Object domain.URN
+	Relation domain.Relation
+	GrantedBy string
+	Depth int
+}
+
+type Tenant struct {
+	ID domain.TenantID
+	Root domain.URN
+	OwnerGrant domain.GrantID
+	Revision domain.Revision
+}
