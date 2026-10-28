@@ -31,6 +31,9 @@ func TestListObjectsAndSubjects(t *testing.T) {
 	for _, sg := range subs.Grants {
 		if sg.GrantID == g.GrantID && sg.Subject == user && sg.Object == folder.URN {
 			found = true
+			if sg.GrantedAt.IsZero() {
+				t.Fatal("provenance has no granted_at")
+			}
 		}
 	}
 	if !found {
@@ -168,5 +171,28 @@ func TestReverseQueryAuthorityAndValidation(t *testing.T) {
 	agent := domain.Subject{URN: "laenen/agent/a1", Kind: domain.SubjectAgent}
 	if _, err := svc.ListObjects(ctx, admin, ListObjectsRequest{Tenant: tenant, Subject: agent, Relation: domain.Viewer}); !errors.Is(err, domain.ErrUnsupported) {
 		t.Fatalf("agent subject: %v", err)
+	}
+}
+
+func TestDeactivatedTenantAdminCannotReadForOthers(t *testing.T) {
+	ctx := context.Background()
+	svc, owner, tenant := bootstrap(t)
+	node := mustNode(t, svc, owner, tenant, "laenen/document/d1", "laenen/root/root")
+	user := mustUser(t, tenant, "u2")
+	linkUser(t, svc, tenant, user)
+	mustGrant(t, svc, owner, GrantRequest{Tenant: tenant, Object: node.URN, Subject: user, Relation: domain.Viewer})
+	admin := tenantAdmin(tenant, owner.Subject)
+
+	if _, err := svc.DeactivatePrincipal(ctx, identityAdapter(), DeactivatePrincipalRequest{Tenant: tenant, Subject: owner.Subject, Source: domain.SourceTenant, Reason: "away"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Check(ctx, admin, CheckRequest{Tenant: tenant, Subject: user, Object: node.URN, Relation: domain.Viewer}); !errors.Is(err, domain.ErrForbidden) {
+		t.Fatalf("deactivated tenant admin checked another subject: %v", err)
+	}
+	if _, err := svc.ListObjects(ctx, admin, ListObjectsRequest{Tenant: tenant, Subject: user, Relation: domain.Viewer}); !errors.Is(err, domain.ErrForbidden) {
+		t.Fatalf("deactivated tenant admin listed for another subject: %v", err)
+	}
+	if _, err := svc.AccessibleCount(ctx, admin, AccessibleCountRequest{Tenant: tenant, Subject: user, Relation: domain.Viewer}); !errors.Is(err, domain.ErrForbidden) {
+		t.Fatalf("deactivated tenant admin counted for another subject: %v", err)
 	}
 }

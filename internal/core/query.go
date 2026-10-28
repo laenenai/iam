@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/laenenai/iam/internal/domain"
 	"github.com/laenenai/iam/internal/eventlog"
@@ -52,6 +53,7 @@ type SubjectGrant struct {
 	Object    domain.URN
 	Relation  domain.Relation
 	GrantedBy string
+	GrantedAt time.Time
 	Depth     int
 }
 
@@ -89,6 +91,9 @@ func (i *IAM) listObjects(ctx context.Context, actor domain.Actor, tenantID doma
 		return nil, 0, err
 	}
 	revision := i.projector.Applied(ws)
+	if actor.Role == domain.RoleTenantAdmin && !i.store.Live(tenant, actor.Subject) {
+		return nil, 0, fmt.Errorf("%w: tenant admin is not live", domain.ErrForbidden)
+	}
 	var objects []domain.URN
 	for _, node := range i.store.Nodes(tenant) {
 		if !node.Live {
@@ -179,6 +184,7 @@ func (i *IAM) ListSubjects(ctx context.Context, actor domain.Actor, req ListSubj
 						Object:    grant.Object,
 						Relation:  grant.Relation,
 						GrantedBy: grant.GrantedBy,
+						GrantedAt: grant.GrantedAt,
 						Depth:     depth,
 					})
 				}
@@ -193,6 +199,7 @@ func (i *IAM) ListSubjects(ctx context.Context, actor domain.Actor, req ListSubj
 				Object:    grant.Object,
 				Relation:  grant.Relation,
 				GrantedBy: grant.GrantedBy,
+				GrantedAt: grant.GrantedAt,
 				Depth:     depth,
 			})
 		}
@@ -236,18 +243,13 @@ func (i *IAM) queryRequest(actor domain.Actor, tenantID domain.TenantID, subject
 	if actor.Subject.Kind == domain.SubjectAgent || subject.Kind == domain.SubjectAgent {
 		return "", fmt.Errorf("%w: agents are not supported in this plan", domain.ErrUnsupported)
 	}
+	if subject.Kind == domain.SubjectGroup {
+		return "", fmt.Errorf("%w: groups are not checked subjects", domain.ErrUnsupported)
+	}
 	if !checkable(relation) {
 		return "", fmt.Errorf("%w: %q", domain.ErrInvalidRelation, relation)
 	}
 	return tenant, nil
-}
-
-func (i *IAM) evaluate(ctx context.Context, tenant domain.TenantID, subject domain.Subject, relation domain.Relation, object domain.URN) (Decision, error) {
-	ws := eventlog.TenantWorkspace(tenant)
-	if err := i.project(ctx, ws); err != nil {
-		return Decision{}, err
-	}
-	return i.evaluateProjected(ctx, tenant, subject, relation, object, i.projector.Applied(ws))
 }
 
 func (i *IAM) evaluateProjected(ctx context.Context, tenant domain.TenantID, subject domain.Subject, relation domain.Relation, object domain.URN, revision domain.Revision) (Decision, error) {

@@ -156,3 +156,38 @@ func TestPrincipalAuthority(t *testing.T) {
 		t.Fatalf("agent principal: %v", err)
 	}
 }
+
+func TestGlobalDeleteFansOutToEveryLinkedTenant(t *testing.T) {
+	ctx := context.Background()
+	svc := newTestIAM(t)
+	admin := deploymentAdmin()
+	ownerA, ownerB := mustUser(t, "a", "u1"), mustUser(t, "b", "u1")
+	mustTenant(t, svc, admin, "a", ownerA)
+	mustTenant(t, svc, admin, "b", ownerB)
+	linkAsIdentity(t, svc, "a", "issuer", "external-delete", ownerA)
+	linkAsIdentity(t, svc, "b", "issuer", "external-delete", ownerB)
+
+	scoped := domain.Actor{ID: "scoped-identity", Tenant: "a", Role: domain.RoleIdentityAdapter}
+	if _, err := svc.DeletePrincipal(ctx, scoped, DeletePrincipalRequest{Tenant: "a", Subject: ownerA}); !errors.Is(err, domain.ErrForbidden) {
+		t.Fatalf("tenant-scoped global delete: %v", err)
+	}
+	if _, err := svc.DeactivatePrincipal(ctx, scoped, DeactivatePrincipalRequest{Tenant: "a", Subject: ownerA, Source: domain.SourceGlobal, Reason: "test"}); !errors.Is(err, domain.ErrForbidden) {
+		t.Fatalf("tenant-scoped global deactivation: %v", err)
+	}
+
+	if _, err := svc.DeletePrincipal(ctx, identityAdapter(), DeletePrincipalRequest{Tenant: "a", Subject: ownerA, Reason: "offboard"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		tenant string
+		subj   domain.Subject
+	}{{"a", ownerA}, {"b", ownerB}} {
+		d, err := svc.Check(ctx, ownerOfTenant(domain.TenantID(tc.tenant)), CheckRequest{Tenant: domain.TenantID(tc.tenant), Subject: tc.subj, Object: mustRoot(t, svc, domain.TenantID(tc.tenant)), Relation: domain.Owner})
+		if err != nil || d.Allowed {
+			t.Fatalf("%s after global delete: %#v %v", tc.tenant, d, err)
+		}
+		if p, ok := svc.store.Principal(domain.TenantID(tc.tenant), tc.subj); !ok || !p.Deleted {
+			t.Fatalf("%s principal not deleted: %#v", tc.tenant, p)
+		}
+	}
+}

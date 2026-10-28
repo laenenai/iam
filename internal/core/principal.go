@@ -135,15 +135,12 @@ func (i *IAM) ReactivatePrincipal(ctx context.Context, actor domain.Actor, req R
 
 // DeletePrincipal removes a principal's edges and retires its URN.
 func (i *IAM) DeletePrincipal(ctx context.Context, actor domain.Actor, req DeletePrincipalRequest) (domain.Revision, error) {
-	if err := authorize(actor, domain.RoleIdentityAdapter); err != nil {
+	if err := i.requireGlobalIdentityAdapter(actor); err != nil {
 		return 0, err
 	}
 	tenant, err := i.principalRequest(req.Tenant, req.Subject)
 	if err != nil {
 		return 0, err
-	}
-	if actor.Tenant != "" && actor.Tenant != tenant {
-		return 0, fmt.Errorf("%w: actor tenant mismatch", domain.ErrForbidden)
 	}
 
 	i.commandMu.Lock()
@@ -157,18 +154,37 @@ func (i *IAM) DeletePrincipal(ctx context.Context, actor domain.Actor, req Delet
 	if !ok {
 		return 0, fmt.Errorf("%w: principal %s", domain.ErrNotFound, req.Subject.URN)
 	}
-	if principal.Deleted {
-		return i.projector.Applied(ws), nil
+
+	key := externalKey{issuer: principal.Issuer, externalID: principal.ExternalID}
+	ident := i.external[key]
+	if ident == nil {
+		ident = &externalIdentity{globalLive: true, links: make(map[externalLink]struct{})}
+		i.external[key] = ident
 	}
-	revision, err := i.appendEvents(ctx, ws, actor, "DeletePrincipal", domain.PrincipalDeleted{
-		Subject: req.Subject,
-		Reason:  req.Reason,
-	})
-	if err != nil {
-		return 0, err
+	ident.links[externalLink{tenant: tenant, subject: req.Subject}] = struct{}{}
+
+	var revision domain.Revision
+	for link := range ident.links {
+		linked, ok := i.store.Principal(link.tenant, link.subject)
+		if !ok || linked.Deleted {
+			continue
+		}
+		rev, err := i.appendEvents(ctx, eventlog.TenantWorkspace(link.tenant), actor, "DeletePrincipal", domain.PrincipalDeleted{
+			Subject: domain.Subject{URN: linked.URN, Kind: linked.Kind},
+			Reason:  req.Reason,
+		})
+		if err != nil {
+			return 0, err
+		}
+		if err := i.project(ctx, eventlog.TenantWorkspace(link.tenant)); err != nil {
+			return 0, err
+		}
+		if link.tenant == tenant {
+			revision = rev
+		}
 	}
-	if err := i.project(ctx, ws); err != nil {
-		return 0, err
+	if revision == 0 {
+		revision = i.projector.Applied(ws)
 	}
 	return revision, nil
 }
@@ -255,7 +271,7 @@ func (i *IAM) setPrincipalActive(ctx context.Context, actor domain.Actor, tenant
 func (i *IAM) authorizePrincipalLifecycle(actor domain.Actor, tenant domain.TenantID, source domain.DeactivationSource) error {
 	switch source {
 	case domain.SourceGlobal:
-		return i.requireIdentityAdapter(actor, tenant)
+		return i.requireGlobalIdentityAdapter(actor)
 	case domain.SourceTenant:
 		switch actor.Role {
 		case domain.RoleTenantAdmin:
@@ -276,6 +292,16 @@ func (i *IAM) requireIdentityAdapter(actor domain.Actor, tenant domain.TenantID)
 	}
 	if actor.Tenant != "" && actor.Tenant != tenant {
 		return fmt.Errorf("%w: actor tenant mismatch", domain.ErrForbidden)
+	}
+	return nil
+}
+
+func (i *IAM) requireGlobalIdentityAdapter(actor domain.Actor) error {
+	if err := authorize(actor, domain.RoleIdentityAdapter); err != nil {
+		return err
+	}
+	if actor.Tenant != "" {
+		return fmt.Errorf("%w: a global operation needs the deployment-wide identity adapter", domain.ErrForbidden)
 	}
 	return nil
 }
