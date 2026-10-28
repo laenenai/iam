@@ -120,7 +120,7 @@ internal/eventlog/     append-only log port and memory adapter
 internal/engine/       relation engine port and reference engine
 internal/projector/    log -> read model + engine
 internal/core/         commands, checks, reverse queries, wiring
-api.txt                golden public surface
+scripts/api-diff.sh    apidiff against the last root tag
 ```
 
 ## Docs and roadmap

@@ -38,8 +38,7 @@ The last two are why the log, not the engine, is the authority.
 
 This replaces the existing `iam` module outright. There are no live
 consumers, no data to migrate, and no compatibility obligation: the current
-API, tables, migrations, examples and golden `api.txt` are rewritten around
-this design. The old charter's ban on a third-party authorization engine,
+API, tables, migrations and examples are rewritten around this design. The old charter's ban on a third-party authorization engine,
 and its no-deny/no-classification rules, are superseded where they conflict;
 the no-deny rule survives for the reasons in §2. The charter's ban on key
 material is also superseded by the `Sealer` port: IAM handles DEKs in

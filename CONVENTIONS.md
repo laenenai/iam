@@ -16,11 +16,13 @@ repos read as one codebase.
 - **`forbidigo` forbids `fmt.Print*` and `panic`** outside `cmd/`. Return
   errors; log through the injected logger.
 - `mise` tasks, same names and same meanings as `cas`: `fmt`, `fmt-check`,
-  `lint`, `test`, `build`, `test-all`, plus `api`, and `check` as the gate —
-  it depends on `fmt-check lint build test-all`.
-  There is no `api-check` task: the golden file is verified by an ordinary
-  test, so `test` and `test-all` already cover it and the check cannot be
-  forgotten. `api` only rewrites it.
+  `lint`, `test`, `build`, `test-all`, `generate-check`, `vuln` and
+  `api-diff`, plus the release-only `release-check`. `check` is the gate and
+  depends on `fmt-check lint build test-all generate-check vuln api-diff`.
+- A module with no generator must make `generate-check` prove that, or omit
+  the task and say why. Never use a task that swallows a generator failure.
+  API compatibility is checked with `apidiff` against the last root tag;
+  `gorelease` runs on a clean release tag, not in the dirty-tree gate.
 - **A module's `mise.toml` is not a copy of cas's.** cas's `migrate`, `dev`,
   `up`, `down`, `reset`, `db` and observability tasks reference `./cmd/casd`
   and `deploy/compose/`, and its `generate` runs `sqlc`/`buf`; none of that
@@ -128,7 +130,7 @@ behave differently in a way that matters, and what the blast radius is.
 | `Now() time.Time` | **no** — returning the current time is not a thing you get subtly wrong | not a module |
 
 **2. Does sharing reduce risk, or only reduce typing?** Reducing typing is not
-worth a `go.mod`, a charter, a CI pipeline, an `api.txt` and a release cadence.
+worth a `go.mod`, a charter, a CI pipeline, a compatibility check and a release cadence.
 For `Clock` the ceremony would exceed the content roughly thirtyfold.
 
 ### So: `Clock` is a convention, not a module
@@ -174,8 +176,8 @@ with it.
   to a convention produced a real defect: in `audit`, `Verify`,
   `VerifyEntries`, `NewMemory` and `BreakKind`'s constants ended up unreachable
   from outside the module, so a consumer could not use it. A facade that hides
-  what the module is for is not a facade. Reachability is checked by `api.txt`:
-  if a consumer would need to name it, it belongs in the golden file.
+  what the module is for is not a facade. Reachability is checked by the compatibility report:
+  if a consumer would need to name it, it belongs in the public surface.
 
 ### Postgres timestamp precision
 
@@ -335,20 +337,16 @@ code; `cas` pins 1.31.1. Converging is a deliberate one-commit bump across
 
 - `CHARTER.md` is binding. Code that does not fit the charter belongs in a
   different module — raise it rather than widening the charter.
-- `api.txt` is the public API as a golden file. Growing the public surface is
-  a reviewed diff.
-- **It is generated and checked by an ordinary test**, `api_test.go`, with an
-  `-update-api` flag to rewrite it — Go's golden-file idiom. Not by a
-  `cmd/apilist` main package: that puts a `main` in a library module's public
-  tree, and it has to be remembered. A test runs inside `go test`, so `test`
-  and `test-all` verify the surface automatically and there is no separate
-  `api-check` task to forget. `mise run api` only rewrites.
-- **`api.txt` must cover the `internal/` packages the facade aliases**, not
-  only the importable ones. Because the facade re-exports internal types as
-  aliases, **a change to an internal signature is a change to the public
-  surface** even though Go's internal rule keeps the import path private. A
-  generator listing only importable packages reports an incomplete surface —
-  converting `meter` took its golden file from 76 lines to 261.
+- The public API is the importable surface compared with the last root tag.
+  `mise run api-diff` uses `apidiff` export data; it ignores `internal/...`,
+  which is not part of the compatibility contract.
+- **Pre-1.0, incompatible changes are reported, not failed.** Record every
+  break in `CHANGELOG.md` and `UPGRADING.md`. At 1.0 and later the gate must
+  fail on an incompatible change.
+- `gorelease` is the clean-release check, not a dirty-branch gate. It runs in
+  the release workflow on the tagged commit. A human-readable compatibility
+  report, if wanted, is generated from `apidiff` output and treated as a
+  report, never as a checked-in golden file.
 
 ## Rendering a secret: redaction belongs on the type
 

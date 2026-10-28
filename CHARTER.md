@@ -69,10 +69,12 @@ IAM makes the decision; the application runs the workflow.
 
 ## Public surface
 
-`api.txt` is generated from the source and checked by `TestAPIGolden`.
-Growing it is a reviewed diff, shrinking it is a breaking change. The facade
-re-exports domain and core types as aliases and forwards constructors; it
-carries no logic.
+Compatibility is checked with `apidiff` against the last root tag
+(`mise run api-diff`) and validated at release time with `gorelease`.
+Internal packages are not part of the contract. Before 1.0, incompatible
+changes are reported and recorded in `CHANGELOG.md` and `UPGRADING.md`; at
+1.0 and later they fail the gate. The facade re-exports domain and core types
+as aliases and forwards constructors; it carries no logic.
 
 `iamtest.RunSuite` is the adoption contract. An adapter demonstrates
 adoption by passing the suite unchanged, not by asserting that it does.
