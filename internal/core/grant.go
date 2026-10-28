@@ -202,29 +202,7 @@ func (i *IAM) Check(ctx context.Context, actor domain.Actor, req CheckRequest) (
 	if actor.Subject.Kind == domain.SubjectAgent || req.Subject.Kind == domain.SubjectAgent {
 		return Decision{}, fmt.Errorf("%w: agents are not supported in this plan", domain.ErrUnsupported)
 	}
-	ws := eventlog.TenantWorkspace(tenant)
-	if err := i.project(ctx, ws); err != nil {
-		return Decision{}, err
-	}
-	revision := i.projector.Applied(ws)
-	if !checkable(req.Relation) {
-		return Decision{Allowed: false, Reason: domain.ReasonNoGrant, Revision: revision}, nil
-	}
-	node, ok := i.store.Node(tenant, object)
-	if !ok || !node.Live {
-		return Decision{Allowed: false, Reason: domain.ReasonNoGrant, Revision: revision}, nil
-	}
-	if !i.store.Live(tenant, req.Subject) {
-		return Decision{Allowed: false, Reason: domain.ReasonNoGrant, Revision: revision}, nil
-	}
-	allowed, reason, err := i.engine.Check(ctx, req.Subject, req.Relation, object)
-	if err != nil {
-		return Decision{}, err
-	}
-	if !allowed {
-		reason = domain.ReasonNoGrant
-	}
-	return Decision{Allowed: allowed, Reason: reason, Revision: revision}, nil
+	return i.evaluate(ctx, tenant, req.Subject, req.Relation, object)
 }
 
 func declares(kind domain.KindSpec, relation domain.Relation) bool {
