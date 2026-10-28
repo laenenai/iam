@@ -8,6 +8,7 @@ import (
 	"github.com/laenenai/iam/internal/eventlog"
 )
 
+// GrantRequest issues one relation grant.
 type GrantRequest struct {
 	Tenant   domain.TenantID
 	Object   domain.URN
@@ -16,17 +17,20 @@ type GrantRequest struct {
 	Reason   string
 }
 
+// GrantResult carries the issued grant id and its revision.
 type GrantResult struct {
 	GrantID  domain.GrantID
 	Revision domain.Revision
 }
 
+// RevokeRequest revokes one live grant.
 type RevokeRequest struct {
 	Tenant  domain.TenantID
 	GrantID domain.GrantID
 	Reason  string
 }
 
+// CheckRequest asks one authorization question.
 type CheckRequest struct {
 	Tenant   domain.TenantID
 	Subject  domain.Subject
@@ -34,12 +38,14 @@ type CheckRequest struct {
 	Relation domain.Relation
 }
 
+// Decision is the answer to a check, with its revision.
 type Decision struct {
 	Allowed  bool
 	Reason   domain.Reason
 	Revision domain.Revision
 }
 
+// Grant issues a grant after authority, liveness and uniqueness checks.
 func (i *IAM) Grant(ctx context.Context, actor domain.Actor, req GrantRequest) (GrantResult, error) {
 	tenant, err := domain.ParseTenantID(string(req.Tenant))
 	if err != nil {
@@ -128,6 +134,7 @@ func (i *IAM) Grant(ctx context.Context, actor domain.Actor, req GrantRequest) (
 	return GrantResult{GrantID: grantID, Revision: revision}, nil
 }
 
+// Revoke revokes a live grant under can_share authority.
 func (i *IAM) Revoke(ctx context.Context, actor domain.Actor, req RevokeRequest) (domain.Revision, error) {
 	tenant, err := domain.ParseTenantID(string(req.Tenant))
 	if err != nil {
@@ -173,6 +180,7 @@ func (i *IAM) Revoke(ctx context.Context, actor domain.Actor, req RevokeRequest)
 	return revision, nil
 }
 
+// Check answers one authorization question, filtering both live projections.
 func (i *IAM) Check(ctx context.Context, actor domain.Actor, req CheckRequest) (Decision, error) {
 	if err := authorize(actor, domain.RoleUser, domain.RoleAgent, domain.RoleTenantAdmin, domain.RoleAuditor); err != nil {
 		return Decision{}, err

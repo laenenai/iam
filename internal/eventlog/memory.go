@@ -17,6 +17,7 @@ type Memory struct {
 	streams map[Workspace][]Recorded
 }
 
+// NewMemory returns an in-memory EventLog. A nil clock uses the system clock.
 func NewMemory(clock domain.Clock) *Memory {
 	if clock == nil {
 		clock = domain.SystemClock{}
@@ -24,6 +25,7 @@ func NewMemory(clock domain.Clock) *Memory {
 	return &Memory{clock: clock, streams: make(map[Workspace][]Recorded)}
 }
 
+// Append writes a batch atomically and returns the new head.
 func (m *Memory) Append(ctx context.Context, ws Workspace, envelopes ...Envelope) (domain.Revision, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
@@ -59,6 +61,7 @@ func (m *Memory) Append(ctx context.Context, ws Workspace, envelopes ...Envelope
 	return rev, nil
 }
 
+// Read returns records at or after from, at most limit (0 means the default).
 func (m *Memory) Read(ctx context.Context, ws Workspace, from domain.Revision, limit int) ([]Recorded, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -90,6 +93,7 @@ func (m *Memory) Read(ctx context.Context, ws Workspace, from domain.Revision, l
 	return out, nil
 }
 
+// Head returns the last revision, or zero for an unknown workspace.
 func (m *Memory) Head(ctx context.Context, ws Workspace) (domain.Revision, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err

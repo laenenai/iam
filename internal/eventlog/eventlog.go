@@ -14,12 +14,15 @@ import (
 // stream.
 type Workspace string
 
+// PlatformWorkspace is the deployment-wide model workspace.
 const PlatformWorkspace Workspace = "_platform"
 
+// TenantWorkspace returns the workspace for one tenant.
 func TenantWorkspace(tenant domain.TenantID) Workspace {
 	return Workspace(tenant)
 }
 
+// Errors returned by the memory adapter and expected from adapters.
 var (
 	ErrInvalidWorkspace = errors.New("eventlog: invalid workspace")
 	ErrInvalidEnvelope  = errors.New("eventlog: invalid envelope")

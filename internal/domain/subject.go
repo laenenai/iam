@@ -5,6 +5,7 @@ import "fmt"
 // SubjectKind is the third URN segment for a subject.
 type SubjectKind string
 
+// Subject kinds.
 const (
 	SubjectUser  SubjectKind = "user"
 	SubjectAgent SubjectKind = "agent"
@@ -26,10 +27,12 @@ type Subject struct {
 	Kind SubjectKind
 }
 
+// NewUserSubject builds a user subject.
 func NewUserSubject(tenant TenantID, id string) (Subject, error) {
 	return newSubject(tenant, SubjectUser, id)
 }
 
+// NewGroupSubject builds a group subject.
 func NewGroupSubject(tenant TenantID, id string) (Subject, error) {
 	return newSubject(tenant, SubjectGroup, id)
 }
@@ -42,9 +45,10 @@ func newSubject(tenant TenantID, kind SubjectKind, id string) (Subject, error) {
 	return Subject{URN: u, Kind: kind}, nil
 }
 
+// ParseSubject parses a user, agent or group subject URN.
 func ParseSubject(u URN) (Subject, error) {
 	if _, err := ParseURN(string(u)); err != nil {
-		return Subject{}, fmt.Errorf("%w: %v", ErrInvalidSubject, err)
+		return Subject{}, fmt.Errorf("%w: %w", ErrInvalidSubject, err)
 	}
 	kind := SubjectKind(u.Kind())
 	if !kind.valid() {
@@ -53,9 +57,10 @@ func ParseSubject(u URN) (Subject, error) {
 	return Subject{URN: u, Kind: kind}, nil
 }
 
+// Validate checks the subject URN and kind.
 func (s Subject) Validate() error {
 	if _, err := ParseURN(string(s.URN)); err != nil {
-		return fmt.Errorf("%w: %v", ErrInvalidSubject, err)
+		return fmt.Errorf("%w: %w", ErrInvalidSubject, err)
 	}
 	if !s.Kind.valid() || s.URN.Kind() != string(s.Kind) {
 		return fmt.Errorf("%w: %q is not %q", ErrInvalidSubject, s.URN, s.Kind)

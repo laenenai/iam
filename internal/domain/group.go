@@ -15,10 +15,11 @@ type Group struct {
 	CreatedAt time.Time
 }
 
+// Validate checks the group identity and admin.
 func (g Group) Validate() error {
 	u, err := ParseURN(string(g.URN))
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrInvalidURN, err)
+		return fmt.Errorf("%w: %w", ErrInvalidURN, err)
 	}
 	if u.Tenant() != g.Tenant {
 		return fmt.Errorf("%w: group tenant mismatch", ErrInvalidURN)

@@ -3,6 +3,7 @@ package domain
 // Relation names an edge between a subject and an object.
 type Relation string
 
+// Relation names.
 const (
 	Parent     Relation = "parent"
 	Owner      Relation = "owner"
@@ -34,6 +35,7 @@ func (r Relation) Rank() int {
 	}
 }
 
+// IsBase reports whether the relation is in the four-role ladder.
 func (r Relation) IsBase() bool {
 	switch r {
 	case Owner, Editor, Commenter, Viewer:
@@ -43,6 +45,7 @@ func (r Relation) IsBase() bool {
 	}
 }
 
+// IsGrantable reports whether the relation may be written as a grant.
 func (r Relation) IsGrantable() bool {
 	switch r {
 	case Owner, Editor, Commenter, Viewer, CanDelete:

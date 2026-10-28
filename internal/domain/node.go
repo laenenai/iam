@@ -16,10 +16,11 @@ type Node struct {
 	CreatedBy string
 }
 
+// Validate checks the node identity, tenant and parent.
 func (n Node) Validate() error {
 	u, err := ParseURN(string(n.URN))
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrInvalidURN, err)
+		return fmt.Errorf("%w: %w", ErrInvalidURN, err)
 	}
 	if u.Tenant() != n.Tenant {
 		return fmt.Errorf("%w: tenant %q does not match %q", ErrInvalidURN, u.Tenant(), n.Tenant)
@@ -30,7 +31,7 @@ func (n Node) Validate() error {
 	if n.Parent != "" {
 		parent, err := ParseURN(string(n.Parent))
 		if err != nil {
-			return fmt.Errorf("%w: parent: %v", ErrInvalidURN, err)
+			return fmt.Errorf("%w: parent: %w", ErrInvalidURN, err)
 		}
 		if parent.Tenant() != n.Tenant {
 			return fmt.Errorf("%w: parent tenant mismatch", ErrInvalidURN)

@@ -8,14 +8,17 @@ import (
 	"github.com/laenenai/iam/internal/eventlog"
 )
 
+// RegisterKindRequest stages a consumer kind.
 type RegisterKindRequest struct {
 	Kind domain.KindSpec
 }
 
+// PublishModelRequest promotes the staged kinds as one model version.
 type PublishModelRequest struct {
 	Version int
 }
 
+// RegisterKind stages a kind until the next model publication.
 func (i *IAM) RegisterKind(ctx context.Context, actor domain.Actor, req RegisterKindRequest) error {
 	if err := authorize(actor, domain.RoleDeploymentAdmin); err != nil {
 		return err
@@ -46,6 +49,7 @@ func (i *IAM) RegisterKind(ctx context.Context, actor domain.Actor, req Register
 	return i.project(ctx, eventlog.PlatformWorkspace)
 }
 
+// PublishModel publishes every staged kind.
 func (i *IAM) PublishModel(ctx context.Context, actor domain.Actor, req PublishModelRequest) error {
 	if err := authorize(actor, domain.RoleDeploymentAdmin); err != nil {
 		return err

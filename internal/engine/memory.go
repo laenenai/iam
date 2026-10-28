@@ -16,10 +16,12 @@ type Memory struct {
 	tuples map[Tuple]struct{}
 }
 
+// NewMemory returns an empty reference engine.
 func NewMemory() *Memory {
 	return &Memory{tuples: make(map[Tuple]struct{})}
 }
 
+// Write adds tuples; writing the same tuple twice is a no-op.
 func (m *Memory) Write(ctx context.Context, tuples ...Tuple) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -32,6 +34,7 @@ func (m *Memory) Write(ctx context.Context, tuples ...Tuple) error {
 	return nil
 }
 
+// Delete removes tuples; deleting an absent tuple is a no-op.
 func (m *Memory) Delete(ctx context.Context, tuples ...Tuple) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -44,6 +47,7 @@ func (m *Memory) Delete(ctx context.Context, tuples ...Tuple) error {
 	return nil
 }
 
+// Check evaluates the ladder, inheritance and group usersets.
 func (m *Memory) Check(ctx context.Context, subject domain.Subject, relation domain.Relation, object domain.URN) (bool, domain.Reason, error) {
 	if err := ctx.Err(); err != nil {
 		return false, "", err

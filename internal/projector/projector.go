@@ -28,6 +28,7 @@ type Projector struct {
 	appliedAt map[eventlog.Workspace]time.Time
 }
 
+// New returns a projector over the supplied ports.
 func New(log eventlog.EventLog, store Store, eng engine.Engine, clock domain.Clock) *Projector {
 	if clock == nil {
 		clock = domain.SystemClock{}
@@ -42,6 +43,7 @@ func New(log eventlog.EventLog, store Store, eng engine.Engine, clock domain.Clo
 	}
 }
 
+// Project applies the platform workspace first, then the requested workspace.
 func (p *Projector) Project(ctx context.Context, ws eventlog.Workspace) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -55,12 +57,14 @@ func (p *Projector) Project(ctx context.Context, ws eventlog.Workspace) error {
 	return p.projectWorkspace(ctx, ws)
 }
 
+// Applied returns the last applied revision for a workspace.
 func (p *Projector) Applied(ws eventlog.Workspace) domain.Revision {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.applied[ws]
 }
 
+// AppliedAt returns when the workspace was last brought up to date.
 func (p *Projector) AppliedAt(ws eventlog.Workspace) time.Time {
 	p.mu.Lock()
 	defer p.mu.Unlock()

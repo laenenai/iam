@@ -10,7 +10,7 @@ import (
 )
 
 func TestMemoryEventLog(t *testing.T) {
-	eventlogtest.RunSuite(t, func(t *testing.T) eventlog.EventLog {
+	eventlogtest.RunSuite(t, func(_ *testing.T) eventlog.EventLog {
 		return eventlog.NewMemory(domain.FixedClock{})
 	})
 }

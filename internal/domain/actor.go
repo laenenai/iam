@@ -5,6 +5,7 @@ import "fmt"
 // ActorRole identifies the authority a caller presents on a command.
 type ActorRole string
 
+// Actor roles.
 const (
 	RoleUser            ActorRole = "user"
 	RoleAgent           ActorRole = "agent"
@@ -31,6 +32,7 @@ type Actor struct {
 	Role    ActorRole
 }
 
+// Validate checks the actor identity, role and tenant.
 func (a Actor) Validate() error {
 	if a.ID == "" {
 		return fmt.Errorf("%w: missing id", ErrInvalidActor)
@@ -42,10 +44,10 @@ func (a Actor) Validate() error {
 	switch a.Role {
 	case RoleUser, RoleAgent, RoleTenantAdmin:
 		if _, err := ParseTenantID(string(a.Tenant)); err != nil {
-			return fmt.Errorf("%w: %v", ErrInvalidActor, err)
+			return fmt.Errorf("%w: %w", ErrInvalidActor, err)
 		}
 		if err := a.Subject.Validate(); err != nil {
-			return fmt.Errorf("%w: %v", ErrInvalidActor, err)
+			return fmt.Errorf("%w: %w", ErrInvalidActor, err)
 		}
 		if a.Subject.URN.Tenant() != a.Tenant {
 			return fmt.Errorf("%w: subject tenant %q does not match %q", ErrInvalidActor, a.Subject.URN.Tenant(), a.Tenant)
@@ -68,26 +70,26 @@ func (a Actor) Validate() error {
 	case RoleDeploymentAdmin:
 		if a.Tenant != "" {
 			if _, err := ParseTenantID(string(a.Tenant)); err != nil {
-				return fmt.Errorf("%w: %v", ErrInvalidActor, err)
+				return fmt.Errorf("%w: %w", ErrInvalidActor, err)
 			}
 		}
 
 	case RoleIdentityAdapter:
 		if a.Tenant != "" {
 			if _, err := ParseTenantID(string(a.Tenant)); err != nil {
-				return fmt.Errorf("%w: %v", ErrInvalidActor, err)
+				return fmt.Errorf("%w: %w", ErrInvalidActor, err)
 			}
 		}
 
 	case RoleAuditor:
 		if _, err := ParseTenantID(string(a.Tenant)); err != nil {
-			return fmt.Errorf("%w: %v", ErrInvalidActor, err)
+			return fmt.Errorf("%w: %w", ErrInvalidActor, err)
 		}
 	}
 
 	if a.Subject.URN != "" {
 		if err := a.Subject.Validate(); err != nil {
-			return fmt.Errorf("%w: %v", ErrInvalidActor, err)
+			return fmt.Errorf("%w: %w", ErrInvalidActor, err)
 		}
 		if a.Tenant != "" && a.Subject.URN.Tenant() != a.Tenant {
 			return fmt.Errorf("%w: subject tenant does not match actor tenant", ErrInvalidActor)

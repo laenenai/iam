@@ -8,12 +8,14 @@ import (
 	"github.com/laenenai/iam/internal/eventlog"
 )
 
+// CreateTenantRequest bootstraps a tenant, its root and its first owner.
 type CreateTenantRequest struct {
 	Tenant     domain.TenantID
 	RootID     string
 	FirstOwner domain.Subject
 }
 
+// Tenant is the result of a tenant bootstrap.
 type Tenant struct {
 	ID         domain.TenantID
 	Root       domain.URN
@@ -21,6 +23,7 @@ type Tenant struct {
 	Revision   domain.Revision
 }
 
+// CreateTenant creates the single root and first owner grant for a tenant.
 func (i *IAM) CreateTenant(ctx context.Context, actor domain.Actor, req CreateTenantRequest) (Tenant, error) {
 	if err := authorize(actor, domain.RoleDeploymentAdmin); err != nil {
 		return Tenant{}, err

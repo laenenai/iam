@@ -8,41 +8,48 @@ import (
 	"github.com/laenenai/iam/internal/eventlog"
 )
 
+// CreateGroupRequest creates a flat group and its first admin.
 type CreateGroupRequest struct {
 	Tenant  domain.TenantID
 	GroupID string
 	Name    string
 }
 
+// GroupResult is the created group and its revision.
 type GroupResult struct {
 	Group    domain.Group
 	Revision domain.Revision
 }
 
+// AddGroupMemberRequest adds one user to a group.
 type AddGroupMemberRequest struct {
 	Tenant domain.TenantID
 	Group  domain.URN
 	Member domain.Subject
 }
 
+// RemoveGroupMemberRequest removes one user from a group.
 type RemoveGroupMemberRequest struct {
 	Tenant domain.TenantID
 	Group  domain.URN
 	Member domain.Subject
 }
 
+// SetGroupAdminRequest replaces the group admin.
 type SetGroupAdminRequest struct {
 	Tenant domain.TenantID
 	Group  domain.URN
 	Admin  domain.Subject
 }
 
+// DeleteGroupRequest tombstones a group and retires its URN.
 type DeleteGroupRequest struct {
 	Tenant domain.TenantID
 	Group  domain.URN
 	Reason string
 }
 
+// CreateGroup makes a live user the new group admin.
 func (i *IAM) CreateGroup(ctx context.Context, actor domain.Actor, req CreateGroupRequest) (GroupResult, error) {
 	tenant, err := domain.ParseTenantID(string(req.Tenant))
 	if err != nil {
@@ -88,6 +95,7 @@ func (i *IAM) CreateGroup(ctx context.Context, actor domain.Actor, req CreateGro
 	return GroupResult{Group: group, Revision: revision}, nil
 }
 
+// AddGroupMember adds a live user under group-admin authority.
 func (i *IAM) AddGroupMember(ctx context.Context, actor domain.Actor, req AddGroupMemberRequest) (domain.Revision, error) {
 	tenant, groupURN, err := i.groupRequest(req.Tenant, req.Group)
 	if err != nil {
@@ -129,6 +137,7 @@ func (i *IAM) AddGroupMember(ctx context.Context, actor domain.Actor, req AddGro
 	return revision, nil
 }
 
+// RemoveGroupMember removes a live member under group-admin authority.
 func (i *IAM) RemoveGroupMember(ctx context.Context, actor domain.Actor, req RemoveGroupMemberRequest) (domain.Revision, error) {
 	tenant, groupURN, err := i.groupRequest(req.Tenant, req.Group)
 	if err != nil {
@@ -172,6 +181,7 @@ func (i *IAM) RemoveGroupMember(ctx context.Context, actor domain.Actor, req Rem
 	return revision, nil
 }
 
+// SetGroupAdmin changes the admin under current-admin or tenant-admin authority.
 func (i *IAM) SetGroupAdmin(ctx context.Context, actor domain.Actor, req SetGroupAdminRequest) (domain.Revision, error) {
 	tenant, groupURN, err := i.groupRequest(req.Tenant, req.Group)
 	if err != nil {
@@ -212,6 +222,7 @@ func (i *IAM) SetGroupAdmin(ctx context.Context, actor domain.Actor, req SetGrou
 	return revision, nil
 }
 
+// DeleteGroup retires a group; its URN is never reusable.
 func (i *IAM) DeleteGroup(ctx context.Context, actor domain.Actor, req DeleteGroupRequest) (domain.Revision, error) {
 	tenant, groupURN, err := i.groupRequest(req.Tenant, req.Group)
 	if err != nil {

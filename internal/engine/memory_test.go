@@ -10,7 +10,7 @@ import (
 )
 
 func TestMemoryEngine(t *testing.T) {
-	enginetest.RunSuite(t, func(t *testing.T) engine.Engine {
+	enginetest.RunSuite(t, func(_ *testing.T) engine.Engine {
 		return engine.NewMemory()
 	})
 }

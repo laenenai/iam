@@ -14,6 +14,7 @@ func validSlug(s string) bool {
 	return slugRE.MatchString(s)
 }
 
+// ParseTenantID validates a tenant slug.
 func ParseTenantID(s string) (TenantID, error) {
 	if !validSlug(s) {
 		return "", fmt.Errorf("%w: %q", ErrInvalidTenant, s)

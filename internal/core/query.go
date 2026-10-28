@@ -9,6 +9,7 @@ import (
 	"github.com/laenenai/iam/internal/eventlog"
 )
 
+// ListObjectsRequest asks which live nodes of a kind a subject can reach.
 type ListObjectsRequest struct {
 	Tenant   domain.TenantID
 	Subject  domain.Subject
@@ -16,11 +17,13 @@ type ListObjectsRequest struct {
 	Kind     string
 }
 
+// ListObjectsResult is the sorted reachable URNs and the revision used.
 type ListObjectsResult struct {
 	Objects  []domain.URN
 	Revision domain.Revision
 }
 
+// AccessibleCountRequest asks for a count of reachable nodes.
 type AccessibleCountRequest struct {
 	Tenant   domain.TenantID
 	Subject  domain.Subject
@@ -28,17 +31,20 @@ type AccessibleCountRequest struct {
 	Kind     string
 }
 
+// AccessibleCountResult is the count and the revision used.
 type AccessibleCountResult struct {
 	Count    int
 	Revision domain.Revision
 }
 
+// ListSubjectsRequest asks who can reach an object with provenance.
 type ListSubjectsRequest struct {
 	Tenant   domain.TenantID
 	Object   domain.URN
 	Relation domain.Relation
 }
 
+// SubjectGrant is one effective subject and its contributing grant.
 type SubjectGrant struct {
 	Subject   domain.Subject
 	ViaGroup  domain.URN
@@ -49,11 +55,13 @@ type SubjectGrant struct {
 	Depth     int
 }
 
+// ListSubjectsResult is the provenance set and the revision used.
 type ListSubjectsResult struct {
 	Grants   []SubjectGrant
 	Revision domain.Revision
 }
 
+// ListObjects returns the sorted live nodes a subject can reach.
 func (i *IAM) ListObjects(ctx context.Context, actor domain.Actor, req ListObjectsRequest) (ListObjectsResult, error) {
 	objects, revision, err := i.listObjects(ctx, actor, req.Tenant, req.Subject, req.Relation, req.Kind)
 	if err != nil {
@@ -62,6 +70,7 @@ func (i *IAM) ListObjects(ctx context.Context, actor domain.Actor, req ListObjec
 	return ListObjectsResult{Objects: objects, Revision: revision}, nil
 }
 
+// AccessibleCount returns the number of reachable live nodes.
 func (i *IAM) AccessibleCount(ctx context.Context, actor domain.Actor, req AccessibleCountRequest) (AccessibleCountResult, error) {
 	objects, revision, err := i.listObjects(ctx, actor, req.Tenant, req.Subject, req.Relation, req.Kind)
 	if err != nil {
@@ -100,6 +109,7 @@ func (i *IAM) listObjects(ctx context.Context, actor domain.Actor, tenantID doma
 	return objects, revision, nil
 }
 
+// ListSubjects returns effective subjects with every contributing grant.
 func (i *IAM) ListSubjects(ctx context.Context, actor domain.Actor, req ListSubjectsRequest) (ListSubjectsResult, error) {
 	tenant, err := domain.ParseTenantID(string(req.Tenant))
 	if err != nil {

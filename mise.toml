@@ -46,8 +46,9 @@ description = "Regenerate api.txt, the public-surface golden file the charter re
 # The golden file is checked by an ordinary test (api_test.go), which is why
 # there is no api-check task: `test` and `test-all` already verify it, so the
 # check cannot be forgotten. This task only rewrites it, deliberately.
-# A module with no api_test.go yet matches no test and this is a no-op.
-run = "go test ./... -run TestAPIGolden -update-api"
+# The golden generator lives in the root package; running it over ./... would
+# pass -update-api to packages that do not define the flag.
+run = "go test . -run TestAPIGolden -update-api"
 
 [tasks.check]
 depends = ["fmt-check", "lint", "build", "test-all"]

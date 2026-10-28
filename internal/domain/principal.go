@@ -20,14 +20,16 @@ type Principal struct {
 	LinkedAt   time.Time
 }
 
+// EffectiveLive combines global, tenant and deleted state.
 func (p Principal) EffectiveLive() bool {
 	return p.GlobalLive && p.TenantLive && !p.Deleted
 }
 
+// Validate checks the principal identity and liveness projection.
 func (p Principal) Validate() error {
 	u, err := ParseURN(string(p.URN))
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrInvalidSubject, err)
+		return fmt.Errorf("%w: %w", ErrInvalidSubject, err)
 	}
 	if u.Tenant() != p.Tenant {
 		return fmt.Errorf("%w: principal tenant mismatch", ErrInvalidSubject)

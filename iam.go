@@ -7,6 +7,7 @@ import (
 	"github.com/laenenai/iam/internal/domain"
 )
 
+//nolint:revive // aliases inherit their documentation from the aliased type.
 type (
 	TenantID           = domain.TenantID
 	URN                = domain.URN
@@ -87,6 +88,7 @@ type (
 	ListSubjectsResult     = core.ListSubjectsResult
 )
 
+// Subjects, relations, roles, sources, kinds and decision reasons.
 const (
 	SubjectUser  = domain.SubjectUser
 	SubjectAgent = domain.SubjectAgent
@@ -123,6 +125,7 @@ const (
 	ReasonInherited = domain.ReasonInherited
 )
 
+// Typed sentinels returned by the facade.
 var (
 	ErrInvalidTenant     = domain.ErrInvalidTenant
 	ErrInvalidURN        = domain.ErrInvalidURN
@@ -141,42 +144,52 @@ var (
 	ErrIDGeneration      = domain.ErrIDGeneration
 )
 
+// NewMemory constructs the reference in-memory IAM.
 func NewMemory(ctx context.Context, cfg Config) (*IAM, error) {
 	return core.NewMemory(ctx, cfg)
 }
 
+// ParseTenantID validates a tenant slug.
 func ParseTenantID(s string) (TenantID, error) {
 	return domain.ParseTenantID(s)
 }
 
+// ParseURN validates a three-segment IAM URN.
 func ParseURN(s string) (URN, error) {
 	return domain.ParseURN(s)
 }
 
+// NewNodeURN builds and validates a node URN.
 func NewNodeURN(tenant TenantID, kind, id string) (URN, error) {
 	return domain.NewNodeURN(tenant, kind, id)
 }
 
+// NewSubjectURN builds and validates a subject URN.
 func NewSubjectURN(tenant TenantID, kind SubjectKind, id string) (URN, error) {
 	return domain.NewSubjectURN(tenant, kind, id)
 }
 
+// NewUserSubject builds a user subject.
 func NewUserSubject(tenant TenantID, id string) (Subject, error) {
 	return domain.NewUserSubject(tenant, id)
 }
 
+// NewGroupSubject builds a group subject.
 func NewGroupSubject(tenant TenantID, id string) (Subject, error) {
 	return domain.NewGroupSubject(tenant, id)
 }
 
+// ParseSubject parses a user, agent or group subject URN.
 func ParseSubject(urn URN) (Subject, error) {
 	return domain.ParseSubject(urn)
 }
 
+// NewGrantID mints a ULID grant id at the clock time.
 func NewGrantID(clock Clock) (GrantID, error) {
 	return domain.NewGrantID(clock)
 }
 
+// DefaultKinds returns the built-in node kinds.
 func DefaultKinds() []KindSpec {
 	return domain.DefaultKinds()
 }

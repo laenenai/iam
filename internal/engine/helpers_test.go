@@ -13,10 +13,3 @@ func mustWrite(t *testing.T, e engine.Engine, tuples ...engine.Tuple) {
 		t.Fatalf("write: %v", err)
 	}
 }
-
-func mustDelete(t *testing.T, e engine.Engine, tuples ...engine.Tuple) {
-	t.Helper()
-	if err := e.Delete(context.Background(), tuples...); err != nil {
-		t.Fatalf("delete: %v", err)
-	}
-}

@@ -13,6 +13,7 @@ type KindSpec struct {
 	Relations   []Relation
 }
 
+// Validate checks the kind name, containment and declared relations.
 func (k KindSpec) Validate() error {
 	if !validSlug(k.Name) {
 		return fmt.Errorf("%w: name %q", ErrInvalidKind, k.Name)
@@ -55,6 +56,7 @@ func (k KindSpec) Validate() error {
 	return nil
 }
 
+// DefaultKinds returns the built-in node kinds.
 func DefaultKinds() []KindSpec {
 	return []KindSpec{
 		{Name: RootKind, ContainsAny: true},

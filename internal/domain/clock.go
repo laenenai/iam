@@ -7,8 +7,10 @@ type Clock interface {
 	Now() time.Time
 }
 
+// SystemClock reads the wall clock.
 type SystemClock struct{}
 
+// Now returns the current wall time.
 func (SystemClock) Now() time.Time {
 	return time.Now()
 }
@@ -19,6 +21,7 @@ type FixedClock struct {
 	now time.Time
 }
 
+// Now returns the clock value, or the Unix epoch for the zero value.
 func (c FixedClock) Now() time.Time {
 	if c.now.IsZero() {
 		return time.Unix(0, 0).UTC()
@@ -26,6 +29,7 @@ func (c FixedClock) Now() time.Time {
 	return c.now
 }
 
+// Advance moves the clock forward.
 func (c *FixedClock) Advance(d time.Duration) {
 	c.now = c.Now().Add(d)
 }

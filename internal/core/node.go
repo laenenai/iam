@@ -8,29 +8,34 @@ import (
 	"github.com/laenenai/iam/internal/eventlog"
 )
 
+// RegisterNodeRequest registers one node under a live parent.
 type RegisterNodeRequest struct {
 	Tenant domain.TenantID
 	URN    domain.URN
 	Parent domain.URN
 }
 
+// NodeResult is the registered node and the revision that recorded it.
 type NodeResult struct {
 	Node     domain.Node
 	Revision domain.Revision
 }
 
+// DeleteNodeRequest tombstones one childless node.
 type DeleteNodeRequest struct {
 	Tenant domain.TenantID
 	URN    domain.URN
 	Reason string
 }
 
+// DeleteSubtreeRequest tombstones a whole live subtree.
 type DeleteSubtreeRequest struct {
 	Tenant domain.TenantID
 	URN    domain.URN
 	Reason string
 }
 
+// RegisterNode validates containment and records the creator as owner.
 func (i *IAM) RegisterNode(ctx context.Context, actor domain.Actor, req RegisterNodeRequest) (NodeResult, error) {
 	tenant, urn, err := i.nodeRequest(req.Tenant, req.URN, req.Parent)
 	if err != nil {
@@ -106,6 +111,7 @@ func (i *IAM) RegisterNode(ctx context.Context, actor domain.Actor, req Register
 	return NodeResult{Node: node, Revision: revision}, nil
 }
 
+// DeleteNode tombstones a node with no live children.
 func (i *IAM) DeleteNode(ctx context.Context, actor domain.Actor, req DeleteNodeRequest) error {
 	tenant, urn, err := i.nodeRequest(req.Tenant, req.URN, "")
 	if err != nil {
@@ -153,6 +159,7 @@ func (i *IAM) DeleteNode(ctx context.Context, actor domain.Actor, req DeleteNode
 	return i.project(ctx, ws)
 }
 
+// DeleteSubtree tombstones every live node below an owner-controlled node.
 func (i *IAM) DeleteSubtree(ctx context.Context, actor domain.Actor, req DeleteSubtreeRequest) error {
 	tenant, urn, err := i.nodeRequest(req.Tenant, req.URN, "")
 	if err != nil {

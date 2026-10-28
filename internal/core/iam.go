@@ -16,6 +16,7 @@ import (
 
 const defaultStaleness = 5 * time.Second
 
+// Config configures the in-memory core.
 type Config struct {
 	Staleness time.Duration
 	Clock     domain.Clock
@@ -36,6 +37,7 @@ type IAM struct {
 	commandMu sync.Mutex
 }
 
+// NewMemory builds the reference core and seeds the default model.
 func NewMemory(ctx context.Context, cfg Config) (*IAM, error) {
 	if cfg.Clock == nil {
 		cfg.Clock = domain.SystemClock{}

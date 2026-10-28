@@ -8,6 +8,7 @@ import (
 	"github.com/laenenai/iam/internal/eventlog"
 )
 
+// LinkPrincipalRequest maps an external identity to a tenant principal.
 type LinkPrincipalRequest struct {
 	Tenant     domain.TenantID
 	Issuer     string
@@ -15,11 +16,13 @@ type LinkPrincipalRequest struct {
 	Subject    domain.Subject
 }
 
+// PrincipalResult is the linked principal and its revision.
 type PrincipalResult struct {
 	Principal domain.Principal
 	Revision  domain.Revision
 }
 
+// DeactivatePrincipalRequest changes one liveness source.
 type DeactivatePrincipalRequest struct {
 	Tenant  domain.TenantID
 	Subject domain.Subject
@@ -27,6 +30,7 @@ type DeactivatePrincipalRequest struct {
 	Reason  string
 }
 
+// ReactivatePrincipalRequest restores one liveness source.
 type ReactivatePrincipalRequest struct {
 	Tenant  domain.TenantID
 	Subject domain.Subject
@@ -34,12 +38,14 @@ type ReactivatePrincipalRequest struct {
 	Reason  string
 }
 
+// DeletePrincipalRequest terminally deletes a principal.
 type DeletePrincipalRequest struct {
 	Tenant  domain.TenantID
 	Subject domain.Subject
 	Reason  string
 }
 
+// LinkPrincipal links an identity adapter subject and honours a global deactivation.
 func (i *IAM) LinkPrincipal(ctx context.Context, actor domain.Actor, req LinkPrincipalRequest) (PrincipalResult, error) {
 	if err := authorize(actor, domain.RoleIdentityAdapter); err != nil {
 		return PrincipalResult{}, err
@@ -117,14 +123,17 @@ func (i *IAM) LinkPrincipal(ctx context.Context, actor domain.Actor, req LinkPri
 	return PrincipalResult{Principal: principal, Revision: revision}, nil
 }
 
+// DeactivatePrincipal deactivates a principal at tenant or global scope.
 func (i *IAM) DeactivatePrincipal(ctx context.Context, actor domain.Actor, req DeactivatePrincipalRequest) (domain.Revision, error) {
 	return i.setPrincipalActive(ctx, actor, req.Tenant, req.Subject, req.Source, false, req.Reason)
 }
 
+// ReactivatePrincipal reactivates a principal at tenant or global scope.
 func (i *IAM) ReactivatePrincipal(ctx context.Context, actor domain.Actor, req ReactivatePrincipalRequest) (domain.Revision, error) {
 	return i.setPrincipalActive(ctx, actor, req.Tenant, req.Subject, req.Source, true, req.Reason)
 }
 
+// DeletePrincipal removes a principal's edges and retires its URN.
 func (i *IAM) DeletePrincipal(ctx context.Context, actor domain.Actor, req DeletePrincipalRequest) (domain.Revision, error) {
 	if err := authorize(actor, domain.RoleIdentityAdapter); err != nil {
 		return 0, err

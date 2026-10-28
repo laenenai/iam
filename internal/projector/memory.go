@@ -28,6 +28,7 @@ type memberRecord struct {
 	live    bool
 }
 
+// NewMemoryStore returns an empty reference read model.
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
 		nodes:      make(map[domain.TenantID]map[domain.URN]domain.Node),
@@ -40,6 +41,7 @@ func NewMemoryStore() *MemoryStore {
 	}
 }
 
+// SetNode upserts a node.
 func (s *MemoryStore) SetNode(node domain.Node) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -51,6 +53,7 @@ func (s *MemoryStore) SetNode(node domain.Node) {
 	byURN[node.URN] = node
 }
 
+// Node returns a node by tenant and URN.
 func (s *MemoryStore) Node(tenant domain.TenantID, urn domain.URN) (domain.Node, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -58,6 +61,7 @@ func (s *MemoryStore) Node(tenant domain.TenantID, urn domain.URN) (domain.Node,
 	return node, ok
 }
 
+// Nodes returns every node for a tenant, sorted by URN.
 func (s *MemoryStore) Nodes(tenant domain.TenantID) []domain.Node {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -69,6 +73,7 @@ func (s *MemoryStore) Nodes(tenant domain.TenantID) []domain.Node {
 	return out
 }
 
+// SetGrant upserts a grant, live or revoked.
 func (s *MemoryStore) SetGrant(grant domain.Grant) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -80,6 +85,7 @@ func (s *MemoryStore) SetGrant(grant domain.Grant) {
 	byID[grant.ID] = grant
 }
 
+// Grant returns a grant even when it is revoked.
 func (s *MemoryStore) Grant(tenant domain.TenantID, id domain.GrantID) (domain.Grant, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -87,6 +93,7 @@ func (s *MemoryStore) Grant(tenant domain.TenantID, id domain.GrantID) (domain.G
 	return grant, ok
 }
 
+// GrantsForObject returns live grants on an object.
 func (s *MemoryStore) GrantsForObject(tenant domain.TenantID, object domain.URN) []domain.Grant {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -100,6 +107,7 @@ func (s *MemoryStore) GrantsForObject(tenant domain.TenantID, object domain.URN)
 	return out
 }
 
+// GrantsForSubject returns live grants naming a subject.
 func (s *MemoryStore) GrantsForSubject(tenant domain.TenantID, subject domain.Subject) []domain.Grant {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -113,6 +121,7 @@ func (s *MemoryStore) GrantsForSubject(tenant domain.TenantID, subject domain.Su
 	return out
 }
 
+// GroupsForMember returns live groups with a live member.
 func (s *MemoryStore) GroupsForMember(tenant domain.TenantID, member domain.Subject) []domain.Group {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -129,6 +138,7 @@ func (s *MemoryStore) GroupsForMember(tenant domain.TenantID, member domain.Subj
 	return out
 }
 
+// GroupsForAdmin returns live groups administered by a subject.
 func (s *MemoryStore) GroupsForAdmin(tenant domain.TenantID, admin domain.Subject) []domain.Group {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -142,6 +152,7 @@ func (s *MemoryStore) GroupsForAdmin(tenant domain.TenantID, admin domain.Subjec
 	return out
 }
 
+// SetGroup upserts a group.
 func (s *MemoryStore) SetGroup(group domain.Group) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -153,6 +164,7 @@ func (s *MemoryStore) SetGroup(group domain.Group) {
 	byURN[group.URN] = group
 }
 
+// Group returns a group by URN.
 func (s *MemoryStore) Group(tenant domain.TenantID, urn domain.URN) (domain.Group, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -160,6 +172,7 @@ func (s *MemoryStore) Group(tenant domain.TenantID, urn domain.URN) (domain.Grou
 	return group, ok
 }
 
+// SetGroupMember upserts a membership and its liveness.
 func (s *MemoryStore) SetGroupMember(tenant domain.TenantID, group domain.URN, member domain.Subject, live bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -176,6 +189,7 @@ func (s *MemoryStore) SetGroupMember(tenant domain.TenantID, group domain.URN, m
 	members[member.URN] = memberRecord{subject: member, live: live}
 }
 
+// GroupMembers returns live members, sorted by URN.
 func (s *MemoryStore) GroupMembers(tenant domain.TenantID, group domain.URN) []domain.Subject {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -189,6 +203,7 @@ func (s *MemoryStore) GroupMembers(tenant domain.TenantID, group domain.URN) []d
 	return out
 }
 
+// SetPrincipal upserts a principal.
 func (s *MemoryStore) SetPrincipal(principal domain.Principal) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -200,6 +215,7 @@ func (s *MemoryStore) SetPrincipal(principal domain.Principal) {
 	byURN[principal.URN] = principal
 }
 
+// Principal returns a principal by subject.
 func (s *MemoryStore) Principal(tenant domain.TenantID, subject domain.Subject) (domain.Principal, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -207,6 +223,7 @@ func (s *MemoryStore) Principal(tenant domain.TenantID, subject domain.Subject) 
 	return principal, ok
 }
 
+// Live reports effective liveness for a user, agent or group subject.
 func (s *MemoryStore) Live(tenant domain.TenantID, subject domain.Subject) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -218,6 +235,7 @@ func (s *MemoryStore) Live(tenant domain.TenantID, subject domain.Subject) bool 
 	return ok && principal.Live
 }
 
+// AddPendingKind stages a kind until the next model publication.
 func (s *MemoryStore) AddPendingKind(kind domain.KindSpec) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -227,6 +245,7 @@ func (s *MemoryStore) AddPendingKind(kind domain.KindSpec) {
 	s.pending[kind.Name] = cloneKind(kind)
 }
 
+// PendingKind returns one staged kind.
 func (s *MemoryStore) PendingKind(name string) (domain.KindSpec, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -234,6 +253,7 @@ func (s *MemoryStore) PendingKind(name string) (domain.KindSpec, bool) {
 	return cloneKind(kind), ok
 }
 
+// PendingKinds returns every staged kind, sorted by name.
 func (s *MemoryStore) PendingKinds() []domain.KindSpec {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -245,6 +265,7 @@ func (s *MemoryStore) PendingKinds() []domain.KindSpec {
 	return out
 }
 
+// PublishKinds promotes every staged kind and records the version.
 func (s *MemoryStore) PublishKinds(version int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -257,6 +278,7 @@ func (s *MemoryStore) PublishKinds(version int) {
 	}
 }
 
+// Kind returns a published kind.
 func (s *MemoryStore) Kind(name string) (domain.KindSpec, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -264,6 +286,7 @@ func (s *MemoryStore) Kind(name string) (domain.KindSpec, bool) {
 	return cloneKind(kind), ok
 }
 
+// ModelVersion returns the published model version.
 func (s *MemoryStore) ModelVersion() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

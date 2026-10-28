@@ -17,13 +17,14 @@ type Grant struct {
 	Live      bool
 }
 
+// Validate checks the grant identity and tenant agreement.
 func (g Grant) Validate() error {
 	if g.ID == "" {
 		return fmt.Errorf("%w: missing grant id", ErrInvalidRelation)
 	}
 	object, err := ParseURN(string(g.Object))
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrInvalidURN, err)
+		return fmt.Errorf("%w: %w", ErrInvalidURN, err)
 	}
 	if object.Tenant() != g.Tenant {
 		return fmt.Errorf("%w: object tenant does not match grant tenant", ErrInvalidURN)

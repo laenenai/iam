@@ -2,6 +2,7 @@ package domain
 
 import "errors"
 
+// Typed sentinels returned by domain validation.
 var (
 	ErrInvalidTenant     = errors.New("iam: invalid tenant")
 	ErrInvalidURN        = errors.New("iam: invalid urn")

@@ -11,6 +11,7 @@ import (
 	"github.com/laenenai/iam"
 )
 
+// RunSuite runs the adoption contract against a facade constructor.
 func RunSuite(t *testing.T, newIAM func(t *testing.T) *iam.IAM) {
 	t.Helper()
 	t.Run("TenantBootstrap", func(t *testing.T) { testTenantBootstrap(t, newIAM) })
