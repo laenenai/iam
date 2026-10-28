@@ -115,3 +115,21 @@ func allowed(t *testing.T, svc *IAM, subject domain.Subject, relation domain.Rel
 	}
 	return ok
 }
+
+func mustGrant(t *testing.T, svc *IAM, actor domain.Actor, req GrantRequest) GrantResult {
+	t.Helper()
+	result, err := svc.Grant(context.Background(), actor, req)
+	if err != nil {
+		t.Fatalf("grant %s on %s: %v", req.Relation, req.Object, err)
+	}
+	return result
+}
+
+func mustCheck(t *testing.T, svc *IAM, actor domain.Actor, req CheckRequest) Decision {
+	t.Helper()
+	decision, err := svc.Check(context.Background(), actor, req)
+	if err != nil {
+		t.Fatalf("check %s on %s: %v", req.Relation, req.Object, err)
+	}
+	return decision
+}
