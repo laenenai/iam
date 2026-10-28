@@ -20,10 +20,10 @@ published kind model and the actor's authority, then append typed events. A
 projector is the only writer to the relation engine and the read models.
 Replaying the log reproduces them.
 
-The record carries actor, command, correlation, causation, occurred-at,
-recorded-at, and the model version the event was validated against.
-Authorization facts carry `granted_by` and `reason`, so provenance is in the
-record by construction.
+The event envelope carries fields for actor, command, correlation,
+causation, occurred-at, recorded-at, and the model version the event was
+validated against. Authorization facts carry `granted_by` and `reason`, so
+provenance is in the record by construction.
 
 ## What IAM owns
 
@@ -62,8 +62,8 @@ IAM makes the decision; the application runs the workflow.
    to an agent actor. `can_delete` is direct, non-inheriting and owner-granted.
 7. **Event payloads are ciphertext; metadata is not.** A per-tenant-version
    DEK encrypts payloads; OpenBao holds the KEK; a missing key fails closed.
-8. **Staleness fails closed.** Reads and writes share a bounded staleness
-   window; a caller that needs read-your-writes passes the revision.
+8. **Staleness fails closed in deployment.** Plan 1 projects synchronously;
+   plan 3 adds the bounded staleness window and read-your-writes revisions.
 9. **No panic and no `fmt.Print*` in library code.** Errors are typed
    sentinels; logging belongs to the caller.
 

@@ -1,0 +1,129 @@
+[13:03:08] reading source tuples
+[13:03:08] writing 11052 tuples in batches of 100
+[13:03:09] wrote 11052 tuples in 1.11s
+[13:03:09] projected page 1: 100 changes, total 100
+[13:03:09] projected page 2: 100 changes, total 200
+[13:03:09] projected page 3: 100 changes, total 300
+[13:03:09] projected page 4: 100 changes, total 400
+[13:03:09] projected page 5: 100 changes, total 500
+[13:03:09] projected page 6: 100 changes, total 600
+[13:03:09] projected page 7: 100 changes, total 700
+[13:03:09] projected page 8: 100 changes, total 800
+[13:03:09] projected page 9: 100 changes, total 900
+[13:03:09] projected page 10: 100 changes, total 1000
+[13:03:09] projected page 11: 100 changes, total 1100
+[13:03:09] projected page 12: 100 changes, total 1200
+[13:03:10] projected page 13: 100 changes, total 1300
+[13:03:10] projected page 14: 100 changes, total 1400
+[13:03:10] projected page 15: 100 changes, total 1500
+[13:03:10] projected page 16: 100 changes, total 1600
+[13:03:10] projected page 17: 100 changes, total 1700
+[13:03:10] projected page 18: 100 changes, total 1800
+[13:03:10] projected page 19: 100 changes, total 1900
+[13:03:10] projected page 20: 100 changes, total 2000
+[13:03:10] projected page 21: 100 changes, total 2100
+[13:03:10] projected page 22: 100 changes, total 2200
+[13:03:10] projected page 23: 100 changes, total 2300
+[13:03:10] projected page 24: 100 changes, total 2400
+[13:03:10] projected page 25: 100 changes, total 2500
+[13:03:10] projected page 26: 100 changes, total 2600
+[13:03:10] projected page 27: 100 changes, total 2700
+[13:03:10] projected page 28: 100 changes, total 2800
+[13:03:10] projected page 29: 100 changes, total 2900
+[13:03:10] projected page 30: 100 changes, total 3000
+[13:03:10] projected page 31: 100 changes, total 3100
+[13:03:10] projected page 32: 100 changes, total 3200
+[13:03:10] projected page 33: 100 changes, total 3300
+[13:03:10] projected page 34: 100 changes, total 3400
+[13:03:10] projected page 35: 100 changes, total 3500
+[13:03:11] projected page 36: 100 changes, total 3600
+[13:03:11] projected page 37: 100 changes, total 3700
+[13:03:11] projected page 38: 100 changes, total 3800
+[13:03:11] projected page 39: 100 changes, total 3900
+[13:03:11] projected page 40: 100 changes, total 4000
+[13:03:11] projected page 41: 100 changes, total 4100
+[13:03:11] projected page 42: 100 changes, total 4200
+[13:03:11] projected page 43: 100 changes, total 4300
+[13:03:11] projected page 44: 100 changes, total 4400
+[13:03:11] projected page 45: 100 changes, total 4500
+[13:03:11] projected page 46: 100 changes, total 4600
+[13:03:11] projected page 47: 100 changes, total 4700
+[13:03:11] projected page 48: 100 changes, total 4800
+[13:03:11] projected page 49: 100 changes, total 4900
+[13:03:11] projected page 50: 100 changes, total 5000
+[13:03:11] projected page 51: 100 changes, total 5100
+[13:03:11] projected page 52: 100 changes, total 5200
+[13:03:11] projected page 53: 100 changes, total 5300
+[13:03:11] projected page 54: 100 changes, total 5400
+[13:03:11] projected page 55: 100 changes, total 5500
+[13:03:11] projected page 56: 100 changes, total 5600
+[13:03:11] projected page 57: 100 changes, total 5700
+[13:03:12] projected page 58: 100 changes, total 5800
+[13:03:12] projected page 59: 100 changes, total 5900
+[13:03:12] projected page 60: 100 changes, total 6000
+[13:03:12] projected page 61: 100 changes, total 6100
+[13:03:12] projected page 62: 100 changes, total 6200
+[13:03:12] projected page 63: 100 changes, total 6300
+[13:03:12] projected page 64: 100 changes, total 6400
+[13:03:12] projected page 65: 100 changes, total 6500
+[13:03:12] projected page 66: 100 changes, total 6600
+[13:03:12] projected page 67: 100 changes, total 6700
+[13:03:12] projected page 68: 100 changes, total 6800
+[13:03:12] projected page 69: 100 changes, total 6900
+[13:03:12] projected page 70: 100 changes, total 7000
+[13:03:12] projected page 71: 100 changes, total 7100
+[13:03:12] projected page 72: 100 changes, total 7200
+[13:03:12] projected page 73: 100 changes, total 7300
+[13:03:12] projected page 74: 100 changes, total 7400
+[13:03:12] projected page 75: 100 changes, total 7500
+[13:03:12] projected page 76: 100 changes, total 7600
+[13:03:12] projected page 77: 100 changes, total 7700
+[13:03:12] projected page 78: 100 changes, total 7800
+[13:03:12] projected page 79: 100 changes, total 7900
+[13:03:12] projected page 80: 100 changes, total 8000
+[13:03:13] projected page 81: 100 changes, total 8100
+[13:03:13] projected page 82: 100 changes, total 8200
+[13:03:13] projected page 83: 100 changes, total 8300
+[13:03:13] projected page 84: 100 changes, total 8400
+[13:03:13] projected page 85: 100 changes, total 8500
+[13:03:13] projected page 86: 100 changes, total 8600
+[13:03:13] projected page 87: 100 changes, total 8700
+[13:03:13] projected page 88: 100 changes, total 8800
+[13:03:13] projected page 89: 100 changes, total 8900
+[13:03:13] projected page 90: 100 changes, total 9000
+[13:03:13] projected page 91: 100 changes, total 9100
+[13:03:13] projected page 92: 100 changes, total 9200
+[13:03:13] projected page 93: 100 changes, total 9300
+[13:03:13] projected page 94: 100 changes, total 9400
+[13:03:13] projected page 95: 100 changes, total 9500
+[13:03:13] projected page 96: 100 changes, total 9600
+[13:03:13] projected page 97: 100 changes, total 9700
+[13:03:13] projected page 98: 100 changes, total 9800
+[13:03:13] projected page 99: 100 changes, total 9900
+[13:03:13] projected page 100: 100 changes, total 10000
+[13:03:13] projected page 101: 100 changes, total 10100
+[13:03:13] projected page 102: 100 changes, total 10200
+[13:03:14] projected page 103: 100 changes, total 10300
+[13:03:14] projected page 104: 100 changes, total 10400
+[13:03:14] projected page 105: 100 changes, total 10500
+[13:03:14] projected page 106: 100 changes, total 10600
+[13:03:14] projected page 107: 100 changes, total 10700
+[13:03:14] projected page 108: 100 changes, total 10800
+[13:03:14] projected page 109: 100 changes, total 10900
+[13:03:14] projected page 110: 100 changes, total 11000
+[13:03:14] projected page 111: 52 changes, total 11052
+[13:03:14] projected 11052 changes over 111 pages in 4.91s (2251 changes/s)
+count nodes: source=10101 projection=10101 ok
+count grants: source=742 projection=742 ok
+count members: source=210 projection=210 ok
+node diff rows: 0
+grant diff rows: 0
+[13:03:14] delete test: one grant and one membership
+[13:03:14] projected page 1: 2 changes, total 2
+delete projection: 2 changes in 0.04s; grants 742->741, members 210->209
+liveness gap: 14 direct grants visible before the log event, 0 after the simulated PrincipalDeactivated
+[13:03:14] projected page 1: 1 changes, total 1
+tombstone gap after parent delete: [['proj/document/d00000011', '', 't']]
+after simulated NodeDeleted: [['proj/document/d00000011', '', 'f']]
+projected grant has no grant_id/granted_by: [['proj/root/main', 'proj/user/u0001', 'viewer', '2026-10-27 09:03:09.319553+00']]
+ReadChanges carries no model id; relation ranks were supplied by the model, not the feed.

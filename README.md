@@ -69,6 +69,12 @@ decision, err := svc.Check(ctx, ownerActor, iam.CheckRequest{
 	Object:   folder.Node.URN,
 	Relation: iam.Owner,
 })
+if err != nil {
+	return err
+}
+if !decision.Allowed {
+	return fmt.Errorf("owner check denied: %s", decision.Reason)
+}
 ```
 
 A node's creator becomes its owner. Owner inherits down the tree and implies
