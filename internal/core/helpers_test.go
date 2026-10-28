@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/laenenai/iam/internal/domain"
-	"github.com/laenenai/iam/internal/eventlog"
 )
 
 func newTestIAM(t *testing.T) *IAM {
@@ -60,16 +59,13 @@ func ownerOfTenant(tenant domain.TenantID) domain.Actor {
 
 func linkAsIdentity(t *testing.T, svc *IAM, tenant domain.TenantID, issuer, externalID string, user domain.Subject) {
 	t.Helper()
-	ws := eventlog.TenantWorkspace(tenant)
-	if _, err := svc.appendEvents(context.Background(), ws, identityAdapter(), "LinkPrincipal", domain.PrincipalLinked{
+	if _, err := svc.LinkPrincipal(context.Background(), identityAdapter(), LinkPrincipalRequest{
+		Tenant:     tenant,
 		Issuer:     issuer,
 		ExternalID: externalID,
 		Subject:    user,
 	}); err != nil {
-		t.Fatalf("append link %s: %v", user.URN, err)
-	}
-	if err := svc.project(context.Background(), ws); err != nil {
-		t.Fatalf("project link %s: %v", user.URN, err)
+		t.Fatalf("link %s: %v", user.URN, err)
 	}
 }
 

@@ -31,6 +31,8 @@ type IAM struct {
 	engine    engine.Engine
 	projector *projector.Projector
 
+	external map[externalKey]*externalIdentity
+
 	commandMu sync.Mutex
 }
 
@@ -51,6 +53,7 @@ func NewMemory(ctx context.Context, cfg Config) (*IAM, error) {
 		store:     store,
 		engine:    eng,
 		projector: projector.New(log, store, eng, cfg.Clock),
+		external:  make(map[externalKey]*externalIdentity),
 	}
 	if err := svc.seedModel(ctx); err != nil {
 		return nil, err
