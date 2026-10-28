@@ -129,3 +129,7 @@ func mustCheck(t *testing.T, svc *IAM, actor domain.Actor, req CheckRequest) Dec
 	}
 	return decision
 }
+
+func tenantAdmin(tenant domain.TenantID, user domain.Subject) domain.Actor {
+	return domain.Actor{ID: "tenant-admin", Tenant: tenant, Role: domain.RoleTenantAdmin, Subject: user}
+}

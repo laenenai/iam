@@ -1043,6 +1043,7 @@ type SubjectGrant struct {
 	Object domain.URN
 	Relation domain.Relation
 	GrantedBy string
+	GrantedAt time.Time
 	Depth int
 }
 

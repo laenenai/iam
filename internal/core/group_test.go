@@ -131,3 +131,46 @@ func TestGroupMemberValidation(t *testing.T) {
 		t.Fatalf("nested group member: %v", err)
 	}
 }
+
+func TestTenantAdminGroupCommandsRequireLiveGroup(t *testing.T) {
+	ctx := context.Background()
+	svc, owner, tenant := bootstrap(t)
+	admin := tenantAdmin(tenant, owner.Subject)
+	user := mustUser(t, tenant, "u2")
+	linkUser(t, svc, tenant, user)
+
+	missing := domain.URN("laenen/group/missing")
+	if _, err := svc.AddGroupMember(ctx, admin, AddGroupMemberRequest{Tenant: tenant, Group: missing, Member: user}); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("add to missing group: %v", err)
+	}
+	if _, err := svc.SetGroupAdmin(ctx, admin, SetGroupAdminRequest{Tenant: tenant, Group: missing, Admin: user}); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("admin of missing group: %v", err)
+	}
+	if _, err := svc.DeleteGroup(ctx, admin, DeleteGroupRequest{Tenant: tenant, Group: missing}); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("delete missing group: %v", err)
+	}
+	if d := mustCheck(t, svc, ownerOf(svc, tenant, user), CheckRequest{Tenant: tenant, Subject: user, Object: mustRoot(t, svc, tenant), Relation: domain.Viewer}); d.Allowed {
+		t.Fatal("a failed group command changed access")
+	}
+
+	group, err := svc.CreateGroup(ctx, owner, CreateGroupRequest{Tenant: tenant, GroupID: "g5", Name: "Family"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	node := mustNode(t, svc, owner, tenant, "laenen/document/shared", mustRoot(t, svc, tenant))
+	if _, err := svc.AddGroupMember(ctx, owner, AddGroupMemberRequest{Tenant: tenant, Group: group.Group.URN, Member: user}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Grant(ctx, owner, GrantRequest{Tenant: tenant, Object: node.URN, Subject: domain.Subject{URN: group.Group.URN, Kind: domain.SubjectGroup}, Relation: domain.Viewer}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.DeleteGroup(ctx, admin, DeleteGroupRequest{Tenant: tenant, Group: group.Group.URN}); err != nil {
+		t.Fatal(err)
+	}
+	if d := mustCheck(t, svc, ownerOf(svc, tenant, user), CheckRequest{Tenant: tenant, Subject: user, Object: node.URN, Relation: domain.Viewer}); d.Allowed {
+		t.Fatal("deleted group grant still allows")
+	}
+	if _, err := svc.AddGroupMember(ctx, admin, AddGroupMemberRequest{Tenant: tenant, Group: group.Group.URN, Member: user}); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("add to deleted group: %v", err)
+	}
+}

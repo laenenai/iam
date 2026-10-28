@@ -96,6 +96,9 @@ func (p *Projector) projectWorkspace(ctx context.Context, ws eventlog.Workspace)
 }
 
 func (p *Projector) apply(ctx context.Context, ws eventlog.Workspace, record eventlog.Recorded) error {
+	if err := validateRecord(ws, record.Envelope.Event); err != nil {
+		return err
+	}
 	switch event := record.Envelope.Event.(type) {
 	case domain.NodeRegistered:
 		node := domain.Node{
@@ -104,7 +107,7 @@ func (p *Projector) apply(ctx context.Context, ws eventlog.Workspace, record eve
 			Kind:      event.Kind,
 			Parent:    event.Parent,
 			Live:      true,
-			CreatedAt: p.clock.Now(),
+			CreatedAt: record.RecordedAt,
 			CreatedBy: event.CreatedBy,
 		}
 		p.store.SetNode(node)
@@ -139,7 +142,7 @@ func (p *Projector) apply(ctx context.Context, ws eventlog.Workspace, record eve
 			Subject:   event.Subject,
 			Relation:  event.Relation,
 			GrantedBy: event.GrantedBy,
-			GrantedAt: p.clock.Now(),
+			GrantedAt: record.RecordedAt,
 			Live:      true,
 		}
 		p.store.SetGrant(grant)
@@ -162,7 +165,7 @@ func (p *Projector) apply(ctx context.Context, ws eventlog.Workspace, record eve
 			Name:      event.Name,
 			Admin:     event.Admin,
 			Live:      true,
-			CreatedAt: p.clock.Now(),
+			CreatedAt: record.RecordedAt,
 		}
 		p.store.SetGroup(group)
 		return p.engine.Write(ctx, adminTuple(event.Group, event.Admin))
@@ -170,7 +173,7 @@ func (p *Projector) apply(ctx context.Context, ws eventlog.Workspace, record eve
 	case domain.GroupAdminChanged:
 		tenant := event.Group.Tenant()
 		group, ok := p.store.Group(tenant, event.Group)
-		if !ok {
+		if !ok || !group.Live {
 			return fmt.Errorf("%w: group %s", domain.ErrNotFound, event.Group)
 		}
 		if group.Admin.URN != "" {
@@ -183,7 +186,7 @@ func (p *Projector) apply(ctx context.Context, ws eventlog.Workspace, record eve
 		return p.engine.Write(ctx, adminTuple(event.Group, event.Admin))
 
 	case domain.MemberAdded:
-		if _, ok := p.store.Group(event.Group.Tenant(), event.Group); !ok {
+		if group, ok := p.store.Group(event.Group.Tenant(), event.Group); !ok || !group.Live {
 			return fmt.Errorf("%w: group %s", domain.ErrNotFound, event.Group)
 		}
 		p.store.SetGroupMember(event.Group.Tenant(), event.Group, event.Member, true)
@@ -199,11 +202,19 @@ func (p *Projector) apply(ctx context.Context, ws eventlog.Workspace, record eve
 		if !ok {
 			return fmt.Errorf("%w: group %s", domain.ErrNotFound, event.Group)
 		}
+		groupSubject := domain.Subject{URN: event.Group, Kind: domain.SubjectGroup}
+		for _, grant := range p.store.GrantsForSubject(tenant, groupSubject) {
+			if err := p.engine.Delete(ctx, grantTuple(grant)); err != nil {
+				return err
+			}
+			grant.Live = false
+			p.store.SetGrant(grant)
+		}
 		for _, member := range p.store.GroupMembers(tenant, event.Group) {
-			p.store.SetGroupMember(tenant, event.Group, member, false)
 			if err := p.engine.Delete(ctx, memberTuple(event.Group, member)); err != nil {
 				return err
 			}
+			p.store.SetGroupMember(tenant, event.Group, member, false)
 		}
 		if group.Admin.URN != "" {
 			if err := p.engine.Delete(ctx, adminTuple(event.Group, group.Admin)); err != nil {
@@ -224,7 +235,7 @@ func (p *Projector) apply(ctx context.Context, ws eventlog.Workspace, record eve
 			GlobalLive: true,
 			TenantLive: true,
 			Live:       true,
-			LinkedAt:   p.clock.Now(),
+			LinkedAt:   record.RecordedAt,
 		}
 		p.store.SetPrincipal(principal)
 		return nil
@@ -266,6 +277,117 @@ func (p *Projector) apply(ctx context.Context, ws eventlog.Workspace, record eve
 	}
 }
 
+func validateRecord(ws eventlog.Workspace, event domain.Event) error {
+	tenant, ok := eventTenant(event)
+	if !ok {
+		if ws != eventlog.PlatformWorkspace {
+			return fmt.Errorf("%w: model event outside %s", domain.ErrForbidden, eventlog.PlatformWorkspace)
+		}
+		return nil
+	}
+	if ws != eventlog.TenantWorkspace(tenant) {
+		return fmt.Errorf("%w: workspace %s does not match tenant %s", domain.ErrInvalidURN, ws, tenant)
+	}
+	invalid := func(what string) error {
+		return fmt.Errorf("%w: %s tenant mismatch", domain.ErrInvalidURN, what)
+	}
+	switch e := event.(type) {
+	case domain.NodeRegistered:
+		if e.Kind != e.URN.Kind() {
+			return fmt.Errorf("%w: node kind does not match urn", domain.ErrInvalidURN)
+		}
+		if e.Parent != "" && e.Parent.Tenant() != tenant {
+			return invalid("node parent")
+		}
+	case domain.NodeDeleted:
+		if e.URN.Tenant() != tenant {
+			return invalid("node")
+		}
+	case domain.GrantIssued:
+		if e.Object.Tenant() != tenant || e.Subject.URN.Tenant() != tenant {
+			return invalid("grant")
+		}
+	case domain.GrantRevoked:
+		if e.Object.Tenant() != tenant {
+			return invalid("grant")
+		}
+	case domain.GroupCreated:
+		if e.Group.Tenant() != tenant || e.Group.Kind() != string(domain.SubjectGroup) || e.Admin.URN.Tenant() != tenant {
+			return invalid("group")
+		}
+	case domain.GroupAdminChanged:
+		if e.Group.Tenant() != tenant || e.Admin.URN.Tenant() != tenant {
+			return invalid("group admin")
+		}
+	case domain.MemberAdded:
+		if e.Group.Tenant() != tenant || e.Member.URN.Tenant() != tenant {
+			return invalid("member")
+		}
+	case domain.MemberRemoved:
+		if e.Group.Tenant() != tenant || e.Member.URN.Tenant() != tenant {
+			return invalid("member")
+		}
+	case domain.GroupDeleted:
+		if e.Group.Tenant() != tenant {
+			return invalid("group")
+		}
+	case domain.PrincipalLinked, domain.PrincipalDeactivated, domain.PrincipalReactivated, domain.PrincipalDeleted:
+		subject := subjectOf(event)
+		if subject.URN.Tenant() != tenant || subject.Kind == domain.SubjectGroup {
+			return invalid("principal")
+		}
+	}
+	return nil
+}
+
+func eventTenant(event domain.Event) (domain.TenantID, bool) {
+	switch e := event.(type) {
+	case domain.NodeRegistered:
+		return e.URN.Tenant(), true
+	case domain.NodeDeleted:
+		return e.URN.Tenant(), true
+	case domain.GrantIssued:
+		return e.Object.Tenant(), true
+	case domain.GrantRevoked:
+		return e.Object.Tenant(), true
+	case domain.GroupCreated:
+		return e.Group.Tenant(), true
+	case domain.GroupAdminChanged:
+		return e.Group.Tenant(), true
+	case domain.MemberAdded:
+		return e.Group.Tenant(), true
+	case domain.MemberRemoved:
+		return e.Group.Tenant(), true
+	case domain.GroupDeleted:
+		return e.Group.Tenant(), true
+	case domain.PrincipalLinked:
+		return e.Subject.URN.Tenant(), true
+	case domain.PrincipalDeactivated:
+		return e.Subject.URN.Tenant(), true
+	case domain.PrincipalReactivated:
+		return e.Subject.URN.Tenant(), true
+	case domain.PrincipalDeleted:
+		return e.Subject.URN.Tenant(), true
+	default:
+		return "", false
+	}
+}
+
+func subjectOf(event domain.Event) domain.Subject {
+	switch e := event.(type) {
+	case domain.PrincipalLinked:
+		return e.Subject
+	case domain.PrincipalDeactivated:
+		return e.Subject
+	case domain.PrincipalReactivated:
+		return e.Subject
+	case domain.PrincipalDeleted:
+		return e.Subject
+	default:
+		return domain.Subject{}
+	}
+}
+
 func (p *Projector) setPrincipalLiveness(subject domain.Subject, source domain.DeactivationSource, live bool) error {
 	tenant := subject.URN.Tenant()
 	principal, ok := p.store.Principal(tenant, subject)
@@ -296,17 +418,17 @@ func (p *Projector) deletePrincipal(ctx context.Context, subject domain.Subject)
 	p.store.SetPrincipal(principal)
 
 	for _, grant := range p.store.GrantsForSubject(tenant, subject) {
-		grant.Live = false
-		p.store.SetGrant(grant)
 		if err := p.engine.Delete(ctx, grantTuple(grant)); err != nil {
 			return err
 		}
+		grant.Live = false
+		p.store.SetGrant(grant)
 	}
 	for _, group := range p.store.GroupsForMember(tenant, subject) {
-		p.store.SetGroupMember(tenant, group.URN, subject, false)
 		if err := p.engine.Delete(ctx, memberTuple(group.URN, subject)); err != nil {
 			return err
 		}
+		p.store.SetGroupMember(tenant, group.URN, subject, false)
 	}
 	for _, group := range p.store.GroupsForAdmin(tenant, subject) {
 		if err := p.engine.Delete(ctx, adminTuple(group.URN, subject)); err != nil {

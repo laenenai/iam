@@ -271,12 +271,12 @@ func (i *IAM) requireGroupAdmin(actor domain.Actor, tenant domain.TenantID, grou
 	if err := i.requireLiveUser(actor, tenant); err != nil {
 		return err
 	}
-	if actor.Role == domain.RoleTenantAdmin {
-		return nil
-	}
 	group, ok := i.store.Group(tenant, groupURN)
 	if !ok || !group.Live {
 		return fmt.Errorf("%w: group %s", domain.ErrNotFound, groupURN)
+	}
+	if actor.Role == domain.RoleTenantAdmin {
+		return nil
 	}
 	if group.Admin != actor.Subject {
 		return fmt.Errorf("%w: %s is not the group admin", domain.ErrForbidden, actor.Subject.URN)

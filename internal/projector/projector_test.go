@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/laenenai/iam/internal/domain"
 	"github.com/laenenai/iam/internal/engine"
@@ -208,5 +209,174 @@ func TestProjectModelAndFutureVersion(t *testing.T) {
 	}
 	if p.Applied(ws) != 1 {
 		t.Fatalf("failed event advanced applied position: %d", p.Applied(ws))
+	}
+}
+
+type flakyEngine struct {
+	base        engine.Engine
+	failDeletes int
+}
+
+func (f *flakyEngine) Write(ctx context.Context, tuples ...engine.Tuple) error {
+	return f.base.Write(ctx, tuples...)
+}
+
+func (f *flakyEngine) Delete(ctx context.Context, tuples ...engine.Tuple) error {
+	if f.failDeletes > 0 {
+		f.failDeletes--
+		return errors.New("injected delete failure")
+	}
+	return f.base.Delete(ctx, tuples...)
+}
+
+func (f *flakyEngine) Check(ctx context.Context, subject domain.Subject, relation domain.Relation, object domain.URN) (bool, domain.Reason, error) {
+	return f.base.Check(ctx, subject, relation, object)
+}
+
+func TestGroupDeletedRetryCleansAccessAfterEngineFailure(t *testing.T) {
+	ctx := context.Background()
+	log := eventlog.NewMemory(domain.FixedClock{})
+	store := projector.NewMemoryStore()
+	base := engine.NewMemory()
+	flaky := &flakyEngine{base: base, failDeletes: 2}
+	p := projector.New(log, store, flaky, domain.FixedClock{})
+	ws := eventlog.TenantWorkspace("t")
+	user := domain.Subject{URN: "t/user/u1", Kind: domain.SubjectUser}
+	group := domain.Subject{URN: "t/group/g1", Kind: domain.SubjectGroup}
+
+	appendAll(t, log, ws,
+		domain.NodeRegistered{URN: "t/document/d1", Kind: "document", CreatedBy: "a"},
+		domain.GroupCreated{Group: group.URN, Name: "Family", Admin: user, CreatedBy: "a"},
+		domain.MemberAdded{Group: group.URN, Member: user, AddedBy: "a"},
+		domain.GrantIssued{GrantID: "g1", Object: "t/document/d1", Subject: group, Relation: domain.Viewer, GrantedBy: "a"},
+		domain.GroupDeleted{Group: group.URN, Reason: "test"},
+	)
+	if err := p.Project(ctx, ws); err == nil {
+		t.Fatal("expected the injected engine failure")
+	}
+	var err error
+	for i := 0; i < 3; i++ {
+		if err = p.Project(ctx, ws); err == nil {
+			break
+		}
+	}
+	if err != nil {
+		t.Fatalf("retries: %v", err)
+	}
+	if ok, _, _ := base.Check(ctx, user, domain.Viewer, "t/document/d1"); ok {
+		t.Fatal("retry left deleted-group access open")
+	}
+	if members := store.GroupMembers("t", group.URN); len(members) != 0 {
+		t.Fatalf("retry left members: %#v", members)
+	}
+}
+
+func TestReplayFromZeroReproducesReadModel(t *testing.T) {
+	ctx := context.Background()
+	log := eventlog.NewMemory(domain.FixedClock{})
+	ws := eventlog.TenantWorkspace("t")
+	user := domain.Subject{URN: "t/user/u1", Kind: domain.SubjectUser}
+	group := domain.Subject{URN: "t/group/g1", Kind: domain.SubjectGroup}
+	appendAll(t, log, ws,
+		domain.NodeRegistered{URN: "t/folder/f1", Kind: "folder", CreatedBy: "a"},
+		domain.NodeRegistered{URN: "t/document/d1", Kind: "document", Parent: "t/folder/f1", CreatedBy: "a"},
+		domain.GroupCreated{Group: group.URN, Name: "Family", Admin: user, CreatedBy: "a"},
+		domain.MemberAdded{Group: group.URN, Member: user, AddedBy: "a"},
+		domain.MemberRemoved{Group: group.URN, Member: user, RemovedBy: "a"},
+		domain.PrincipalLinked{Issuer: "issuer", ExternalID: "e1", Subject: user},
+		domain.GrantIssued{GrantID: "g1", Object: "t/document/d1", Subject: user, Relation: domain.Viewer, GrantedBy: "a"},
+		domain.GrantIssued{GrantID: "g2", Object: "t/document/d1", Subject: group, Relation: domain.Editor, GrantedBy: "a"},
+		domain.GrantRevoked{GrantID: "g2", Object: "t/document/d1", RevokedBy: "a"},
+	)
+
+	firstStore := projector.NewMemoryStore()
+	firstEngine := engine.NewMemory()
+	first := projector.New(log, firstStore, firstEngine, domain.FixedClock{})
+	if err := first.Project(ctx, ws); err != nil {
+		t.Fatal(err)
+	}
+
+	var later domain.FixedClock
+	later.Advance(48 * time.Hour)
+	secondStore := projector.NewMemoryStore()
+	secondEngine := engine.NewMemory()
+	second := projector.New(log, secondStore, secondEngine, later)
+	if err := second.Project(ctx, ws); err != nil {
+		t.Fatal(err)
+	}
+
+	firstNode, _ := firstStore.Node("t", "t/document/d1")
+	secondNode, _ := secondStore.Node("t", "t/document/d1")
+	if !firstNode.CreatedAt.Equal(secondNode.CreatedAt) {
+		t.Fatalf("node timestamp drifted: %v vs %v", firstNode.CreatedAt, secondNode.CreatedAt)
+	}
+	firstGrant, _ := firstStore.Grant("t", "g1")
+	secondGrant, _ := secondStore.Grant("t", "g1")
+	if !firstGrant.GrantedAt.Equal(secondGrant.GrantedAt) {
+		t.Fatalf("grant timestamp drifted: %v vs %v", firstGrant.GrantedAt, secondGrant.GrantedAt)
+	}
+	firstGroup, _ := firstStore.Group("t", group.URN)
+	secondGroup, _ := secondStore.Group("t", group.URN)
+	if !firstGroup.CreatedAt.Equal(secondGroup.CreatedAt) {
+		t.Fatalf("group timestamp drifted: %v vs %v", firstGroup.CreatedAt, secondGroup.CreatedAt)
+	}
+	firstPrincipal, _ := firstStore.Principal("t", user)
+	secondPrincipal, _ := secondStore.Principal("t", user)
+	if !firstPrincipal.LinkedAt.Equal(secondPrincipal.LinkedAt) {
+		t.Fatalf("principal timestamp drifted: %v vs %v", firstPrincipal.LinkedAt, secondPrincipal.LinkedAt)
+	}
+	for _, store := range []projector.Store{firstStore, secondStore} {
+		if node, ok := store.Node("t", "t/document/d1"); !ok || !node.Live {
+			t.Fatalf("node: %#v %v", node, ok)
+		}
+		if grant, ok := store.Grant("t", "g1"); !ok || !grant.Live {
+			t.Fatalf("grant: %#v %v", grant, ok)
+		}
+		if grant, ok := store.Grant("t", "g2"); !ok || grant.Live {
+			t.Fatalf("revoked grant: %#v %v", grant, ok)
+		}
+		if members := store.GroupMembers("t", group.URN); len(members) != 0 {
+			t.Fatalf("members: %#v", members)
+		}
+	}
+	firstOK, _, _ := firstEngine.Check(ctx, user, domain.Viewer, "t/document/d1")
+	secondOK, _, _ := secondEngine.Check(ctx, user, domain.Viewer, "t/document/d1")
+	if firstOK != secondOK || !firstOK {
+		t.Fatalf("engine drift: %v vs %v", firstOK, secondOK)
+	}
+}
+
+func TestProjectorRejectsTenantWorkspaceMismatch(t *testing.T) {
+	ctx := context.Background()
+	log := eventlog.NewMemory(domain.FixedClock{})
+	store := projector.NewMemoryStore()
+	p := projector.New(log, store, engine.NewMemory(), domain.FixedClock{})
+	ws := eventlog.TenantWorkspace("t")
+	appendAll(t, log, ws, domain.NodeRegistered{URN: "other/document/d1", Kind: "document", CreatedBy: "a"})
+	err := p.Project(ctx, ws)
+	if !errors.Is(err, domain.ErrInvalidURN) {
+		t.Fatalf("wrong workspace: %v", err)
+	}
+	if p.Applied(ws) != 0 {
+		t.Fatalf("invalid event advanced applied: %d", p.Applied(ws))
+	}
+}
+
+func TestProjectorRejectsCrossTenantEdge(t *testing.T) {
+	ctx := context.Background()
+	log := eventlog.NewMemory(domain.FixedClock{})
+	store := projector.NewMemoryStore()
+	p := projector.New(log, store, engine.NewMemory(), domain.FixedClock{})
+	ws := eventlog.TenantWorkspace("t")
+	appendAll(t, log, ws,
+		domain.NodeRegistered{URN: "t/document/d1", Kind: "document", CreatedBy: "a"},
+		domain.GrantIssued{GrantID: "g1", Object: "t/document/d1", Subject: domain.Subject{URN: "other/user/u1", Kind: domain.SubjectUser}, Relation: domain.Viewer, GrantedBy: "a"},
+	)
+	err := p.Project(ctx, ws)
+	if !errors.Is(err, domain.ErrInvalidURN) {
+		t.Fatalf("cross-tenant grant: %v", err)
+	}
+	if p.Applied(ws) != 1 {
+		t.Fatalf("invalid event advanced applied: %d", p.Applied(ws))
 	}
 }
