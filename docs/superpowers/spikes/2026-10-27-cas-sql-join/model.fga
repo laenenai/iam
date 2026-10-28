@@ -1,0 +1,22 @@
+model
+  schema 1.1
+
+type user
+
+type agent
+  relations
+    define supervisor: [user, agent]
+    define can_act_for: [user]
+
+type group
+  relations
+    define member: [user]
+
+type node
+  relations
+    define parent: [node]
+    define owner: [user, group#member] or owner from parent
+    define editor: [user, agent, group#member] or owner or editor from parent
+    define commenter: [user, agent, group#member] or editor or commenter from parent
+    define viewer: [user, agent, group#member] or commenter or viewer from parent
+    define can_view: viewer

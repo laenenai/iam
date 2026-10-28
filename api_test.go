@@ -17,55 +17,29 @@ import (
 	"testing"
 )
 
-// updateAPI regenerates api.txt instead of checking it:
-//
-//	go test . -run TestAPIGolden -update-api
 var updateAPI = flag.Bool("update-api", false, "rewrite api.txt from the current source")
 
-// apiPackages are the directories api.txt covers, in the order they appear
-// in the file. The importable packages come first — the facade, the
-// conformance suites, and the use-case corpus a consumer runs against its
-// own wiring — and the internal ones follow because the facade re-exports
-// them as aliases, so a change to an internal signature is a change to the
-// public surface even though Go's internal rule keeps the import path
-// private.
-//
-// The examples/ packages are listed because they are importable and a
-// consumer does import them: examples/scenario is the language the corpus
-// is written in and the harness that runs it, and CHARTER.md makes running
-// this module's suites against a consumer's own wiring the adoption test.
 var apiPackages = []string{
 	".",
 	"iamtest",
-	"examples",
-	"examples/scenario",
-	"examples/discretionary",
-	"examples/household",
-	"examples/agents",
-	"examples/unexpressible",
 	"internal/domain",
-	"internal/registry",
-	"internal/idp",
-	"internal/authz",
-	"internal/authz/pgauthz",
+	"internal/eventlog",
+	"internal/engine",
+	"internal/projector",
+	"internal/core",
 }
 
 const apiHeader = `# Public API of github.com/laenenai/iam, as a golden file.
 #
 # Regenerate with: go test . -run TestAPIGolden -update-api
 #
-# "package iam" is the facade a consumer imports; "package iamtest" is the
-# conformance suite it runs against its own wiring, and the examples/
-# packages are the use-case corpus it runs the same way. The internal
-# packages are listed too, because the facade re-exports their types as
-# aliases: a change to one of those signatures changes what a consumer
-# sees, even though the import path itself is private. Growing this file is
-# a reviewed diff — see CHARTER.md.
+# "package iam" is the facade a consumer imports and "package iamtest" is the
+# conformance suite it runs against its own wiring. The internal packages are
+# listed too, because the facade re-exports their types as aliases: a change to
+# one of those signatures changes what a consumer sees, even though the import
+# path itself is private. Growing this file is a reviewed diff.
 `
 
-// TestAPIGolden keeps api.txt in step with the source. CHARTER.md makes the
-// file one of the two mechanisms that enforce the module's boundary, which
-// only works if it is generated rather than maintained by hand.
 func TestAPIGolden(t *testing.T) {
 	t.Parallel()
 
@@ -93,7 +67,6 @@ func TestAPIGolden(t *testing.T) {
 	}
 }
 
-// renderAPI renders every exported declaration in apiPackages.
 func renderAPI() ([]byte, error) {
 	var out bytes.Buffer
 	out.WriteString(apiHeader)
@@ -109,9 +82,6 @@ func renderAPI() ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-// renderPackage renders one directory's exported declarations, sorted so
-// the output depends on the declarations and not on the order of the files
-// they happen to live in.
 func renderPackage(dir string) (string, error) {
 	fset := token.NewFileSet()
 
@@ -146,7 +116,6 @@ func renderPackage(dir string) (string, error) {
 	return out.String(), nil
 }
 
-// goFiles lists the non-test .go files in dir, sorted.
 func goFiles(dir string) ([]string, error) {
 	dirEntries, err := os.ReadDir(dir)
 	if err != nil {
@@ -168,16 +137,11 @@ func goFiles(dir string) ([]string, error) {
 	return names, nil
 }
 
-// apiEntry is one rendered declaration plus the key it sorts under.
-// Methods sort directly after their receiver type.
 type apiEntry struct {
 	key  string
 	text string
 }
 
-// exportedDecls renders the exported declarations in one file. Doc comments
-// are deliberately omitted: api.txt is a signature diff, and including the
-// prose would make every wording change look like an API change.
 func exportedDecls(fset *token.FileSet, file *ast.File) []apiEntry {
 	var entries []apiEntry
 
@@ -214,10 +178,6 @@ func exportedDecls(fset *token.FileSet, file *ast.File) []apiEntry {
 	return entries
 }
 
-// renderFunc renders a function or method signature. The receiver's type
-// name is returned separately so a method sorts under its type. A method
-// on an unexported type is not part of the surface, however exported its
-// own name is, so it reports ok == false.
 func renderFunc(fset *token.FileSet, d *ast.FuncDecl) (recvType, text string, ok bool) {
 	sig := strings.TrimPrefix(render(fset, d.Type), "func")
 
@@ -233,8 +193,6 @@ func renderFunc(fset *token.FileSet, d *ast.FuncDecl) (recvType, text string, ok
 	return bare + ".", fmt.Sprintf("func (%s) %s%s", recv, d.Name.Name, sig), true
 }
 
-// renderSpec renders one type, var or const spec, or reports ok == false if
-// nothing in it is exported.
 func renderSpec(fset *token.FileSet, keyword string, spec ast.Spec) (name, text string, ok bool) {
 	switch s := spec.(type) {
 	case *ast.TypeSpec:
@@ -262,9 +220,6 @@ func renderSpec(fset *token.FileSet, keyword string, spec ast.Spec) (name, text 
 	return "", "", false
 }
 
-// renderStruct renders a struct type listing its exported fields only.
-// Unexported state is not part of the surface, but its presence is worth
-// recording, so a struct that has any says so the way godoc does.
 func renderStruct(fset *token.FileSet, st *ast.StructType) string {
 	var fields []string
 	hidden := false
@@ -272,7 +227,6 @@ func renderStruct(fset *token.FileSet, st *ast.StructType) string {
 	for _, field := range st.Fields.List {
 		typ := render(fset, field.Type)
 		if len(field.Names) == 0 {
-			// An embedded field is exported if its type name is.
 			if token.IsExported(strings.TrimLeft(typ, "*")) {
 				fields = append(fields, typ)
 			} else {
@@ -302,8 +256,6 @@ func renderStruct(fset *token.FileSet, st *ast.StructType) string {
 	return "struct {\n\t" + strings.Join(fields, "\n\t") + "\n}"
 }
 
-// collapseBlankLines removes empty lines from a rendered declaration. They
-// are artefacts of the doc comments this file strips, not structure.
 func collapseBlankLines(s string) string {
 	lines := strings.Split(s, "\n")
 	kept := make([]string, 0, len(lines))
@@ -315,9 +267,6 @@ func collapseBlankLines(s string) string {
 	return strings.Join(kept, "\n")
 }
 
-// render prints one AST node with go/printer, which is the same formatter
-// gofmt uses, so the output is stable across runs and across Go releases
-// that do not change formatting.
 func render(fset *token.FileSet, node ast.Node) string {
 	var buf bytes.Buffer
 	if err := (&printer.Config{Mode: printer.UseSpaces | printer.TabIndent, Tabwidth: 4}).Fprint(&buf, fset, node); err != nil {

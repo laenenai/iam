@@ -1,0 +1,577 @@
+SET
+SET
+DROP TABLE
+CREATE TABLE
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+       stage        
+--------------------
+ bench: broad pages
+(1 row)
+
+ bench_page 
+------------
+ 
+(1 row)
+
+ bench_page 
+------------
+ 
+(1 row)
+
+ bench_page 
+------------
+ 
+(1 row)
+
+ bench_page 
+------------
+ 
+(1 row)
+
+ bench_page 
+------------
+ 
+(1 row)
+
+ bench_page 
+------------
+ 
+(1 row)
+
+ bench_page 
+------------
+ 
+(1 row)
+
+ bench_page 
+------------
+ 
+(1 row)
+
+        stage        
+---------------------
+ bench: narrow pages
+(1 row)
+
+ bench_page 
+------------
+ 
+(1 row)
+
+ bench_page 
+------------
+ 
+(1 row)
+
+ bench_page 
+------------
+ 
+(1 row)
+
+ bench_page 
+------------
+ 
+(1 row)
+
+ bench_page 
+------------
+ 
+(1 row)
+
+ bench_page 
+------------
+ 
+(1 row)
+
+ bench_page 
+------------
+ 
+(1 row)
+
+ bench_page 
+------------
+ 
+(1 row)
+
+ bench_page 
+------------
+ 
+(1 row)
+
+ bench_page 
+------------
+ 
+(1 row)
+
+     stage     
+---------------
+ bench: counts
+(1 row)
+
+ bench_count 
+-------------
+ 
+(1 row)
+
+ bench_count 
+-------------
+ 
+(1 row)
+
+ bench_count 
+-------------
+ 
+(1 row)
+
+ bench_count 
+-------------
+ 
+(1 row)
+
+ bench_count 
+-------------
+ 
+(1 row)
+
+ bench_count 
+-------------
+ 
+(1 row)
+
+    stage     
+--------------
+ bench: point
+(1 row)
+
+ bench_point 
+-------------
+ 
+(1 row)
+
+ bench_point 
+-------------
+ 
+(1 row)
+
+ bench_point 
+-------------
+ 
+(1 row)
+
+ bench_point 
+-------------
+ 
+(1 row)
+
+       stage        
+--------------------
+ bench: listobjects
+(1 row)
+
+ bench_populate 
+----------------
+ 
+(1 row)
+
+ bench_page 
+------------
+ 
+(1 row)
+
+ bench_count 
+-------------
+ 
+(1 row)
+
+ bench_populate 
+----------------
+ 
+(1 row)
+
+ bench_page 
+------------
+ 
+(1 row)
+
+ bench_count 
+-------------
+ 
+(1 row)
+
+--- results
+    path     |      subject      | rank |   kind   | runs |  avg_ms  |   p50    |   p95    |   p99    |  min_ms  |  max_ms  |  rows  
+-------------+-------------------+------+----------+------+----------+----------+----------+----------+----------+----------+--------
+ grant       | laenen/user/u0002 |    1 | count    |   30 |    0.573 |    0.571 |    0.584 |    0.587 |    0.565 |    0.588 |      0
+ grant       | laenen/user/u0003 |    1 | count    |   30 |   87.675 |   87.574 |   89.447 |   89.703 |   86.363 |   89.739 |  10000
+ grant       | laenen/user/u0004 |    1 | count    |   30 |    0.722 |    0.709 |    0.784 |    0.904 |    0.692 |    0.951 |     10
+ grant       | laenen/user/u0020 |    1 | count    |   10 |  866.628 |  865.635 |  895.565 |  899.656 |  840.996 |  900.679 | 100000
+ grant       | laenen/user/u0021 |    1 | count    |   30 |   88.165 |   87.850 |   91.383 |   92.891 |   86.310 |   93.310 |  10000
+ grant       | laenen/user/u0022 |    1 | count    |   30 |    6.233 |    6.034 |    7.644 |    9.576 |    5.583 |   10.133 |   1000
+ listobjects | laenen/user/u0020 |    1 | count    |   10 | 1802.806 | 1798.379 | 1874.398 | 1881.500 | 1715.536 | 1883.275 | 100000
+ listobjects | laenen/user/u0021 |    1 | count    |   30 |  109.467 |  108.710 |  111.542 |  120.151 |  108.016 |  123.633 |  10000
+ closure     | laenen/user/u0001 |    1 | page     |   10 |    2.178 |    2.157 |    2.931 |    3.057 |    1.614 |    3.088 |     50
+ closure     | laenen/user/u0003 |    1 | page     |   30 |  418.463 |  417.396 |  426.393 |  448.893 |  406.932 |  457.576 |     50
+ closure     | laenen/user/u0020 |    1 | page     |   30 |   43.646 |   41.586 |   54.909 |   71.911 |   41.054 |   75.297 |     50
+ closure     | laenen/user/u0021 |    1 | page     |   30 |  408.924 |  409.843 |  413.027 |  413.753 |  401.696 |  413.974 |     50
+ denorm      | laenen/user/u0001 |    1 | page     |   10 |    1.135 |    1.127 |    1.206 |    1.225 |    1.095 |    1.230 |     50
+ denorm      | laenen/user/u0003 |    1 | page     |   30 |  268.490 |  268.810 |  272.552 |  273.012 |  264.158 |  273.066 |     50
+ denorm      | laenen/user/u0020 |    1 | page     |   30 |   27.828 |   27.740 |   28.318 |   28.380 |   27.463 |   28.384 |     50
+ denorm      | laenen/user/u0021 |    1 | page     |   30 |  273.330 |  272.423 |  281.365 |  283.335 |  265.664 |  283.984 |     50
+ grant       | laenen/user/u0002 |    1 | page     |   30 |    0.621 |    0.620 |    0.634 |    0.641 |    0.603 |    0.644 |      0
+ grant       | laenen/user/u0003 |    1 | page     |   30 |   93.894 |   95.810 |   96.606 |   96.640 |   90.005 |   96.641 |     50
+ grant       | laenen/user/u0004 |    1 | page     |   30 |    0.777 |    0.776 |    0.803 |    0.807 |    0.752 |    0.808 |     10
+ grant       | laenen/user/u0005 |    1 | page     |   30 |    7.487 |    7.101 |    9.514 |   10.804 |    5.942 |   11.328 |     50
+ grant       | laenen/user/u0005 |    3 | page     |   30 |    6.769 |    6.182 |   10.099 |   11.901 |    5.668 |   12.190 |     50
+ grant       | laenen/user/u0020 |    1 | page     |   10 |  947.191 |  951.178 |  965.708 |  966.593 |  915.585 |  966.814 |     50
+ grant       | laenen/user/u0021 |    1 | page     |   30 |   95.598 |   95.361 |   98.121 |   99.300 |   92.994 |   99.618 |     50
+ grant       | laenen/user/u0022 |    1 | page     |   30 |    7.287 |    7.274 |    8.580 |    8.723 |    5.981 |    8.766 |     50
+ grant       | laenen/user/u0041 |    1 | page     |   30 |    6.499 |    6.410 |    7.214 |    7.312 |    6.074 |    7.313 |     50
+ grant       | laenen/user/u0041 |    3 | page     |   30 |    0.556 |    0.551 |    0.581 |    0.591 |    0.540 |    0.592 |      0
+ listobjects | laenen/user/u0020 |    1 | page     |   30 |    8.712 |    8.731 |    8.839 |    8.891 |    8.522 |    8.908 |     50
+ listobjects | laenen/user/u0021 |    1 | page     |   30 |   73.458 |   73.583 |   74.422 |   74.897 |   72.000 |   75.027 |     50
+ point-hit   | laenen/user/u0001 |    1 | point    |   30 |    0.383 |    0.380 |    0.397 |    0.420 |    0.371 |    0.429 |      1
+ point-hit   | laenen/user/u0005 |    1 | point    |   30 |    0.377 |    0.376 |    0.386 |    0.392 |    0.371 |    0.394 |      1
+ point-hit   | laenen/user/u0005 |    3 | point    |   30 |    0.359 |    0.360 |    0.368 |    0.369 |    0.350 |    0.370 |      1
+ point-miss  | laenen/user/u0005 |    1 | point    |   30 |    0.363 |    0.363 |    0.380 |    0.381 |    0.353 |    0.382 |      0
+ listobjects | laenen/user/u0020 |    1 | populate |   10 | 1520.112 | 1515.410 | 1732.666 | 1755.443 | 1339.235 | 1761.137 | 100000
+ listobjects | laenen/user/u0021 |    1 | populate |   30 |  202.635 |  200.509 |  273.746 |  299.907 |  131.846 |  310.208 |  10000
+(34 rows)
+
+--- relation sizes
+      relname      |  total  |    heap    | indexes 
+-------------------+---------+------------+---------
+ iam_node_closure  | 7942 MB | 2606 MB    | 5336 MB
+ cas_documents     | 2768 MB | 1434 MB    | 1333 MB
+ iam_nodes         | 2069 MB | 974 MB     | 1094 MB
+ accessible_urns   | 212 MB  | 158 MB     | 54 MB
+ iam_group_members | 2344 kB | 752 kB     | 1552 kB
+ iam_grants        | 2032 kB | 824 kB     | 1168 kB
+ iam_subjects      | 320 kB  | 144 kB     | 136 kB
+ iam_live_subjects | 312 kB  | 136 kB     | 136 kB
+ bench_results     | 120 kB  | 88 kB      | 0 bytes
+ relations         | 32 kB   | 8192 bytes | 16 kB
+ tenants           | 32 kB   | 8192 bytes | 16 kB
+(11 rows)
+
+--- plans: key cases
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:  --- EXPLAIN closure / laenen/user/u0020 / rank 1 / laenen
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:  Limit  (cost=4.68..533.27 rows=50 width=57) (actual time=0.100..46.824 rows=50 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:    Buffers: shared hit=64922
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:    ->  Nested Loop Semi Join  (cost=4.68..2124205.34 rows=200931 width=57) (actual time=0.099..46.820 rows=50 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:          Buffers: shared hit=64922
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:          ->  Nested Loop  (cost=4.40..2121691.20 rows=200931 width=63) (actual time=0.089..46.802 rows=50 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                Buffers: shared hit=64919
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                ->  Nested Loop Semi Join  (cost=3.84..1998304.51 rows=202906 width=88) (actual time=0.076..46.606 rows=50 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                      Buffers: shared hit=64669
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                      ->  Index Scan using cas_documents_page_idx on cas_documents d  (cost=0.56..421527.62 rows=10011261 width=63) (actual time=0.020..0.458 rows=4965 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                            Index Cond: (tenant_id = 'laenen'::text)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                            Buffers: shared hit=121
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                      ->  Hash Join  (cost=3.28..3.43 rows=1 width=31) (actual time=0.008..0.008 rows=0 loops=4965)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                            Hash Cond: (('laenen/user/u0020'::text) = g.subject_urn)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                            Buffers: shared hit=64548
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                            ->  HashAggregate  (cost=1.65..1.75 rows=10 width=32) (actual time=0.000..0.000 rows=1 loops=4965)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                                  Group Key: ('laenen/user/u0020'::text)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                                  Batches: 1  Memory Usage: 24kB
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                                  Buffers: shared hit=2
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                                  ->  Append  (cost=0.00..1.62 rows=10 width=32) (actual time=0.001..0.010 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                                        Buffers: shared hit=2
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                                        ->  Result  (cost=0.00..0.01 rows=1 width=32) (actual time=0.000..0.000 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                                        ->  Index Only Scan using iam_group_members_member_idx on iam_group_members gm  (cost=0.29..1.56 rows=9 width=19) (actual time=0.008..0.008 rows=0 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                                              Index Cond: ((tenant_id = 'laenen'::text) AND (member_urn = 'laenen/user/u0020'::text))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                                              Heap Fetches: 0
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                                              Buffers: shared hit=2
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                            ->  Hash  (cost=1.61..1.61 rows=2 width=49) (actual time=0.007..0.007 rows=2 loops=4965)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                                  Buckets: 1024  Batches: 1  Memory Usage: 9kB
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                                  Buffers: shared hit=64546
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                                  ->  Nested Loop  (cost=0.84..1.61 rows=2 width=49) (actual time=0.005..0.005 rows=2 loops=4965)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                                        Buffers: shared hit=64546
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                                        ->  Index Only Scan using iam_node_closure_pkey on iam_node_closure c  (cost=0.56..0.66 rows=3 width=52) (actual time=0.002..0.002 rows=3 loops=4965)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                                              Index Cond: ((tenant_id = 'laenen'::text) AND (descendant_urn = d.urn))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                                              Heap Fetches: 0
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                                              Buffers: shared hit=34755
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                                        ->  Index Only Scan using iam_grants_lookup_idx on iam_grants g  (cost=0.28..0.31 rows=1 width=49) (actual time=0.001..0.001 rows=1 loops=14895)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                                              Index Cond: ((tenant_id = 'laenen'::text) AND (object_urn = c.ancestor_urn) AND (relation_rank >= 1))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                                              Heap Fetches: 0
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                                              Buffers: shared hit=29791
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                ->  Index Scan using iam_nodes_pkey on iam_nodes n  (cost=0.56..0.61 rows=1 width=31) (actual time=0.004..0.004 rows=1 loops=50)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                      Index Cond: ((tenant_id = 'laenen'::text) AND (urn = d.urn))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                      Filter: live
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                      Buffers: shared hit=250
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:          ->  Materialize  (cost=0.28..2.50 rows=1 width=6) (actual time=0.000..0.000 rows=1 loops=50)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                Buffers: shared hit=3
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                ->  Index Scan using iam_live_subjects_pkey on iam_live_subjects s  (cost=0.28..2.50 rows=1 width=6) (actual time=0.008..0.008 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                      Index Cond: ((tenant_id = 'laenen'::text) AND (subject_urn = 'laenen/user/u0020'::text))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                      Filter: live
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:                      Buffers: shared hit=3
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:  Planning Time: 0.646 ms
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:270: NOTICE:  Execution Time: 46.895 ms
+ explain_path 
+--------------
+ 
+(1 row)
+
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:  --- EXPLAIN denorm / laenen/user/u0020 / rank 1 / laenen
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:  Limit  (cost=4.00..434.62 rows=50 width=57) (actual time=0.071..29.326 rows=50 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:    Buffers: shared hit=22167
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:    ->  Nested Loop Semi Join  (cost=4.00..2155095.05 rows=250231 width=57) (actual time=0.070..29.323 rows=50 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:          Buffers: shared hit=22167
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:          ->  Nested Loop  (cost=3.72..2151964.66 rows=250231 width=63) (actual time=0.060..29.306 rows=50 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                Buffers: shared hit=22164
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                ->  Nested Loop Semi Join  (cost=3.16..1998303.83 rows=252691 width=63) (actual time=0.052..29.134 rows=50 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                      Buffers: shared hit=21914
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                      ->  Index Scan using cas_documents_page_idx on cas_documents d  (cost=0.56..421527.62 rows=10011261 width=100) (actual time=0.015..0.448 rows=4965 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                            Index Cond: (tenant_id = 'laenen'::text)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                            Buffers: shared hit=121
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                      ->  Hash Join  (cost=2.60..2.75 rows=1 width=31) (actual time=0.004..0.004 rows=0 loops=4965)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                            Hash Cond: (('laenen/user/u0020'::text) = g.subject_urn)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                            Buffers: shared hit=21793
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                            ->  HashAggregate  (cost=1.65..1.75 rows=10 width=32) (actual time=0.000..0.000 rows=1 loops=4965)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                                  Group Key: ('laenen/user/u0020'::text)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                                  Batches: 1  Memory Usage: 24kB
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                                  Buffers: shared hit=2
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                                  ->  Append  (cost=0.00..1.62 rows=10 width=32) (actual time=0.001..0.009 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                                        Buffers: shared hit=2
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                                        ->  Result  (cost=0.00..0.01 rows=1 width=32) (actual time=0.000..0.001 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                                        ->  Index Only Scan using iam_group_members_member_idx on iam_group_members gm  (cost=0.29..1.56 rows=9 width=19) (actual time=0.008..0.008 rows=0 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                                              Index Cond: ((tenant_id = 'laenen'::text) AND (member_urn = 'laenen/user/u0020'::text))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                                              Heap Fetches: 0
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                                              Buffers: shared hit=2
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                            ->  Hash  (cost=0.92..0.92 rows=3 width=49) (actual time=0.004..0.004 rows=2 loops=4965)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                                  Buckets: 1024  Batches: 1  Memory Usage: 9kB
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                                  Buffers: shared hit=21791
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                                  ->  Index Only Scan using iam_grants_lookup_idx on iam_grants g  (cost=0.28..0.92 rows=3 width=49) (actual time=0.002..0.002 rows=2 loops=4965)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                                        Index Cond: ((tenant_id = 'laenen'::text) AND (object_urn = ANY (ARRAY[d.urn, d.fileset_urn, d.root_urn])) AND (relation_rank >= 1))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                                        Heap Fetches: 0
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                                        Buffers: shared hit=21791
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                ->  Index Scan using iam_nodes_pkey on iam_nodes n  (cost=0.56..0.61 rows=1 width=31) (actual time=0.003..0.003 rows=1 loops=50)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                      Index Cond: ((tenant_id = 'laenen'::text) AND (urn = d.urn))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                      Filter: live
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                      Buffers: shared hit=250
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:          ->  Materialize  (cost=0.28..2.50 rows=1 width=6) (actual time=0.000..0.000 rows=1 loops=50)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                Buffers: shared hit=3
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                ->  Index Scan using iam_live_subjects_pkey on iam_live_subjects s  (cost=0.28..2.50 rows=1 width=6) (actual time=0.008..0.008 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                      Index Cond: ((tenant_id = 'laenen'::text) AND (subject_urn = 'laenen/user/u0020'::text))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                      Filter: live
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:                      Buffers: shared hit=3
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:  Planning Time: 0.399 ms
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:271: NOTICE:  Execution Time: 29.383 ms
+ explain_path 
+--------------
+ 
+(1 row)
+
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:  --- EXPLAIN grant / laenen/user/u0021 / rank 1 / laenen
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:  Limit  (cost=176715.11..176715.23 rows=50 width=57) (actual time=101.001..101.011 rows=50 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:    Buffers: shared hit=100232
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:    ->  Sort  (cost=176715.11..176858.41 rows=57321 width=57) (actual time=101.001..101.008 rows=50 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:          Sort Key: d.created_at DESC, d.id DESC
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:          Sort Method: top-N heapsort  Memory: 36kB
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:          Buffers: shared hit=100232
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:          ->  Nested Loop  (cost=2610.82..174810.95 rows=57321 width=57) (actual time=2.488..100.033 rows=10000 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                Buffers: shared hit=100232
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                ->  Index Scan using iam_live_subjects_pkey on iam_live_subjects s  (cost=0.28..2.50 rows=1 width=6) (actual time=0.013..0.015 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                      Index Cond: ((tenant_id = 'laenen'::text) AND (subject_urn = 'laenen/user/u0021'::text))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                      Filter: live
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                      Buffers: shared hit=3
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                ->  Nested Loop  (cost=2610.53..174235.24 rows=57321 width=63) (actual time=2.473..99.532 rows=10000 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                      Join Filter: (n.urn = c.descendant_urn)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                      Buffers: shared hit=100229
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                      ->  Nested Loop  (cost=2609.97..138312.56 rows=57884 width=88) (actual time=2.460..51.365 rows=10000 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                            Buffers: shared hit=50229
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                            ->  HashAggregate  (cost=2609.41..3193.38 rows=58396 width=25) (actual time=2.446..4.054 rows=10010 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                  Group Key: c.descendant_urn
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                  Batches: 1  Memory Usage: 2577kB
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                  Buffers: shared hit=189
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                  ->  Nested Loop  (cost=18.24..2463.43 rows=58396 width=25) (actual time=0.046..1.101 rows=10010 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                        Buffers: shared hit=189
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                        ->  HashAggregate  (cost=17.67..18.27 rows=60 width=25) (actual time=0.031..0.034 rows=10 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                              Group Key: g.object_urn
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                              Batches: 1  Memory Usage: 24kB
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                              Buffers: shared hit=5
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                              ->  Nested Loop  (cost=1.93..17.52 rows=60 width=25) (actual time=0.026..0.030 rows=10 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                                    Buffers: shared hit=5
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                                    ->  HashAggregate  (cost=1.65..1.75 rows=10 width=32) (actual time=0.013..0.015 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                                          Group Key: ('laenen/user/u0021'::text)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                                          Batches: 1  Memory Usage: 24kB
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                                          Buffers: shared hit=2
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                                          ->  Append  (cost=0.00..1.62 rows=10 width=32) (actual time=0.001..0.011 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                                                Buffers: shared hit=2
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                                                ->  Result  (cost=0.00..0.01 rows=1 width=32) (actual time=0.001..0.001 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                                                ->  Index Only Scan using iam_group_members_member_idx on iam_group_members gm  (cost=0.29..1.56 rows=9 width=19) (actual time=0.009..0.009 rows=0 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                                                      Index Cond: ((tenant_id = 'laenen'::text) AND (member_urn = 'laenen/user/u0021'::text))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                                                      Heap Fetches: 0
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                                                      Buffers: shared hit=2
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                                    ->  Index Only Scan using iam_grants_subject_idx on iam_grants g  (cost=0.28..1.52 rows=6 width=43) (actual time=0.011..0.012 rows=10 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                                          Index Cond: ((tenant_id = 'laenen'::text) AND (subject_urn = ('laenen/user/u0021'::text)) AND (relation_rank >= 1))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                                          Heap Fetches: 0
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                                          Buffers: shared hit=3
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                        ->  Index Only Scan using iam_node_closure_ancestor_idx on iam_node_closure c  (cost=0.56..31.02 rows=973 width=46) (actual time=0.006..0.063 rows=1001 loops=10)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                              Index Cond: ((tenant_id = 'laenen'::text) AND (ancestor_urn = g.object_urn))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                              Heap Fetches: 0
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                              Buffers: shared hit=184
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                            ->  Index Scan using cas_documents_urn_idx on cas_documents d  (cost=0.56..2.31 rows=1 width=63) (actual time=0.005..0.005 rows=1 loops=10010)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                  Index Cond: ((tenant_id = 'laenen'::text) AND (urn = c.descendant_urn))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                                  Buffers: shared hit=50040
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                      ->  Index Scan using iam_nodes_pkey on iam_nodes n  (cost=0.56..0.61 rows=1 width=31) (actual time=0.005..0.005 rows=1 loops=10000)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                            Index Cond: ((tenant_id = 'laenen'::text) AND (urn = d.urn))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                            Filter: live
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:                            Buffers: shared hit=50000
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:  Planning Time: 0.436 ms
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:272: NOTICE:  Execution Time: 101.499 ms
+ explain_path 
+--------------
+ 
+(1 row)
+
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:  --- EXPLAIN grant / laenen/user/u0004 / rank 1 / laenen
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:  Limit  (cost=176715.11..176715.23 rows=50 width=57) (actual time=0.164..0.167 rows=10 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:    Buffers: shared hit=149
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:    ->  Sort  (cost=176715.11..176858.41 rows=57321 width=57) (actual time=0.164..0.165 rows=10 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:          Sort Key: d.created_at DESC, d.id DESC
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:          Sort Method: quicksort  Memory: 26kB
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:          Buffers: shared hit=149
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:          ->  Nested Loop  (cost=2610.82..174810.95 rows=57321 width=57) (actual time=0.088..0.158 rows=10 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                Buffers: shared hit=149
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                ->  Index Scan using iam_live_subjects_pkey on iam_live_subjects s  (cost=0.28..2.50 rows=1 width=6) (actual time=0.012..0.012 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                      Index Cond: ((tenant_id = 'laenen'::text) AND (subject_urn = 'laenen/user/u0004'::text))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                      Filter: live
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                      Buffers: shared hit=3
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                ->  Nested Loop  (cost=2610.53..174235.24 rows=57321 width=63) (actual time=0.076..0.144 rows=10 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                      Join Filter: (n.urn = c.descendant_urn)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                      Buffers: shared hit=146
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                      ->  Nested Loop  (cost=2609.97..138312.56 rows=57884 width=88) (actual time=0.067..0.116 rows=10 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                            Buffers: shared hit=96
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                            ->  HashAggregate  (cost=2609.41..3193.38 rows=58396 width=25) (actual time=0.058..0.090 rows=10 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                  Group Key: c.descendant_urn
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                  Batches: 1  Memory Usage: 1561kB
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                  Buffers: shared hit=46
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                  ->  Nested Loop  (cost=18.24..2463.43 rows=58396 width=25) (actual time=0.037..0.056 rows=10 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                        Buffers: shared hit=46
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                        ->  HashAggregate  (cost=17.67..18.27 rows=60 width=25) (actual time=0.026..0.027 rows=10 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                              Group Key: g.object_urn
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                              Batches: 1  Memory Usage: 24kB
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                              Buffers: shared hit=5
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                              ->  Nested Loop  (cost=1.93..17.52 rows=60 width=25) (actual time=0.023..0.025 rows=10 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                                    Buffers: shared hit=5
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                                    ->  HashAggregate  (cost=1.65..1.75 rows=10 width=32) (actual time=0.012..0.013 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                                          Group Key: ('laenen/user/u0004'::text)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                                          Batches: 1  Memory Usage: 24kB
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                                          Buffers: shared hit=2
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                                          ->  Append  (cost=0.00..1.62 rows=10 width=32) (actual time=0.001..0.010 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                                                Buffers: shared hit=2
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                                                ->  Result  (cost=0.00..0.01 rows=1 width=32) (actual time=0.000..0.000 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                                                ->  Index Only Scan using iam_group_members_member_idx on iam_group_members gm  (cost=0.29..1.56 rows=9 width=19) (actual time=0.009..0.009 rows=0 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                                                      Index Cond: ((tenant_id = 'laenen'::text) AND (member_urn = 'laenen/user/u0004'::text))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                                                      Heap Fetches: 0
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                                                      Buffers: shared hit=2
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                                    ->  Index Only Scan using iam_grants_subject_idx on iam_grants g  (cost=0.28..1.52 rows=6 width=43) (actual time=0.010..0.010 rows=10 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                                          Index Cond: ((tenant_id = 'laenen'::text) AND (subject_urn = ('laenen/user/u0004'::text)) AND (relation_rank >= 1))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                                          Heap Fetches: 0
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                                          Buffers: shared hit=3
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                        ->  Index Only Scan using iam_node_closure_ancestor_idx on iam_node_closure c  (cost=0.56..31.02 rows=973 width=46) (actual time=0.003..0.003 rows=1 loops=10)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                              Index Cond: ((tenant_id = 'laenen'::text) AND (ancestor_urn = g.object_urn))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                              Heap Fetches: 0
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                              Buffers: shared hit=41
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                            ->  Index Scan using cas_documents_urn_idx on cas_documents d  (cost=0.56..2.31 rows=1 width=63) (actual time=0.002..0.002 rows=1 loops=10)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                  Index Cond: ((tenant_id = 'laenen'::text) AND (urn = c.descendant_urn))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                                  Buffers: shared hit=50
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                      ->  Index Scan using iam_nodes_pkey on iam_nodes n  (cost=0.56..0.61 rows=1 width=31) (actual time=0.003..0.003 rows=1 loops=10)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                            Index Cond: ((tenant_id = 'laenen'::text) AND (urn = d.urn))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                            Filter: live
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:                            Buffers: shared hit=50
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:  Planning Time: 0.452 ms
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:273: NOTICE:  Execution Time: 0.555 ms
+ explain_path 
+--------------
+ 
+(1 row)
+
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:274: NOTICE:  --- EXPLAIN listobjects / laenen/user/u0021 / rank 1 / laenen
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:274: NOTICE:  Limit  (cost=1001.60..2366.06 rows=50 width=57) (actual time=320.668..328.655 rows=50 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:274: NOTICE:    Buffers: shared hit=1817985
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:274: NOTICE:    ->  Nested Loop  (cost=1001.60..1514401.04 rows=55458 width=57) (actual time=320.667..328.650 rows=50 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:274: NOTICE:          Join Filter: (a.urn = n.urn)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:274: NOTICE:          Buffers: shared hit=1817985
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:274: NOTICE:          ->  Gather Merge  (cost=1001.04..1479645.70 rows=56003 width=89) (actual time=320.615..328.298 rows=50 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:274: NOTICE:                Workers Planned: 4
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:274: NOTICE:                Workers Launched: 4
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:274: NOTICE:                Buffers: shared hit=1817735
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:274: NOTICE:                ->  Nested Loop  (cost=0.99..1471975.15 rows=14001 width=89) (actual time=3.852..255.657 rows=119 loops=5)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:274: NOTICE:                      Buffers: shared hit=1817735
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:274: NOTICE:                      ->  Parallel Index Scan using cas_documents_page_idx on cas_documents d  (cost=0.56..346443.16 rows=2502815 width=63) (actual time=0.071..12.597 rows=119151 loops=5)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:274: NOTICE:                            Index Cond: (tenant_id = 'laenen'::text)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:274: NOTICE:                            Buffers: shared hit=16640
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:274: NOTICE:                      ->  Index Only Scan using accessible_urns_lookup on accessible_urns a  (cost=0.42..0.45 rows=1 width=33) (actual time=0.002..0.002 rows=0 loops=595753)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:274: NOTICE:                            Index Cond: ((tenant_id = 'laenen'::text) AND (subject_urn = 'laenen/user/u0021'::text) AND (urn = d.urn))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:274: NOTICE:                            Heap Fetches: 13827
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:274: NOTICE:                            Buffers: shared hit=1801095
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:274: NOTICE:          ->  Index Scan using iam_nodes_pkey on iam_nodes n  (cost=0.56..0.61 rows=1 width=31) (actual time=0.007..0.007 rows=1 loops=50)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:274: NOTICE:                Index Cond: ((tenant_id = 'laenen'::text) AND (urn = d.urn))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:274: NOTICE:                Filter: live
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:274: NOTICE:                Buffers: shared hit=250
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:274: NOTICE:  Planning Time: 0.243 ms
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:274: NOTICE:  Execution Time: 328.699 ms
+ explain_path 
+--------------
+ 
+(1 row)
+
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:  --- EXPLAIN point / laenen/user/u0005 / rank 1 / laenen / laenen/document/d00005800
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:  Limit  (cost=4.12..15.94 rows=1 width=57) (actual time=0.101..0.103 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:    Buffers: shared hit=26
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:    ->  Nested Loop Semi Join  (cost=4.12..15.94 rows=1 width=57) (actual time=0.100..0.102 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:          Buffers: shared hit=26
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:          ->  Nested Loop  (cost=3.84..13.43 rows=1 width=63) (actual time=0.092..0.093 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                Buffers: shared hit=23
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                ->  Nested Loop Semi Join  (cost=3.28..10.64 rows=1 width=63) (actual time=0.077..0.078 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                      Buffers: shared hit=18
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                      ->  Index Scan using cas_documents_urn_idx on cas_documents d  (cost=0.56..2.78 rows=1 width=63) (actual time=0.019..0.019 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                            Index Cond: ((tenant_id = 'laenen'::text) AND (urn = 'laenen/document/d00005800'::text))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                            Buffers: shared hit=5
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                      ->  Hash Join  (cost=2.72..7.85 rows=1 width=31) (actual time=0.056..0.057 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                            Hash Cond: (g.subject_urn = ('laenen/user/u0005'::text))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                            Buffers: shared hit=13
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                            ->  Nested Loop  (cost=0.84..5.97 rows=2 width=49) (actual time=0.033..0.033 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                                  Buffers: shared hit=11
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                                  ->  Index Only Scan using iam_node_closure_pkey on iam_node_closure c  (cost=0.56..1.72 rows=3 width=52) (actual time=0.016..0.017 rows=2 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                                        Index Cond: ((tenant_id = 'laenen'::text) AND (descendant_urn = 'laenen/document/d00005800'::text))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                                        Heap Fetches: 0
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                                        Buffers: shared hit=6
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                                  ->  Index Only Scan using iam_grants_lookup_idx on iam_grants g  (cost=0.28..1.41 rows=1 width=49) (actual time=0.007..0.007 rows=0 loops=2)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                                        Index Cond: ((tenant_id = 'laenen'::text) AND (object_urn = c.ancestor_urn) AND (relation_rank >= 1))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                                        Heap Fetches: 0
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                                        Buffers: shared hit=5
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                            ->  Hash  (cost=1.75..1.75 rows=10 width=32) (actual time=0.017..0.018 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                                  Buckets: 1024  Batches: 1  Memory Usage: 9kB
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                                  Buffers: shared hit=2
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                                  ->  HashAggregate  (cost=1.65..1.75 rows=10 width=32) (actual time=0.014..0.015 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                                        Group Key: ('laenen/user/u0005'::text)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                                        Batches: 1  Memory Usage: 24kB
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                                        Buffers: shared hit=2
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                                        ->  Append  (cost=0.00..1.62 rows=10 width=32) (actual time=0.001..0.011 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                                              Buffers: shared hit=2
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                                              ->  Result  (cost=0.00..0.01 rows=1 width=32) (actual time=0.000..0.000 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                                              ->  Index Only Scan using iam_group_members_member_idx on iam_group_members gm  (cost=0.29..1.56 rows=9 width=19) (actual time=0.009..0.010 rows=0 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                                                    Index Cond: ((tenant_id = 'laenen'::text) AND (member_urn = 'laenen/user/u0005'::text))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                                                    Heap Fetches: 0
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                                                    Buffers: shared hit=2
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                ->  Index Scan using iam_nodes_pkey on iam_nodes n  (cost=0.56..2.78 rows=1 width=31) (actual time=0.014..0.015 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                      Index Cond: ((tenant_id = 'laenen'::text) AND (urn = 'laenen/document/d00005800'::text))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                      Filter: live
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                      Buffers: shared hit=5
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:          ->  Index Scan using iam_live_subjects_pkey on iam_live_subjects s  (cost=0.28..2.50 rows=1 width=6) (actual time=0.009..0.009 rows=1 loops=1)
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                Index Cond: ((tenant_id = 'laenen'::text) AND (subject_urn = 'laenen/user/u0005'::text))
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                Filter: live
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:                Buffers: shared hit=3
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:  Planning Time: 0.375 ms
+psql:docs/superpowers/spikes/2026-10-27-cas-sql-join/06-bench.sql:275: NOTICE:  Execution Time: 0.169 ms
+ explain_point 
+---------------
+ 
+(1 row)
+
