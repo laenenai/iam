@@ -16,6 +16,13 @@ type LinkPrincipalRequest struct {
 	Subject    domain.Subject
 }
 
+// ResolvePrincipalRequest looks up a tenant principal by external identity.
+type ResolvePrincipalRequest struct {
+	Tenant     domain.TenantID
+	Issuer     string
+	ExternalID string
+}
+
 // PrincipalResult is the linked principal and its revision.
 type PrincipalResult struct {
 	Principal domain.Principal
@@ -121,6 +128,46 @@ func (i *IAM) LinkPrincipal(ctx context.Context, actor domain.Actor, req LinkPri
 	ident.links[externalLink{tenant: tenant, subject: req.Subject}] = struct{}{}
 	principal, _ := i.store.Principal(tenant, req.Subject)
 	return PrincipalResult{Principal: principal, Revision: revision}, nil
+}
+
+// ResolvePrincipal maps an external identity to its live tenant principal.
+func (i *IAM) ResolvePrincipal(ctx context.Context, actor domain.Actor, req ResolvePrincipalRequest) (PrincipalResult, error) {
+	if err := authorize(actor, domain.RoleIdentityAdapter); err != nil {
+		return PrincipalResult{}, err
+	}
+	tenant, err := domain.ParseTenantID(string(req.Tenant))
+	if err != nil {
+		return PrincipalResult{}, err
+	}
+	if req.Issuer == "" || req.ExternalID == "" {
+		return PrincipalResult{}, fmt.Errorf("%w: issuer and external id are required", domain.ErrInvalidSubject)
+	}
+	if actor.Tenant != "" && actor.Tenant != tenant {
+		return PrincipalResult{}, fmt.Errorf("%w: actor tenant mismatch", domain.ErrForbidden)
+	}
+
+	i.commandMu.Lock()
+	defer i.commandMu.Unlock()
+
+	ws := eventlog.TenantWorkspace(tenant)
+	if err := i.project(ctx, ws); err != nil {
+		return PrincipalResult{}, err
+	}
+	ident := i.external[externalKey{issuer: req.Issuer, externalID: req.ExternalID}]
+	if ident == nil {
+		return PrincipalResult{}, fmt.Errorf("%w: external identity", domain.ErrNotFound)
+	}
+	for link := range ident.links {
+		if link.tenant != tenant {
+			continue
+		}
+		principal, ok := i.store.Principal(tenant, link.subject)
+		if !ok || principal.Deleted {
+			continue
+		}
+		return PrincipalResult{Principal: principal, Revision: i.projector.Applied(ws)}, nil
+	}
+	return PrincipalResult{}, fmt.Errorf("%w: external identity in %s", domain.ErrNotFound, tenant)
 }
 
 // DeactivatePrincipal deactivates a principal at tenant or global scope.

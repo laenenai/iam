@@ -157,6 +157,151 @@ func TestPrincipalAuthority(t *testing.T) {
 	}
 }
 
+func TestResolvePrincipalReturnsLinkedPrincipal(t *testing.T) {
+	ctx := context.Background()
+	svc, _, tenant := bootstrap(t)
+
+	got, err := svc.ResolvePrincipal(ctx, identityAdapter(), ResolvePrincipalRequest{
+		Tenant:     tenant,
+		Issuer:     "issuer",
+		ExternalID: "external-u1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Principal.URN != mustUser(t, tenant, "u1").URN {
+		t.Fatalf("principal = %s, want %s", got.Principal.URN, mustUser(t, tenant, "u1").URN)
+	}
+	if !got.Principal.Live {
+		t.Fatal("resolved principal is not live")
+	}
+	if got.Revision == 0 {
+		t.Fatal("resolved principal has no revision")
+	}
+}
+
+func TestResolvePrincipalRequiresIdentityAdapter(t *testing.T) {
+	ctx := context.Background()
+	svc, owner, tenant := bootstrap(t)
+
+	_, err := svc.ResolvePrincipal(ctx, owner, ResolvePrincipalRequest{
+		Tenant:     tenant,
+		Issuer:     "issuer",
+		ExternalID: "external-u1",
+	})
+	if !errors.Is(err, domain.ErrForbidden) {
+		t.Fatalf("err = %v, want ErrForbidden", err)
+	}
+}
+
+func TestResolvePrincipalUnknownExternalID(t *testing.T) {
+	ctx := context.Background()
+	svc, _, tenant := bootstrap(t)
+
+	_, err := svc.ResolvePrincipal(ctx, identityAdapter(), ResolvePrincipalRequest{
+		Tenant:     tenant,
+		Issuer:     "issuer",
+		ExternalID: "missing",
+	})
+	if !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestResolvePrincipalTenantIsolation(t *testing.T) {
+	ctx := context.Background()
+	svc := newTestIAM(t)
+	admin := deploymentAdmin()
+	ownerA, ownerB := mustUser(t, "a", "u1"), mustUser(t, "b", "u1")
+	mustTenant(t, svc, admin, "a", ownerA)
+	mustTenant(t, svc, admin, "b", ownerB)
+	linkAsIdentity(t, svc, "a", "issuer", "shared-external", ownerA)
+	linkAsIdentity(t, svc, "b", "issuer", "shared-external", ownerB)
+
+	for _, tc := range []struct {
+		tenant domain.TenantID
+		want   domain.URN
+	}{{"a", ownerA.URN}, {"b", ownerB.URN}} {
+		actor := domain.Actor{ID: "identity-adapter", Tenant: tc.tenant, Role: domain.RoleIdentityAdapter}
+		got, err := svc.ResolvePrincipal(ctx, actor, ResolvePrincipalRequest{
+			Tenant:     tc.tenant,
+			Issuer:     "issuer",
+			ExternalID: "shared-external",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Principal.URN != tc.want {
+			t.Fatalf("%s principal = %s, want %s", tc.tenant, got.Principal.URN, tc.want)
+		}
+	}
+
+	_, err := svc.ResolvePrincipal(ctx, domain.Actor{ID: "identity-adapter", Tenant: "b", Role: domain.RoleIdentityAdapter}, ResolvePrincipalRequest{
+		Tenant:     "a",
+		Issuer:     "issuer",
+		ExternalID: "shared-external",
+	})
+	if !errors.Is(err, domain.ErrForbidden) {
+		t.Fatalf("cross-tenant err = %v, want ErrForbidden", err)
+	}
+}
+
+func TestResolvePrincipalReturnsDeactivatedPrincipal(t *testing.T) {
+	ctx := context.Background()
+	svc, owner, tenant := bootstrap(t)
+	if _, err := svc.DeactivatePrincipal(ctx, tenantAdmin(tenant, owner.Subject), DeactivatePrincipalRequest{
+		Tenant:  tenant,
+		Subject: owner.Subject,
+		Source:  domain.SourceTenant,
+		Reason:  "away",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := svc.ResolvePrincipal(ctx, identityAdapter(), ResolvePrincipalRequest{
+		Tenant:     tenant,
+		Issuer:     "issuer",
+		ExternalID: "external-u1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Principal.Live {
+		t.Fatal("deactivated principal resolved live")
+	}
+}
+
+func TestResolvePrincipalDeletedLinkIsNotFound(t *testing.T) {
+	ctx := context.Background()
+	svc, owner, tenant := bootstrap(t)
+	if _, err := svc.DeletePrincipal(ctx, identityAdapter(), DeletePrincipalRequest{
+		Tenant:  tenant,
+		Subject: owner.Subject,
+		Reason:  "offboard",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := svc.ResolvePrincipal(ctx, identityAdapter(), ResolvePrincipalRequest{
+		Tenant:     tenant,
+		Issuer:     "issuer",
+		ExternalID: "external-u1",
+	})
+	if !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestResolvePrincipalRejectsEmptyExternalIdentity(t *testing.T) {
+	ctx := context.Background()
+	svc, _, tenant := bootstrap(t)
+
+	_, err := svc.ResolvePrincipal(ctx, identityAdapter(), ResolvePrincipalRequest{Tenant: tenant})
+	if !errors.Is(err, domain.ErrInvalidSubject) {
+		t.Fatalf("err = %v, want ErrInvalidSubject", err)
+	}
+}
+
 func TestGlobalDeleteFansOutToEveryLinkedTenant(t *testing.T) {
 	ctx := context.Background()
 	svc := newTestIAM(t)

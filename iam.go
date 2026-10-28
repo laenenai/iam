@@ -74,6 +74,7 @@ type (
 	DeleteGroupRequest       = core.DeleteGroupRequest
 
 	LinkPrincipalRequest       = core.LinkPrincipalRequest
+	ResolvePrincipalRequest    = core.ResolvePrincipalRequest
 	PrincipalResult            = core.PrincipalResult
 	DeactivatePrincipalRequest = core.DeactivatePrincipalRequest
 	ReactivatePrincipalRequest = core.ReactivatePrincipalRequest
