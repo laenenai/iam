@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package es.v1;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "github.com/laenenai/es-lite/gen/es/v1;esv1";
+
+// es-lite's framework options, vendored so this module can generate its
+// es-lite sum types without depending on a buf module registry.
+extend google.protobuf.MessageOptions {
+  // Marks a message as a sum-type container.
+  string sum_type = 50002;
+
+  // Marks an event variant's schema version. Defaults to 1.
+  uint32 schema_version = 50001;
+}

@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package iam.v1;
+
+import "iam/v1/common.proto";
+
+option go_package = "github.com/laenenai/iam/gen/iam/v1;iamv1";
+
+message NodeState {
+  string urn = 1;
+  string kind = 2;
+  string parent_urn = 3;
+  string created_by = 4;
+  bool live = 5;
+  bool deleted = 6;
+}
+
+message GrantState {
+  string grant_id = 1;
+  string subject_urn = 2;
+  string subject_kind = 3;
+  string relation = 4;
+  string granted_by = 5;
+  string reason = 6;
+  bool live = 7;
+}
+
+message ACLState {
+  repeated GrantState grants = 1;
+}
+
+message GroupMemberState {
+  string member_urn = 1;
+  string member_kind = 2;
+  bool live = 3;
+}
+
+message GroupState {
+  string group_urn = 1;
+  string name = 2;
+  string admin_urn = 3;
+  string admin_kind = 4;
+  string created_by = 5;
+  bool live = 6;
+  bool deleted = 7;
+  repeated GroupMemberState members = 8;
+}
+
+message PrincipalState {
+  string subject_urn = 1;
+  string subject_kind = 2;
+  string issuer = 3;
+  string external_id = 4;
+  bool global_live = 5;
+  bool tenant_live = 6;
+  bool deleted = 7;
+}
+
+message ModelState {
+  int32 version = 1;
+  repeated KindSpec kinds = 2;
+}

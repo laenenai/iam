@@ -1,0 +1,130 @@
+syntax = "proto3";
+
+package iam.v1;
+
+import "es/v1/options.proto";
+import "iam/v1/common.proto";
+
+option go_package = "github.com/laenenai/iam/gen/iam/v1;iamv1";
+
+message NodeRegistered {
+  string urn = 1;
+  string kind = 2;
+  string parent_urn = 3;
+  string created_by = 4;
+}
+
+message NodeDeleted {
+  string urn = 1;
+  string reason = 2;
+}
+
+message GrantIssued {
+  string grant_id = 1;
+  string object_urn = 2;
+  string subject_urn = 3;
+  string subject_kind = 4;
+  string relation = 5;
+  string granted_by = 6;
+  string reason = 7;
+}
+
+message GrantRevoked {
+  string grant_id = 1;
+  string object_urn = 2;
+  string revoked_by = 3;
+  string reason = 4;
+}
+
+message GroupCreated {
+  string group_urn = 1;
+  string name = 2;
+  string admin_urn = 3;
+  string admin_kind = 4;
+  string created_by = 5;
+}
+
+message GroupAdminChanged {
+  string group_urn = 1;
+  string admin_urn = 2;
+  string admin_kind = 3;
+  string changed_by = 4;
+}
+
+message MemberAdded {
+  string group_urn = 1;
+  string member_urn = 2;
+  string member_kind = 3;
+  string added_by = 4;
+}
+
+message MemberRemoved {
+  string group_urn = 1;
+  string member_urn = 2;
+  string member_kind = 3;
+  string removed_by = 4;
+}
+
+message GroupDeleted {
+  string group_urn = 1;
+  string reason = 2;
+}
+
+message PrincipalLinked {
+  string issuer = 1;
+  string external_id = 2;
+  string subject_urn = 3;
+  string subject_kind = 4;
+}
+
+message PrincipalDeactivated {
+  string subject_urn = 1;
+  string subject_kind = 2;
+  string source = 3;
+  string reason = 4;
+}
+
+message PrincipalReactivated {
+  string subject_urn = 1;
+  string subject_kind = 2;
+  string source = 3;
+  string reason = 4;
+}
+
+message PrincipalDeleted {
+  string subject_urn = 1;
+  string subject_kind = 2;
+  string reason = 3;
+}
+
+message KindRegistered {
+  int32 version = 1;
+  KindSpec kind = 2;
+}
+
+message ModelPublished {
+  int32 version = 1;
+}
+
+// Events is the sealed sum-type container over every plan-1 IAM event.
+message Events {
+  option (es.v1.sum_type) = "Event";
+
+  oneof variant {
+    NodeRegistered node_registered = 1;
+    NodeDeleted node_deleted = 2;
+    GrantIssued grant_issued = 3;
+    GrantRevoked grant_revoked = 4;
+    GroupCreated group_created = 5;
+    GroupAdminChanged group_admin_changed = 6;
+    MemberAdded member_added = 7;
+    MemberRemoved member_removed = 8;
+    GroupDeleted group_deleted = 9;
+    PrincipalLinked principal_linked = 10;
+    PrincipalDeactivated principal_deactivated = 11;
+    PrincipalReactivated principal_reactivated = 12;
+    PrincipalDeleted principal_deleted = 13;
+    KindRegistered kind_registered = 14;
+    ModelPublished model_published = 15;
+  }
+}

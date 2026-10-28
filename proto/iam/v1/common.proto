@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package iam.v1;
+
+option go_package = "github.com/laenenai/iam/gen/iam/v1;iamv1";
+
+// KindSpec is one published node kind.
+message KindSpec {
+  string name = 1;
+  repeated string contains = 2;
+  repeated string relations = 3;
+  bool contains_any = 4;
+}

@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package iam.v1;
+
+option go_package = "github.com/laenenai/iam/gen/iam/v1;iamv1";
+
+// SealedPayload is the ciphertext envelope stored as an es-lite payload.
+message SealedPayload {
+  string key_id = 1;
+  bytes nonce = 2;
+  bytes ciphertext = 3;
+}

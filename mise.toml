@@ -7,15 +7,18 @@
 go            = "1.26.5"
 golangci-lint = "2.11.4"
 gofumpt       = "0.9.2"
+buf           = "1.75.0"
+"go:google.golang.org/protobuf/cmd/protoc-gen-go" = "1.36.11"
+"go:github.com/laenenai/es-lite/cmd/protoc-gen-es-lite" = "v0.6.0"
 
 [env]
 CGO_ENABLED = "0"
 
 [tasks.fmt]
-run = "gofumpt -l -w $(find . -path ./.claude -prune -o -name '*.go' -print)"
+run = "gofumpt -l -w $(find . -path ./.claude -prune -o -path ./gen -prune -o -name '*.go' -print)"
 
 [tasks.fmt-check]
-run = "test -z \"$(gofumpt -l $(find . -path ./.claude -prune -o -name '*.go' -print))\""
+run = "test -z \"$(gofumpt -l $(find . -path ./.claude -prune -o -path ./gen -prune -o -name '*.go' -print))\""
 
 [tasks.lint]
 run = "golangci-lint run"
@@ -40,9 +43,13 @@ description = "Full race suite for the published root module."
 env = { CGO_ENABLED = "1" }
 run = "go test ./... -race"
 
+[tasks.generate]
+description = "Lint the protobuf contracts and regenerate Go code."
+run = "buf lint && buf generate"
+
 [tasks.generate-check]
-description = "This module has no generator; fail if a generator config appears without a real check."
-run = "test ! -e sqlc.yaml && test ! -e buf.gen.yaml || { echo 'generate-check: generator config found; add a real generate-check task' >&2; exit 1; }"
+description = "Fail if checked-in generated code is stale."
+run = "mise run generate && git diff --exit-code -- gen && test -z \"$(git ls-files --others --exclude-standard -- gen)\""
 
 [tasks.vuln]
 description = "Report reachable Go vulnerabilities."
