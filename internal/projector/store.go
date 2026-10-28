@@ -31,6 +31,7 @@ type Store interface {
 
 	AddPendingKind(domain.KindSpec)
 	PendingKind(name string) (domain.KindSpec, bool)
+	PendingKinds() []domain.KindSpec
 	PublishKinds(version int)
 	Kind(name string) (domain.KindSpec, bool)
 	ModelVersion() int

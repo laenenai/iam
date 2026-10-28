@@ -234,6 +234,17 @@ func (s *MemoryStore) PendingKind(name string) (domain.KindSpec, bool) {
 	return cloneKind(kind), ok
 }
 
+func (s *MemoryStore) PendingKinds() []domain.KindSpec {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]domain.KindSpec, 0, len(s.pending))
+	for _, kind := range s.pending {
+		out = append(out, cloneKind(kind))
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
 func (s *MemoryStore) PublishKinds(version int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
