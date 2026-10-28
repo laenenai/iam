@@ -210,7 +210,18 @@ func (i *IAM) Check(ctx context.Context, actor domain.Actor, req CheckRequest) (
 	if actor.Subject.Kind == domain.SubjectAgent || req.Subject.Kind == domain.SubjectAgent {
 		return Decision{}, fmt.Errorf("%w: agents are not supported in this plan", domain.ErrUnsupported)
 	}
-	return i.evaluate(ctx, tenant, req.Subject, req.Relation, object)
+	if req.Subject.Kind == domain.SubjectGroup {
+		return Decision{}, fmt.Errorf("%w: groups are not checked subjects", domain.ErrUnsupported)
+	}
+
+	ws := eventlog.TenantWorkspace(tenant)
+	if err := i.project(ctx, ws); err != nil {
+		return Decision{}, err
+	}
+	if actor.Role == domain.RoleTenantAdmin && !i.store.Live(tenant, actor.Subject) {
+		return Decision{}, fmt.Errorf("%w: tenant admin is not live", domain.ErrForbidden)
+	}
+	return i.evaluateProjected(ctx, tenant, req.Subject, req.Relation, object, i.projector.Applied(ws))
 }
 
 func declares(kind domain.KindSpec, relation domain.Relation) bool {
